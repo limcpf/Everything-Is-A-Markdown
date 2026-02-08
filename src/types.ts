@@ -47,6 +47,7 @@ export interface DocRecord {
   body: string;
   raw: string;
   isNew: boolean;
+  branch: string | null;
 }
 
 export interface FileNode {
@@ -61,6 +62,7 @@ export interface FileNode {
   tags: string[];
   description?: string;
   date?: string;
+  branch: string | null;
 }
 
 export interface FolderNode {
@@ -75,6 +77,8 @@ export type TreeNode = FolderNode | FileNode;
 
 export interface Manifest {
   generatedAt: string;
+  defaultBranch: string;
+  branches: string[];
   ui: {
     newWithinDays: number;
     recentLimit: number;
@@ -91,6 +95,7 @@ export interface Manifest {
     tags: string[];
     description?: string;
     isNew: boolean;
+    branch: string | null;
   }>;
 }
 

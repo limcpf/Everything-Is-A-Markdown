@@ -22,6 +22,7 @@ import {
 const CACHE_VERSION = 1;
 const CACHE_DIR_NAME = ".cache";
 const CACHE_FILE_NAME = "build-index.json";
+const DEFAULT_BRANCH = "dev";
 
 interface BuildResult {
   totalDocs: number;
@@ -91,6 +92,15 @@ function parseStringArray(value: unknown): string[] {
   return value.map((item) => String(item).trim()).filter(Boolean);
 }
 
+function parseBranch(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : null;
+}
+
 async function readPublishedDocs(options: BuildOptions): Promise<DocRecord[]> {
   const isExcluded = buildExcluder(options.exclude);
   const mdFiles = await walkMarkdownFiles(options.vaultDir, options.vaultDir, isExcluded);
@@ -139,6 +149,7 @@ async function readPublishedDocs(options: BuildOptions): Promise<DocRecord[]> {
       body: parsed.content,
       raw,
       isNew: mtimeMs >= newThreshold,
+      branch: parseBranch(parsed.data.branch),
     });
   }
 
@@ -208,6 +219,7 @@ function fileNodeFromDoc(doc: DocRecord): FileNode {
     tags: doc.tags,
     description: doc.description,
     date: doc.date,
+    branch: doc.branch,
   };
 }
 
@@ -301,10 +313,30 @@ function buildManifest(docs: DocRecord[], tree: TreeNode[], options: BuildOption
       description: doc.description,
       isNew: doc.isNew,
       contentUrl: doc.contentUrl,
+      branch: doc.branch,
     }));
+
+  const branchSet = new Set<string>([DEFAULT_BRANCH]);
+  for (const doc of docs) {
+    if (doc.branch) {
+      branchSet.add(doc.branch);
+    }
+  }
+
+  const branches = Array.from(branchSet).sort((left, right) => {
+    if (left === DEFAULT_BRANCH) {
+      return -1;
+    }
+    if (right === DEFAULT_BRANCH) {
+      return 1;
+    }
+    return left.localeCompare(right, "ko-KR");
+  });
 
   return {
     generatedAt: new Date().toISOString(),
+    defaultBranch: DEFAULT_BRANCH,
+    branches,
     ui: {
       newWithinDays: options.newWithinDays,
       recentLimit: options.recentLimit,

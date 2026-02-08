@@ -1,5 +1,6 @@
 ---
 publish: true
+branch: main
 title: Building a File-System Blog
 date: "2024-10-24"
 description: This post explores how to build a developer blog that mimics a file system.

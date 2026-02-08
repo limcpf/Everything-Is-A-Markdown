@@ -85,6 +85,9 @@ export default {
 **콘텐츠 작성 규칙**
 - `publish: true`인 문서만 출력됩니다.
 - `draft: true`면 출력에서 제외됩니다.
+- `branch`를 지정하면 해당 브랜치 필터에서만 노출됩니다.
+- `branch`가 없으면 "브랜치 분류 없음"으로 간주되어 기본 브랜치에서만 노출됩니다.
+- 기본 브랜치 뷰는 `dev + 분류 없음`이며, 다른 브랜치는 해당 브랜치 글만 노출됩니다.
 - `title`이 없으면 파일명에서 자동 생성됩니다.
 - `date`가 없으면 파일 수정 시각을 기준으로 합니다.
 - `tags`는 문자열 배열로 작성합니다.
@@ -92,6 +95,7 @@ export default {
 ```md
 ---
 publish: true
+branch: dev
 title: My Post
 date: "2024-10-24"
 description: Short summary

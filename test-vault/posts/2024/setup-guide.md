@@ -1,5 +1,6 @@
 ---
 publish: true
+branch: dev
 title: Setup Guide
 date: "2024-09-15"
 description: How to set up your development environment
