@@ -135,14 +135,19 @@ function buildBranchView(manifest, branch, defaultBranch) {
   const visibleDocIds = new Set(docs.map((doc) => doc.id));
   const tree = cloneFilteredTree(manifest.tree, visibleDocIds);
   const routeMap = {};
+  const docIndexById = new Map();
   for (const doc of docs) {
     routeMap[doc.route] = doc.id;
+  }
+  for (let i = 0; i < docs.length; i += 1) {
+    docIndexById.set(docs[i].id, i);
   }
 
   return {
     docs,
     tree,
     routeMap,
+    docIndexById,
   };
 }
 
@@ -363,6 +368,15 @@ function initializeTreeLabelTooltip(treeRoot, tooltipEl) {
   };
 
   const show = (row) => {
+    if (!(row instanceof HTMLElement)) {
+      hide();
+      return;
+    }
+
+    if (activeRow === row && !tooltipEl.hidden) {
+      return;
+    }
+
     const labelEl = row.querySelector(".tree-label");
     if (!(labelEl instanceof HTMLElement)) {
       hide();
@@ -412,25 +426,62 @@ function initializeTreeLabelTooltip(treeRoot, tooltipEl) {
     row.setAttribute("aria-describedby", tooltipEl.id);
   };
 
-  for (const row of treeRoot.querySelectorAll(".tree-row")) {
-    if (!(row instanceof HTMLElement)) {
-      continue;
+  const getTreeRow = (target) => {
+    if (!(target instanceof Element)) {
+      return null;
     }
-    const onMouseEnter = () => show(row);
-    const onMouseLeave = () => hide();
-    const onFocus = () => show(row);
-    const onBlur = () => hide();
+    const row = target.closest(".tree-row");
+    if (!(row instanceof HTMLElement) || !treeRoot.contains(row)) {
+      return null;
+    }
+    return row;
+  };
 
-    row.addEventListener("mouseenter", onMouseEnter);
-    row.addEventListener("mouseleave", onMouseLeave);
-    row.addEventListener("focus", onFocus);
-    row.addEventListener("blur", onBlur);
+  const onMouseOver = (event) => {
+    const row = getTreeRow(event.target);
+    if (!row) {
+      return;
+    }
+    show(row);
+  };
 
-    cleanups.push(() => row.removeEventListener("mouseenter", onMouseEnter));
-    cleanups.push(() => row.removeEventListener("mouseleave", onMouseLeave));
-    cleanups.push(() => row.removeEventListener("focus", onFocus));
-    cleanups.push(() => row.removeEventListener("blur", onBlur));
-  }
+  const onMouseOut = (event) => {
+    const fromRow = getTreeRow(event.target);
+    if (!fromRow) {
+      return;
+    }
+    const toRow = getTreeRow(event.relatedTarget);
+    if (toRow === fromRow) {
+      return;
+    }
+    hide();
+  };
+
+  const onFocusIn = (event) => {
+    const row = getTreeRow(event.target);
+    if (!row) {
+      return;
+    }
+    show(row);
+  };
+
+  const onFocusOut = (event) => {
+    const toRow = getTreeRow(event.relatedTarget);
+    if (toRow) {
+      return;
+    }
+    hide();
+  };
+
+  treeRoot.addEventListener("mouseover", onMouseOver);
+  treeRoot.addEventListener("mouseout", onMouseOut);
+  treeRoot.addEventListener("focusin", onFocusIn);
+  treeRoot.addEventListener("focusout", onFocusOut);
+
+  cleanups.push(() => treeRoot.removeEventListener("mouseover", onMouseOver));
+  cleanups.push(() => treeRoot.removeEventListener("mouseout", onMouseOut));
+  cleanups.push(() => treeRoot.removeEventListener("focusin", onFocusIn));
+  cleanups.push(() => treeRoot.removeEventListener("focusout", onFocusOut));
 
   treeRoot.addEventListener("scroll", hide);
   window.addEventListener("resize", hide);
@@ -451,7 +502,7 @@ function initializeTreeLabelTooltip(treeRoot, tooltipEl) {
   };
 }
 
-function createFolderNode(node, state, depth = 0) {
+function createFolderNode(node, expandedSet, fileRowsById, depth = 0) {
   const wrapper = document.createElement("div");
   wrapper.className = node.virtual ? "tree-folder virtual" : "tree-folder";
   wrapper.style.setProperty("--tree-depth", String(depth));
@@ -459,11 +510,15 @@ function createFolderNode(node, state, depth = 0) {
   const row = document.createElement("button");
   row.type = "button";
   row.className = "tree-folder-row tree-row";
+  row.dataset.rowType = "folder";
+  row.dataset.folderPath = node.path;
+  row.dataset.virtual = String(Boolean(node.virtual));
 
-  const isExpanded = node.virtual ? true : state.expanded.has(node.path);
+  const isExpanded = node.virtual ? true : expandedSet.has(node.path);
   const iconName = isExpanded ? "folder_open" : "folder";
 
   row.innerHTML = `<span class="material-symbols-outlined">${iconName}</span><span class="tree-label">${node.name}</span>`;
+  row.setAttribute("aria-expanded", String(isExpanded));
 
   const children = document.createElement("div");
   children.className = "tree-children";
@@ -471,25 +526,11 @@ function createFolderNode(node, state, depth = 0) {
     children.hidden = true;
   }
 
-  if (!node.virtual) {
-    row.addEventListener("click", () => {
-      const currentlyExpanded = !children.hidden;
-      children.hidden = currentlyExpanded;
-      row.querySelector(".material-symbols-outlined").textContent = currentlyExpanded ? "folder" : "folder_open";
-      if (currentlyExpanded) {
-        state.expanded.delete(node.path);
-      } else {
-        state.expanded.add(node.path);
-      }
-      persistExpandedSet(state.expanded);
-    });
-  }
-
   for (const child of node.children) {
     if (child.type === "folder") {
-      children.appendChild(createFolderNode(child, state, depth + 1));
+      children.appendChild(createFolderNode(child, expandedSet, fileRowsById, depth + 1));
     } else {
-      children.appendChild(createFileNode(child, state, depth + 1));
+      children.appendChild(createFileNode(child, fileRowsById, depth + 1));
     }
   }
 
@@ -498,46 +539,65 @@ function createFolderNode(node, state, depth = 0) {
   return wrapper;
 }
 
-function createFileNode(node, state, depth = 0) {
+function createFileNode(node, fileRowsById, depth = 0) {
   const row = document.createElement("a");
   row.href = node.route;
   row.className = "tree-row tree-file-row";
+  row.dataset.rowType = "file";
+  row.dataset.route = node.route;
   row.dataset.fileId = node.id;
   row.style.setProperty("--tree-depth", String(depth));
 
   const newBadge = node.isNew ? `<span class="badge-new">NEW</span>` : "";
   row.innerHTML = `<span class="material-symbols-outlined">article</span><span class="tree-label">${node.title || node.name}</span>${newBadge}`;
-
-  row.addEventListener("click", (event) => {
-    event.preventDefault();
-    state.navigate(node.route, true);
-  });
+  fileRowsById.set(node.id, row);
 
   return row;
 }
 
-function markActive(id) {
-  for (const el of document.querySelectorAll("[data-file-id]")) {
-    if (!(el instanceof HTMLElement)) {
-      continue;
-    }
-    const badge = el.querySelector(".badge-active");
-    if (badge) {
-      badge.remove();
-    }
-    
-    if (el.dataset.fileId === id) {
-      el.classList.add("is-active");
-      el.setAttribute("aria-current", "page");
-      const activeBadge = document.createElement("span");
-      activeBadge.className = "badge-active";
-      activeBadge.textContent = "active";
-      el.appendChild(activeBadge);
-    } else {
-      el.classList.remove("is-active");
-      el.removeAttribute("aria-current");
-    }
+function setFileRowActive(row, active) {
+  if (!(row instanceof HTMLElement)) {
+    return;
   }
+
+  const badge = row.querySelector(".badge-active");
+  if (badge) {
+    badge.remove();
+  }
+
+  if (active) {
+    row.classList.add("is-active");
+    row.setAttribute("aria-current", "page");
+    const activeBadge = document.createElement("span");
+    activeBadge.className = "badge-active";
+    activeBadge.textContent = "active";
+    row.appendChild(activeBadge);
+    return;
+  }
+
+  row.classList.remove("is-active");
+  row.removeAttribute("aria-current");
+}
+
+function markActive(fileRowsById, activeState, id) {
+  if (activeState.currentId === id) {
+    return;
+  }
+
+  if (activeState.current instanceof HTMLElement) {
+    setFileRowActive(activeState.current, false);
+  }
+
+  const next = id ? fileRowsById.get(id) : null;
+  if (next instanceof HTMLElement) {
+    setFileRowActive(next, true);
+    activeState.current = next;
+    activeState.currentId = id;
+    return;
+  }
+
+  activeState.current = null;
+  activeState.currentId = "";
 }
 
 function renderBreadcrumb(route) {
@@ -581,8 +641,8 @@ function renderMeta(doc) {
   return items.join("");
 }
 
-function renderNav(docs, currentId) {
-  const currentIndex = docs.findIndex(d => d.id === currentId);
+function renderNav(docs, docIndexById, currentId) {
+  const currentIndex = docIndexById.get(currentId) ?? -1;
   if (currentIndex === -1) return "";
 
   const prev = currentIndex > 0 ? docs[currentIndex - 1] : null;
@@ -629,6 +689,7 @@ async function start() {
   const contentEl = document.getElementById("viewer-content");
   const navEl = document.getElementById("viewer-nav");
   const a11yStatusEl = document.getElementById("a11y-status");
+  const viewerEl = document.querySelector(".viewer");
 
   let hideTreeTooltip = () => {};
   let disposeTreeTooltip = () => {};
@@ -636,6 +697,11 @@ async function start() {
   let activeResizePointerId = null;
   let resizeStartX = 0;
   let resizeStartWidth = desktopSidebarWidth;
+  let treeFileRowsById = new Map();
+  const activeFileState = {
+    current: null,
+    currentId: "",
+  };
 
   const announceA11yStatus = (message) => {
     if (!(a11yStatusEl instanceof HTMLElement)) {
@@ -1029,7 +1095,17 @@ async function start() {
 
   const savedBranch = normalizeBranch(localStorage.getItem(BRANCH_KEY));
   let activeBranch = savedBranch && availableBranchSet.has(savedBranch) ? savedBranch : defaultBranch;
-  let view = buildBranchView(manifest, activeBranch, defaultBranch);
+  const branchViewCache = new Map();
+  const getBranchView = (branch) => {
+    const cached = branchViewCache.get(branch);
+    if (cached) {
+      return cached;
+    }
+    const nextView = buildBranchView(manifest, branch, defaultBranch);
+    branchViewCache.set(branch, nextView);
+    return nextView;
+  };
+  let view = getBranchView(activeBranch);
 
   const docsById = new Map(manifest.docs.map((doc) => [doc.id, doc]));
   const expanded = loadExpandedSet();
@@ -1061,19 +1137,20 @@ async function start() {
     hideTreeTooltip();
     disposeTreeTooltip();
     treeRoot.innerHTML = "";
+    treeFileRowsById = new Map();
 
     for (const node of view.tree) {
       if (node.type === "folder") {
-        treeRoot.appendChild(createFolderNode(node, state));
+        treeRoot.appendChild(createFolderNode(node, state.expanded, treeFileRowsById));
       } else {
-        treeRoot.appendChild(createFileNode(node, state));
+        treeRoot.appendChild(createFileNode(node, treeFileRowsById));
       }
     }
 
     const tooltipController = initializeTreeLabelTooltip(treeRoot, treeLabelTooltip);
     hideTreeTooltip = tooltipController.hide;
     disposeTreeTooltip = tooltipController.dispose;
-    markActive(state.currentDocId || "");
+    markActive(treeFileRowsById, activeFileState, state.currentDocId || "");
   };
 
   const state = {
@@ -1095,7 +1172,7 @@ async function start() {
         const globalDocBranch = normalizeBranch(globalDoc?.branch);
         if (globalDoc && globalDocBranch && globalDocBranch !== activeBranch && availableBranchSet.has(globalDocBranch)) {
           activeBranch = globalDocBranch;
-          view = buildBranchView(manifest, activeBranch, defaultBranch);
+          view = getBranchView(activeBranch);
           updateBranchInfo();
           renderTree(state);
           localStorage.setItem(BRANCH_KEY, activeBranch);
@@ -1110,7 +1187,7 @@ async function start() {
         metaEl.innerHTML = "";
         contentEl.innerHTML = '<p class="placeholder">요청한 경로에 해당하는 문서가 없습니다.</p>';
         navEl.innerHTML = "";
-        markActive("");
+        markActive(treeFileRowsById, activeFileState, "");
         announceA11yStatus("탐색 실패: 요청한 문서를 찾을 수 없습니다.");
         if (push) {
           history.pushState(null, "", toSafeUrlPath(route));
@@ -1128,7 +1205,7 @@ async function start() {
       }
 
       state.currentDocId = id;
-      markActive(id);
+      markActive(treeFileRowsById, activeFileState, id);
       breadcrumbEl.innerHTML = renderBreadcrumb(route);
       titleEl.textContent = doc.title;
       metaEl.innerHTML = renderMeta(doc);
@@ -1142,40 +1219,131 @@ async function start() {
       }
 
       contentEl.innerHTML = await res.text();
-      
-      for (const btn of contentEl.querySelectorAll(".code-copy")) {
-        btn.addEventListener("click", async () => {
-          const code = btn.dataset.code;
-          if (!code) return;
-          try {
-            await navigator.clipboard.writeText(code);
-            btn.classList.add("copied");
-            btn.querySelector(".material-symbols-outlined").textContent = "check";
-            setTimeout(() => {
-              btn.classList.remove("copied");
-              btn.querySelector(".material-symbols-outlined").textContent = "content_copy";
-            }, 2000);
-          } catch (err) {
-            console.error("Copy failed:", err);
-          }
-        });
-      }
 
-      navEl.innerHTML = renderNav(view.docs, id);
-      
-      for (const link of navEl.querySelectorAll(".nav-link")) {
-        link.addEventListener("click", (e) => {
-          e.preventDefault();
-          state.navigate(link.dataset.route, true);
-          document.querySelector(".viewer").scrollTo(0, 0);
-        });
-      }
+      navEl.innerHTML = renderNav(view.docs, view.docIndexById, id);
 
       document.title = `${doc.title} - File-System Blog`;
-      document.querySelector(".viewer").scrollTo(0, 0);
+      if (viewerEl instanceof HTMLElement) {
+        viewerEl.scrollTo(0, 0);
+      }
       announceA11yStatus(`탐색 완료: ${doc.title} 문서를 열었습니다.`);
     },
   };
+
+  if (treeRoot instanceof HTMLElement) {
+    treeRoot.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      const row = target.closest(".tree-row");
+      if (!(row instanceof HTMLElement) || !treeRoot.contains(row)) {
+        return;
+      }
+
+      if (row.dataset.rowType === "folder") {
+        if (row.dataset.virtual === "true") {
+          return;
+        }
+
+        const children = row.nextElementSibling;
+        if (!(children instanceof HTMLElement) || !children.classList.contains("tree-children")) {
+          return;
+        }
+
+        const currentlyExpanded = !children.hidden;
+        children.hidden = currentlyExpanded;
+        row.setAttribute("aria-expanded", String(!currentlyExpanded));
+        const icon = row.querySelector(".material-symbols-outlined");
+        if (icon instanceof HTMLElement) {
+          icon.textContent = currentlyExpanded ? "folder" : "folder_open";
+        }
+
+        const folderPath = row.dataset.folderPath;
+        if (!folderPath) {
+          return;
+        }
+        if (currentlyExpanded) {
+          state.expanded.delete(folderPath);
+        } else {
+          state.expanded.add(folderPath);
+        }
+        persistExpandedSet(state.expanded);
+        return;
+      }
+
+      if (row.dataset.rowType === "file") {
+        event.preventDefault();
+        const route = row.dataset.route;
+        if (!route) {
+          return;
+        }
+        state.navigate(route, true);
+      }
+    });
+  }
+
+  if (contentEl instanceof HTMLElement) {
+    contentEl.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      const button = target.closest(".code-copy");
+      if (!(button instanceof HTMLButtonElement) || !contentEl.contains(button)) {
+        return;
+      }
+
+      const code = button.dataset.code;
+      if (!code) {
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(code);
+        button.classList.add("copied");
+        const icon = button.querySelector(".material-symbols-outlined");
+        if (icon instanceof HTMLElement) {
+          icon.textContent = "check";
+        }
+        setTimeout(() => {
+          button.classList.remove("copied");
+          const nextIcon = button.querySelector(".material-symbols-outlined");
+          if (nextIcon instanceof HTMLElement) {
+            nextIcon.textContent = "content_copy";
+          }
+        }, 2000);
+      } catch (err) {
+        console.error("Copy failed:", err);
+      }
+    });
+  }
+
+  if (navEl instanceof HTMLElement) {
+    navEl.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      const link = target.closest(".nav-link");
+      if (!(link instanceof HTMLAnchorElement) || !navEl.contains(link)) {
+        return;
+      }
+
+      event.preventDefault();
+      const route = link.dataset.route;
+      if (!route) {
+        return;
+      }
+      state.navigate(route, true);
+      if (viewerEl instanceof HTMLElement) {
+        viewerEl.scrollTo(0, 0);
+      }
+    });
+  }
 
   initializeTreeTypeahead(treeRoot);
 
@@ -1186,7 +1354,7 @@ async function start() {
     }
 
     activeBranch = normalized;
-    view = buildBranchView(manifest, activeBranch, defaultBranch);
+    view = getBranchView(activeBranch);
     localStorage.setItem(BRANCH_KEY, activeBranch);
     updateBranchInfo();
     renderTree(state);

@@ -64,7 +64,8 @@ export interface DocRecord {
   tags: string[];
   mtimeMs: number;
   body: string;
-  raw: string;
+  rawHash: string;
+  wikiTargets: string[];
   isNew: boolean;
   branch: string | null;
 }
@@ -122,6 +123,24 @@ export interface Manifest {
 
 export interface BuildCache {
   version: number;
+  sources: Record<
+    string,
+    {
+      mtimeMs: number;
+      size: number;
+      rawHash: string;
+      publish: boolean;
+      draft: boolean;
+      title?: string;
+      date?: string;
+      updatedDate?: string;
+      description?: string;
+      tags: string[];
+      branch: string | null;
+      body: string;
+      wikiTargets: string[];
+    }
+  >;
   docs: Record<
     string,
     {
@@ -130,6 +149,7 @@ export interface BuildCache {
       relPath: string;
     }
   >;
+  outputHashes: Record<string, string>;
 }
 
 export interface WikiResolver {

@@ -20,12 +20,30 @@ import {
   toRoute,
 } from "./utils";
 
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 const CACHE_DIR_NAME = ".cache";
 const CACHE_FILE_NAME = "build-index.json";
 const DEFAULT_BRANCH = "dev";
 const DEFAULT_SITE_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
 const DEFAULT_SITE_TITLE = "File-System Blog";
+
+type CachedSourceEntry = BuildCache["sources"][string];
+
+interface OutputWriteContext {
+  outDir: string;
+  previousHashes: Record<string, string>;
+  nextHashes: Record<string, string>;
+}
+
+interface WikiLookup {
+  byPath: Map<string, DocRecord>;
+  byStem: Map<string, DocRecord[]>;
+}
+
+interface ReadDocsResult {
+  docs: DocRecord[];
+  nextSources: BuildCache["sources"];
+}
 
 interface BuildResult {
   totalDocs: number;
@@ -41,20 +59,130 @@ function toCachePath(): string {
   return path.join(process.cwd(), CACHE_DIR_NAME, CACHE_FILE_NAME);
 }
 
+function createEmptyCache(): BuildCache {
+  return { version: CACHE_VERSION, sources: {}, docs: {}, outputHashes: {} };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizeCachedDocIndex(value: unknown): BuildCache["docs"] {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  const normalized: BuildCache["docs"] = {};
+  for (const [id, rawEntry] of Object.entries(value)) {
+    if (!isRecord(rawEntry)) {
+      continue;
+    }
+
+    const hash = typeof rawEntry.hash === "string" ? rawEntry.hash : "";
+    const route = typeof rawEntry.route === "string" ? rawEntry.route : "";
+    const relPath = typeof rawEntry.relPath === "string" ? rawEntry.relPath : "";
+    if (!hash || !route || !relPath) {
+      continue;
+    }
+
+    normalized[id] = { hash, route, relPath };
+  }
+
+  return normalized;
+}
+
+function normalizeCachedOutputHashes(value: unknown): BuildCache["outputHashes"] {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  const normalized: BuildCache["outputHashes"] = {};
+  for (const [outputPath, hash] of Object.entries(value)) {
+    if (typeof hash === "string" && hash.length > 0) {
+      normalized[outputPath] = hash;
+    }
+  }
+  return normalized;
+}
+
+function normalizeCachedSourceEntry(value: unknown): CachedSourceEntry | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const mtimeMs = typeof value.mtimeMs === "number" && Number.isFinite(value.mtimeMs) ? value.mtimeMs : null;
+  const size = typeof value.size === "number" && Number.isFinite(value.size) ? value.size : null;
+  const rawHash = typeof value.rawHash === "string" ? value.rawHash : "";
+  const publish = value.publish === true;
+  const draft = value.draft === true;
+  const title = typeof value.title === "string" && value.title.trim().length > 0 ? value.title.trim() : undefined;
+  const date = typeof value.date === "string" && value.date.trim().length > 0 ? value.date.trim() : undefined;
+  const updatedDate =
+    typeof value.updatedDate === "string" && value.updatedDate.trim().length > 0 ? value.updatedDate.trim() : undefined;
+  const description =
+    typeof value.description === "string" && value.description.trim().length > 0 ? value.description.trim() : undefined;
+  const tags = parseStringArray(value.tags);
+  const branch = parseBranch(value.branch);
+  const body = typeof value.body === "string" ? value.body : null;
+  const wikiTargets = parseStringArray(value.wikiTargets);
+
+  if (mtimeMs === null || size === null || !rawHash || body == null) {
+    return null;
+  }
+
+  return {
+    mtimeMs,
+    size,
+    rawHash,
+    publish,
+    draft,
+    title,
+    date,
+    updatedDate,
+    description,
+    tags,
+    branch,
+    body,
+    wikiTargets,
+  };
+}
+
+function normalizeCachedSources(value: unknown): BuildCache["sources"] {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  const normalized: BuildCache["sources"] = {};
+  for (const [relPath, rawEntry] of Object.entries(value)) {
+    const entry = normalizeCachedSourceEntry(rawEntry);
+    if (!entry) {
+      continue;
+    }
+    normalized[relPath] = entry;
+  }
+  return normalized;
+}
+
 async function readCache(cachePath: string): Promise<BuildCache> {
   const file = Bun.file(cachePath);
   if (!(await file.exists())) {
-    return { version: CACHE_VERSION, docs: {} };
+    return createEmptyCache();
   }
 
   try {
-    const parsed = (await file.json()) as BuildCache;
-    if (parsed.version !== CACHE_VERSION || typeof parsed.docs !== "object" || !parsed.docs) {
-      return { version: CACHE_VERSION, docs: {} };
+    const parsed = (await file.json()) as unknown;
+    if (!isRecord(parsed) || parsed.version !== CACHE_VERSION) {
+      return createEmptyCache();
     }
-    return parsed;
+
+    return {
+      version: CACHE_VERSION,
+      sources: normalizeCachedSources(parsed.sources),
+      docs: normalizeCachedDocIndex(parsed.docs),
+      outputHashes: normalizeCachedOutputHashes(parsed.outputHashes),
+    };
   } catch {
-    return { version: CACHE_VERSION, docs: {} };
+    return createEmptyCache();
   }
 }
 
@@ -252,64 +380,147 @@ function ensureUniqueRoutes(docs: DocRecord[]): void {
   }
 }
 
-async function readPublishedDocs(options: BuildOptions): Promise<DocRecord[]> {
+function normalizeWikiTarget(input: string): string {
+  return input
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "")
+    .replace(/^\//, "")
+    .replace(/\.md$/i, "")
+    .toLowerCase();
+}
+
+function extractWikiTargets(markdown: string): string[] {
+  const targets = new Set<string>();
+  const re = /\[\[([^\]]+)\]\]/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = re.exec(markdown)) !== null) {
+    if (match.index > 0 && markdown.charAt(match.index - 1) === "!") {
+      continue;
+    }
+
+    const inner = (match[1] ?? "").trim();
+    if (!inner) {
+      continue;
+    }
+
+    const [rawTarget] = inner.split("|");
+    const normalized = normalizeWikiTarget(rawTarget ?? "");
+    if (!normalized) {
+      continue;
+    }
+
+    targets.add(normalized);
+  }
+
+  return Array.from(targets).sort((left, right) => left.localeCompare(right, "ko-KR"));
+}
+
+function toCachedSourceEntry(raw: string, parsed: matter.GrayMatterFile<string>): CachedSourceEntry {
+  return {
+    mtimeMs: 0,
+    size: 0,
+    rawHash: makeHash(raw),
+    publish: parsed.data.publish === true,
+    draft: parsed.data.draft === true,
+    title: typeof parsed.data.title === "string" && parsed.data.title.trim().length > 0 ? parsed.data.title.trim() : undefined,
+    date: pickDocDate(parsed.data as Record<string, unknown>, raw),
+    updatedDate: pickDocUpdatedDate(parsed.data as Record<string, unknown>, raw),
+    description: typeof parsed.data.description === "string" ? parsed.data.description.trim() || undefined : undefined,
+    tags: parseStringArray(parsed.data.tags),
+    branch: parseBranch(parsed.data.branch),
+    body: parsed.content,
+    wikiTargets: extractWikiTargets(parsed.content),
+  };
+}
+
+function toDocRecord(
+  sourcePath: string,
+  relPath: string,
+  entry: CachedSourceEntry,
+  newThreshold: number,
+): DocRecord {
+  const relNoExt = stripMdExt(relPath);
+  const fileName = path.basename(relPath);
+  const id = toDocId(relNoExt);
+
+  return {
+    sourcePath,
+    relPath,
+    relNoExt,
+    id,
+    route: toRoute(relNoExt),
+    contentUrl: `/content/${toContentFileName(id)}`,
+    fileName,
+    title: entry.title ?? makeTitleFromFileName(fileName),
+    date: entry.date,
+    updatedDate: entry.updatedDate,
+    description: entry.description,
+    tags: entry.tags,
+    mtimeMs: entry.mtimeMs,
+    body: entry.body,
+    rawHash: entry.rawHash,
+    wikiTargets: entry.wikiTargets,
+    isNew: entry.mtimeMs >= newThreshold,
+    branch: entry.branch,
+  };
+}
+
+async function readPublishedDocs(options: BuildOptions, previousSources: BuildCache["sources"]): Promise<ReadDocsResult> {
   const isExcluded = buildExcluder(options.exclude);
   const mdFiles = await walkMarkdownFiles(options.vaultDir, options.vaultDir, isExcluded);
+  const fileEntries = await Promise.all(
+    mdFiles.map(async (sourcePath) => ({
+      sourcePath,
+      relPath: relativePosix(options.vaultDir, sourcePath),
+      stat: await fs.stat(sourcePath),
+    })),
+  );
   const now = Date.now();
   const newThreshold = now - options.newWithinDays * 24 * 60 * 60 * 1000;
 
   const docs: DocRecord[] = [];
+  const nextSources: BuildCache["sources"] = {};
 
-  for (const sourcePath of mdFiles) {
-    const relPath = relativePosix(options.vaultDir, sourcePath);
-    const relNoExt = stripMdExt(relPath);
-    const stat = await fs.stat(sourcePath);
-    const raw = await Bun.file(sourcePath).text();
+  for (const { sourcePath, relPath, stat } of fileEntries) {
+    const prev = previousSources[relPath];
 
-    let parsed: matter.GrayMatterFile<string>;
-    try {
-      parsed = matter(raw);
-    } catch (error) {
-      throw new Error(`Frontmatter parse failed: ${relPath}\n${(error as Error).message}`);
+    let entry: CachedSourceEntry;
+    const canReuse = !!prev && prev.mtimeMs === stat.mtimeMs && prev.size === stat.size;
+    if (canReuse) {
+      entry = prev;
+    } else {
+      const raw = await Bun.file(sourcePath).text();
+
+      let parsed: matter.GrayMatterFile<string>;
+      try {
+        parsed = matter(raw);
+      } catch (error) {
+        throw new Error(`Frontmatter parse failed: ${relPath}\n${(error as Error).message}`);
+      }
+
+      entry = toCachedSourceEntry(raw, parsed);
     }
 
-    const publish = parsed.data.publish === true;
-    const draft = parsed.data.draft === true;
-    if (!publish || draft) {
+    const completeEntry: CachedSourceEntry = {
+      ...entry,
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+    };
+    nextSources[relPath] = completeEntry;
+
+    if (!completeEntry.publish || completeEntry.draft) {
       continue;
     }
-
-    const fileName = path.basename(relPath);
-    const id = toDocId(relNoExt);
-    const route = toRoute(relNoExt);
-    const mtimeMs = stat.mtimeMs;
-
-    docs.push({
-      sourcePath,
-      relPath,
-      relNoExt,
-      id,
-      route,
-      contentUrl: `/content/${toContentFileName(id)}`,
-      fileName,
-      title: typeof parsed.data.title === "string" && parsed.data.title.trim().length > 0 ? parsed.data.title.trim() : makeTitleFromFileName(fileName),
-      date: pickDocDate(parsed.data as Record<string, unknown>, raw),
-      updatedDate: pickDocUpdatedDate(parsed.data as Record<string, unknown>, raw),
-      description: typeof parsed.data.description === "string" ? parsed.data.description : undefined,
-      tags: parseStringArray(parsed.data.tags),
-      mtimeMs,
-      body: parsed.content,
-      raw,
-      isNew: mtimeMs >= newThreshold,
-      branch: parseBranch(parsed.data.branch),
-    });
+    docs.push(toDocRecord(sourcePath, relPath, completeEntry, newThreshold));
   }
 
   ensureUniqueRoutes(docs);
-  return docs;
+  return { docs, nextSources };
 }
 
-function createWikiResolver(docs: DocRecord[], currentDoc: DocRecord): WikiResolver {
+function createWikiLookup(docs: DocRecord[]): WikiLookup {
   const byPath = new Map<string, DocRecord>();
   const byStem = new Map<string, DocRecord[]>();
 
@@ -321,40 +532,47 @@ function createWikiResolver(docs: DocRecord[], currentDoc: DocRecord): WikiResol
     byStem.set(stem, bucket);
   }
 
+  return { byPath, byStem };
+}
+
+function resolveWikiTarget(
+  lookup: WikiLookup,
+  input: string,
+  currentDoc: DocRecord,
+  warnOnDuplicate: boolean,
+): { route: string; label: string } | null {
+  const normalized = normalizeWikiTarget(input);
+  if (!normalized) {
+    return null;
+  }
+
+  const direct = lookup.byPath.get(normalized);
+  if (direct) {
+    return { route: direct.route, label: direct.title };
+  }
+
+  if (normalized.includes("/")) {
+    return null;
+  }
+
+  const stemMatches = lookup.byStem.get(normalized) ?? [];
+  if (stemMatches.length === 1) {
+    return { route: stemMatches[0].route, label: stemMatches[0].title };
+  }
+
+  if (warnOnDuplicate && stemMatches.length > 1) {
+    console.warn(
+      `[wikilink] Duplicate target "${input}" in ${currentDoc.relPath}. Candidates: ${stemMatches.map((item) => item.relPath).join(", ")}`,
+    );
+  }
+
+  return null;
+}
+
+function createWikiResolver(lookup: WikiLookup, currentDoc: DocRecord): WikiResolver {
   return {
     resolve(input: string) {
-      const normalized = input
-        .trim()
-        .replace(/\\/g, "/")
-        .replace(/^\.\//, "")
-        .replace(/^\//, "")
-        .replace(/\.md$/i, "");
-
-      if (!normalized) {
-        return null;
-      }
-
-      const direct = byPath.get(normalized.toLowerCase());
-      if (direct) {
-        return { route: direct.route, label: direct.title };
-      }
-
-      if (normalized.includes("/")) {
-        return null;
-      }
-
-      const stemMatches = byStem.get(normalized.toLowerCase()) ?? [];
-      if (stemMatches.length === 1) {
-        return { route: stemMatches[0].route, label: stemMatches[0].title };
-      }
-
-      if (stemMatches.length > 1) {
-        console.warn(
-          `[wikilink] Duplicate target "${input}" in ${currentDoc.relPath}. Candidates: ${stemMatches.map((item) => item.relPath).join(", ")}`,
-        );
-      }
-
-      return null;
+      return resolveWikiTarget(lookup, input, currentDoc, true);
     },
   };
 }
@@ -599,13 +817,36 @@ function buildStructuredData(route: string, doc: DocRecord | null, options: Buil
   return [articleSchema];
 }
 
-async function writeRuntimeAssets(outDir: string): Promise<void> {
-  const assetsDir = path.join(outDir, "assets");
-  await ensureDir(assetsDir);
+function toRouteOutputPath(route: string): string {
+  const clean = route.replace(/^\/+/, "").replace(/\/+$/, "");
+  return clean ? `${clean}/index.html` : "index.html";
+}
 
+async function writeOutputIfChanged(
+  context: OutputWriteContext,
+  relOutputPath: string,
+  content: string,
+): Promise<void> {
+  const outputHash = makeHash(content);
+  context.nextHashes[relOutputPath] = outputHash;
+
+  const outputPath = path.join(context.outDir, relOutputPath);
+  const unchanged = context.previousHashes[relOutputPath] === outputHash;
+  if (unchanged) {
+    return;
+  }
+
+  await ensureDir(path.dirname(outputPath));
+  await Bun.write(outputPath, content);
+}
+
+async function writeRuntimeAssets(context: OutputWriteContext): Promise<void> {
   const runtimeDir = path.join(import.meta.dir, "runtime");
-  await fs.copyFile(path.join(runtimeDir, "app.js"), path.join(assetsDir, "app.js"));
-  await fs.copyFile(path.join(runtimeDir, "app.css"), path.join(assetsDir, "app.css"));
+  const runtimeJs = await Bun.file(path.join(runtimeDir, "app.js")).text();
+  const runtimeCss = await Bun.file(path.join(runtimeDir, "app.css")).text();
+
+  await writeOutputIfChanged(context, "assets/app.js", runtimeJs);
+  await writeOutputIfChanged(context, "assets/app.css", runtimeCss);
 }
 
 function buildShellMeta(route: string, doc: DocRecord | null, options: BuildOptions): AppShellMeta {
@@ -633,17 +874,18 @@ function buildShellMeta(route: string, doc: DocRecord | null, options: BuildOpti
   };
 }
 
-async function writeShellPages(outDir: string, docs: DocRecord[], options: BuildOptions): Promise<void> {
+async function writeShellPages(context: OutputWriteContext, docs: DocRecord[], options: BuildOptions): Promise<void> {
   const shell = renderAppShellHtml(buildShellMeta("/", null, options));
-  await ensureDir(path.join(outDir, "_app"));
-  await Bun.write(path.join(outDir, "_app", "index.html"), shell);
-  await Bun.write(path.join(outDir, "index.html"), shell);
-  await Bun.write(path.join(outDir, "404.html"), render404Html());
+  await writeOutputIfChanged(context, "_app/index.html", shell);
+  await writeOutputIfChanged(context, "index.html", shell);
+  await writeOutputIfChanged(context, "404.html", render404Html());
 
   for (const doc of docs) {
-    const routeDir = path.join(outDir, doc.route.replace(/^\/+/, "").replace(/\/+$/, ""));
-    await ensureDir(routeDir);
-    await Bun.write(path.join(routeDir, "index.html"), renderAppShellHtml(buildShellMeta(doc.route, doc, options)));
+    await writeOutputIfChanged(
+      context,
+      toRouteOutputPath(doc.route),
+      renderAppShellHtml(buildShellMeta(doc.route, doc, options)),
+    );
   }
 }
 
@@ -667,8 +909,10 @@ function buildSitemapXml(urls: string[]): string {
   ].join("\n");
 }
 
-async function writeSeoArtifacts(outDir: string, docs: DocRecord[], options: BuildOptions): Promise<void> {
+async function writeSeoArtifacts(context: OutputWriteContext, docs: DocRecord[], options: BuildOptions): Promise<void> {
   if (!options.seo) {
+    await removeFileIfExists(path.join(context.outDir, "robots.txt"));
+    await removeFileIfExists(path.join(context.outDir, "sitemap.xml"));
     console.warn('[seo] Skipping robots.txt and sitemap.xml generation. Add "seo.siteUrl" to blog.config.* to enable SEO artifacts.');
     return;
   }
@@ -685,8 +929,8 @@ async function writeSeoArtifacts(outDir: string, docs: DocRecord[], options: Bui
   const sitemapUrl = buildCanonicalUrl("/sitemap.xml", seo);
   const robotsTxt = ["User-agent: *", "Allow: /", `Sitemap: ${sitemapUrl}`, ""].join("\n");
 
-  await Bun.write(path.join(outDir, "robots.txt"), robotsTxt);
-  await Bun.write(path.join(outDir, "sitemap.xml"), buildSitemapXml(urls));
+  await writeOutputIfChanged(context, "robots.txt", robotsTxt);
+  await writeOutputIfChanged(context, "sitemap.xml", buildSitemapXml(urls));
 }
 
 async function cleanRemovedOutputs(outDir: string, oldCache: BuildCache, currentDocs: DocRecord[]): Promise<void> {
@@ -723,56 +967,89 @@ export async function cleanBuildArtifacts(outDir: string): Promise<void> {
   await fs.rm(path.dirname(cachePath), { recursive: true, force: true });
 }
 
+function buildWikiResolutionSignature(doc: DocRecord, lookup: WikiLookup): string {
+  if (doc.wikiTargets.length === 0) {
+    return "";
+  }
+
+  const segments: string[] = [];
+  for (const target of doc.wikiTargets) {
+    const resolved = resolveWikiTarget(lookup, target, doc, false);
+    segments.push(`${target}->${resolved?.route ?? "null"}`);
+  }
+  return segments.join("|");
+}
+
 export async function buildSite(options: BuildOptions): Promise<BuildResult> {
   await ensureDir(options.outDir);
   await ensureDir(path.join(options.outDir, "content"));
 
   const cachePath = toCachePath();
   const previousCache = await readCache(cachePath);
-  const docs = await readPublishedDocs(options);
+  const canReuseOutputs = await fileExists(path.join(options.outDir, "manifest.json"));
+  const previousDocs = canReuseOutputs ? previousCache.docs : {};
+  const previousOutputHashes = canReuseOutputs ? previousCache.outputHashes : {};
+  const { docs, nextSources } = await readPublishedDocs(options, previousCache.sources);
   docs.sort((a, b) => a.relNoExt.localeCompare(b.relNoExt, "ko-KR"));
 
   await cleanRemovedOutputs(options.outDir, previousCache, docs);
-  await writeRuntimeAssets(options.outDir);
+  const outputContext: OutputWriteContext = {
+    outDir: options.outDir,
+    previousHashes: previousOutputHashes,
+    nextHashes: {},
+  };
+  await writeRuntimeAssets(outputContext);
 
   const tree = buildTree(docs, options);
   const manifest = buildManifest(docs, tree, options);
-  await Bun.write(path.join(options.outDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeOutputIfChanged(outputContext, "manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
 
-  await writeShellPages(options.outDir, docs, options);
-  await writeSeoArtifacts(options.outDir, docs, options);
+  await writeShellPages(outputContext, docs, options);
+  await writeSeoArtifacts(outputContext, docs, options);
 
   const markdownRenderer = await createMarkdownRenderer(options);
-  const globalFingerprint = makeHash(docs.map((doc) => doc.relNoExt).sort().join("|"));
+  const wikiLookup = createWikiLookup(docs);
 
   let renderedDocs = 0;
   let skippedDocs = 0;
 
   const nextCache: BuildCache = {
     version: CACHE_VERSION,
+    sources: nextSources,
     docs: {},
+    outputHashes: outputContext.nextHashes,
   };
 
   for (const doc of docs) {
+    const wikiSignature = options.wikilinks ? buildWikiResolutionSignature(doc, wikiLookup) : "";
     const sourceHash = makeHash(
-      [doc.raw, options.shikiTheme, options.imagePolicy, options.wikilinks ? "wikilinks-on" : "wikilinks-off", globalFingerprint].join("::"),
+      [
+        doc.rawHash,
+        doc.route,
+        options.shikiTheme,
+        options.imagePolicy,
+        options.wikilinks ? "wikilinks-on" : "wikilinks-off",
+        wikiSignature,
+      ].join("::"),
     );
-    const previous = previousCache.docs[doc.id];
+    const previous = previousDocs[doc.id];
+    const contentRelPath = `content/${toContentFileName(doc.id)}`;
     const outputPath = path.join(options.outDir, "content", toContentFileName(doc.id));
-    const unchanged = previous?.hash === sourceHash && (await fileExists(outputPath));
+    const unchanged = previous?.hash === sourceHash && outputContext.previousHashes[contentRelPath] === sourceHash;
 
     nextCache.docs[doc.id] = {
       hash: sourceHash,
       route: doc.route,
       relPath: doc.relPath,
     };
+    outputContext.nextHashes[contentRelPath] = sourceHash;
 
     if (unchanged) {
       skippedDocs += 1;
       continue;
     }
 
-    const resolver = createWikiResolver(docs, doc);
+    const resolver = createWikiResolver(wikiLookup, doc);
     const renderResult = await markdownRenderer.render(doc.body, resolver);
     if (renderResult.warnings.length > 0) {
       for (const warning of renderResult.warnings) {

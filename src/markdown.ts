@@ -89,8 +89,9 @@ function preprocessMarkdown(
 
 type Highlighter = HighlighterGeneric<string, string>;
 
-async function loadFenceLanguages(highlighter: Highlighter, markdown: string): Promise<void> {
+async function loadFenceLanguages(highlighter: Highlighter, loaded: Set<string>, markdown: string): Promise<void> {
   const langs = new Set<string>();
+  FENCE_LANG_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = FENCE_LANG_RE.exec(markdown)) !== null) {
     if (match[1]) {
@@ -98,7 +99,6 @@ async function loadFenceLanguages(highlighter: Highlighter, markdown: string): P
     }
   }
 
-  const loaded = new Set(highlighter.getLoadedLanguages().map(String));
   for (const lang of langs) {
     if (loaded.has(lang)) {
       continue;
@@ -195,13 +195,14 @@ export async function createMarkdownRenderer(options: BuildOptions): Promise<Mar
     themes: [options.shikiTheme],
     langs: ["text", "plaintext", "markdown", "bash", "json", "typescript", "javascript"],
   });
+  const loadedLanguages = new Set(highlighter.getLoadedLanguages().map(String));
 
   const md = createMarkdownIt(highlighter, options.shikiTheme, options.gfm);
 
   return {
     async render(markdown: string, resolver: WikiResolver): Promise<RenderResult> {
       const { markdown: preprocessed, warnings } = preprocessMarkdown(markdown, resolver, options.imagePolicy, options.wikilinks);
-      await loadFenceLanguages(highlighter, preprocessed);
+      await loadFenceLanguages(highlighter, loadedLanguages, preprocessed);
       const html = md.render(preprocessed);
       return { html, warnings };
     },
