@@ -1,5 +1,8 @@
 import MarkdownIt from "markdown-it";
-import { createHighlighter, type Highlighter } from "shiki";
+import { createBundledHighlighter, type HighlighterGeneric } from "shiki/core";
+import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
+import { bundledLanguages } from "shiki/langs";
+import { bundledThemes } from "shiki/themes";
 import type { BuildOptions, WikiResolver } from "./types";
 import { isRemoteUrl } from "./utils";
 
@@ -83,6 +86,8 @@ function preprocessMarkdown(
 
   return { markdown: output, warnings };
 }
+
+type Highlighter = HighlighterGeneric<string, string>;
 
 async function loadFenceLanguages(highlighter: Highlighter, markdown: string): Promise<void> {
   const langs = new Set<string>();
@@ -179,6 +184,12 @@ function createMarkdownIt(highlighter: Highlighter, theme: string, gfm: boolean)
 }
 
 export async function createMarkdownRenderer(options: BuildOptions): Promise<MarkdownRenderer> {
+  const createHighlighter = createBundledHighlighter({
+    langs: bundledLanguages,
+    themes: bundledThemes,
+    engine: () => createJavaScriptRegexEngine(),
+  });
+
   const highlighter = await createHighlighter({
     themes: [options.shikiTheme],
     langs: ["text", "plaintext", "markdown", "bash", "json", "typescript", "javascript"],
