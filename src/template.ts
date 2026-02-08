@@ -1,10 +1,102 @@
-export function renderAppShellHtml(): string {
+import { escapeHtmlAttribute } from "./seo";
+
+const DEFAULT_TITLE = "File-System Blog";
+const DEFAULT_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
+
+export interface AppShellMeta {
+  title?: string;
+  description?: string;
+  canonicalUrl?: string;
+  ogTitle?: string;
+  ogType?: string;
+  ogUrl?: string;
+  ogDescription?: string;
+  ogImage?: string;
+  twitterCard?: string;
+  twitterTitle?: string;
+  twitterDescription?: string;
+  twitterImage?: string;
+  jsonLd?: unknown | unknown[];
+}
+
+function normalizeJsonLd(value: unknown | unknown[] | undefined): unknown[] {
+  if (Array.isArray(value)) {
+    return value.filter((item) => item != null);
+  }
+  return value == null ? [] : [value];
+}
+
+function stringifyJsonLd(value: unknown): string {
+  return JSON.stringify(value)
+    .replaceAll("<", "\\u003c")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
+}
+
+function renderHeadMeta(meta: AppShellMeta): string {
+  const title = (meta.title ?? DEFAULT_TITLE).trim() || DEFAULT_TITLE;
+  const description = typeof meta.description === "string" ? meta.description.trim() : "";
+  const canonicalUrl = typeof meta.canonicalUrl === "string" ? meta.canonicalUrl.trim() : "";
+
+  const ogTitle = (meta.ogTitle ?? title).trim() || title;
+  const ogType = (meta.ogType ?? "website").trim() || "website";
+  const ogUrl = typeof meta.ogUrl === "string" ? meta.ogUrl.trim() : "";
+  const ogDescription = (meta.ogDescription ?? (description || DEFAULT_DESCRIPTION)).trim() || DEFAULT_DESCRIPTION;
+  const ogImage = typeof meta.ogImage === "string" ? meta.ogImage.trim() : "";
+
+  const twitterCard = (meta.twitterCard ?? "summary").trim() || "summary";
+  const twitterTitle = (meta.twitterTitle ?? title).trim() || title;
+  const twitterDescription = (meta.twitterDescription ?? (description || DEFAULT_DESCRIPTION)).trim() || DEFAULT_DESCRIPTION;
+  const twitterImage = typeof meta.twitterImage === "string" ? meta.twitterImage.trim() : "";
+  const jsonLd = normalizeJsonLd(meta.jsonLd);
+
+  const headTags: string[] = [`    <title>${escapeHtmlAttribute(title)}</title>`];
+
+  if (description) {
+    headTags.push(`    <meta name="description" content="${escapeHtmlAttribute(description)}" />`);
+  }
+
+  if (canonicalUrl) {
+    headTags.push(`    <link rel="canonical" href="${escapeHtmlAttribute(canonicalUrl)}" />`);
+  }
+
+  headTags.push(`    <meta property="og:title" content="${escapeHtmlAttribute(ogTitle)}" />`);
+  headTags.push(`    <meta property="og:type" content="${escapeHtmlAttribute(ogType)}" />`);
+
+  if (ogUrl) {
+    headTags.push(`    <meta property="og:url" content="${escapeHtmlAttribute(ogUrl)}" />`);
+  }
+
+  headTags.push(`    <meta property="og:description" content="${escapeHtmlAttribute(ogDescription)}" />`);
+
+  if (ogImage) {
+    headTags.push(`    <meta property="og:image" content="${escapeHtmlAttribute(ogImage)}" />`);
+  }
+
+  headTags.push(`    <meta name="twitter:card" content="${escapeHtmlAttribute(twitterCard)}" />`);
+  headTags.push(`    <meta name="twitter:title" content="${escapeHtmlAttribute(twitterTitle)}" />`);
+  headTags.push(`    <meta name="twitter:description" content="${escapeHtmlAttribute(twitterDescription)}" />`);
+
+  if (twitterImage) {
+    headTags.push(`    <meta name="twitter:image" content="${escapeHtmlAttribute(twitterImage)}" />`);
+  }
+
+  for (const schema of jsonLd) {
+    headTags.push(`    <script type="application/ld+json">${stringifyJsonLd(schema)}</script>`);
+  }
+
+  return headTags.join("\n");
+}
+
+export function renderAppShellHtml(meta: AppShellMeta = {}): string {
+  const headMeta = renderHeadMeta(meta);
+
   return `<!doctype html>
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>File-System Blog</title>
+${headMeta}
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -12,6 +104,8 @@ export function renderAppShellHtml(): string {
     <link rel="stylesheet" href="/assets/app.css" />
   </head>
   <body>
+    <a class="skip-link" href="#viewer-panel">본문으로 건너뛰기</a>
+    <div id="a11y-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     <div class="app-root">
       <div id="sidebar-overlay" class="sidebar-overlay" hidden></div>
       <aside id="sidebar-panel" class="sidebar" aria-label="문서 탐색기 패널">
@@ -93,7 +187,7 @@ export function renderAppShellHtml(): string {
         aria-label="탐색기 너비 조절"
         tabindex="0"
       ></div>
-      <main id="viewer-panel" class="viewer">
+      <main id="viewer-panel" class="viewer" tabindex="-1">
         <button
           id="sidebar-toggle"
           class="mobile-menu-toggle"

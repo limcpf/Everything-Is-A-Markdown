@@ -131,6 +131,10 @@ export default {
   vaultDir: "./vault",
   outDir: "dist",
   exclude: [".obsidian/**", "private/**"],
+  seo: {
+    siteUrl: "https://example.com", // origin only (http/https)
+    pathBase: "/blog", // optional, deploy base path
+  },
   ui: {
     newWithinDays: 7,
     recentLimit: 5,
@@ -145,6 +149,11 @@ export default {
   },
 };
 ```
+
+SEO 설정 메모
+- `seo.siteUrl`: 필수. 절대 origin만 허용됩니다 (예: `https://example.com`, path/query/hash 불가).
+- `seo.pathBase`: 선택. `/blog` 같은 배포 base path를 canonical/OG/sitemap URL에 함께 붙입니다.
+- `seo.siteUrl`이 없으면 `robots.txt`, `sitemap.xml`은 생성되지 않습니다.
 
 **콘텐츠 작성 규칙**
 - `publish: true`인 문서만 출력됩니다.
@@ -179,6 +188,86 @@ tags: ["dev", "blog"]
 - `dist/_app/index.html`: 앱 셸
 - `dist/<문서 slug 경로>/index.html`: 각 문서 경로
 - `dist/assets/app.js`, `dist/assets/app.css`: 런타임 UI
+
+**SEO/A11y 생성 결과**
+- 라우트별 HTML(`index.html`, `about/index.html`, `posts/2024/setup-guide/index.html` 등)에 route-specific `<title>`, description, canonical, Open Graph/Twitter meta가 주입됩니다.
+- 각 라우트에 JSON-LD(`application/ld+json`)가 포함됩니다.
+- `seo.siteUrl` 설정 시에만 `robots.txt`, `sitemap.xml`이 생성됩니다.
+  - `robots.txt`는 `Sitemap: <canonical sitemap url>`을 포함합니다.
+  - `sitemap.xml`은 `/` + 게시된 문서 라우트들을 canonical URL로 직렬화합니다 (`seo.pathBase` 반영).
+- 접근성 기본값:
+  - skip link: `본문으로 건너뛰기` (`href="#viewer-panel"`)
+  - live region: `#a11y-status` (`aria-live="polite"`, `aria-atomic="true"`)
+  - reduced motion: `prefers-reduced-motion: reduce`에서 `.status-dot` pulse 애니메이션 비활성화
+
+**검증 명령 (복붙용)**
+
+1) Temp CWD 기반으로 SEO OFF/ON 빌드 (repo 설정 파일 비오염)
+
+```bash
+REPO="$(pwd)"
+TMP_NO="$(mktemp -d)"
+TMP_YES="$(mktemp -d)"
+TMP_OUT="$(mktemp -d)"
+
+# SEO OFF (blog.config.* 없음)
+(cd "$TMP_NO" && bun "$REPO/src/cli.ts" build --vault "$REPO/test-vault" --out "$TMP_OUT/no-seo-out")
+
+# SEO ON (temp blog.config.mjs 사용)
+cat > "$TMP_YES/blog.config.mjs" <<'EOF'
+export default {
+  seo: {
+    siteUrl: "https://docs.example.com",
+    pathBase: "/kb"
+  }
+};
+EOF
+(cd "$TMP_YES" && bun "$REPO/src/cli.ts" build --vault "$REPO/test-vault" --out "$TMP_OUT/with-seo-out")
+```
+
+2) 라우트별 head/JSON-LD + robots/sitemap assert
+
+```bash
+bun -e 'import { existsSync, readFileSync } from "node:fs";
+const out = process.env.OUT;
+const noSeoOut = `${out}/no-seo-out`;
+const withSeoOut = `${out}/with-seo-out`;
+const pages = [
+  ["index", `${withSeoOut}/index.html`, "https://docs.example.com/kb/"],
+  ["about", `${withSeoOut}/about/index.html`, "https://docs.example.com/kb/about/"],
+  ["post", `${withSeoOut}/posts/2024/setup-guide/index.html`, "https://docs.example.com/kb/posts/2024/setup-guide/"],
+];
+for (const [name, file, canonical] of pages) {
+  const html = readFileSync(file, "utf8");
+  console.log(`${name}: canonical=${html.includes(`<link rel="canonical" href="${canonical}" />`)} og:url=${html.includes(`<meta property="og:url" content="${canonical}" />`)} jsonld=${/<script type="application\/ld\+json">[\s\S]*<\/script>/.test(html)}`);
+}
+console.log(`no-seo robots=${existsSync(`${noSeoOut}/robots.txt`)}`);
+console.log(`no-seo sitemap=${existsSync(`${noSeoOut}/sitemap.xml`)}`);
+console.log(`with-seo robots=${existsSync(`${withSeoOut}/robots.txt`)}`);
+console.log(`with-seo sitemap=${existsSync(`${withSeoOut}/sitemap.xml`)}`);
+' OUT="$TMP_OUT"
+```
+
+3) Playwright MCP 최소 키보드/포커스 + reduced motion 확인 (OpenCode)
+
+```text
+static server: (cd "$TMP_OUT/with-seo-out" && python3 -m http.server 4173 --bind 127.0.0.1)
+
+browser_navigate: http://127.0.0.1:4173/
+
+browser_run_code:
+async (page) => {
+  await page.keyboard.press('Tab');
+  const skip = await page.evaluate(() => document.activeElement?.className);
+  await page.keyboard.press('Enter');
+  const focus = await page.evaluate(() => ({ hash: window.location.hash, id: document.activeElement?.id }));
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const normal = await page.evaluate(() => getComputedStyle(document.querySelector('.status-dot')).animationName);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const reduced = await page.evaluate(() => getComputedStyle(document.querySelector('.status-dot')).animationName);
+  return { skip, focus, normal, reduced };
+}
+```
 
 **추가로 필요한 문서 목록**
 - `LICENSE`: 라이선스 명시

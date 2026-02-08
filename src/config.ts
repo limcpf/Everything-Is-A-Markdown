@@ -1,5 +1,6 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { normalizeSeoConfig } from "./seo";
 import type { BuildOptions, PinnedMenuOption, UserConfig } from "./types";
 
 export interface CliArgs {
@@ -153,7 +154,7 @@ export async function loadPinnedMenuConfig(
   }
 
   if (typeof parsed !== "object" || parsed == null) {
-    throw new Error(`[menu-config] top-level JSON must be an object`);
+    throw new Error("[menu-config] top-level JSON must be an object");
   }
 
   return normalizePinnedMenu((parsed as Record<string, unknown>).pinnedMenu);
@@ -168,6 +169,7 @@ export function resolveBuildOptions(
   const cfgExclude = userConfig.exclude ?? [];
   const cliExclude = cli.exclude ?? [];
   const mergedExclude = Array.from(new Set([...DEFAULTS.exclude, ...cfgExclude, ...cliExclude]));
+  const seo = normalizeSeoConfig(userConfig.seo);
 
   return {
     vaultDir: path.resolve(cwd, cli.vaultDir ?? userConfig.vaultDir ?? DEFAULTS.vaultDir),
@@ -180,6 +182,7 @@ export function resolveBuildOptions(
     imagePolicy: userConfig.markdown?.images ?? DEFAULTS.imagePolicy,
     gfm: userConfig.markdown?.gfm ?? DEFAULTS.gfm,
     shikiTheme: userConfig.markdown?.highlight?.theme ?? DEFAULTS.shikiTheme,
+    seo,
   };
 }
 

@@ -528,12 +528,14 @@ function markActive(id) {
     
     if (el.dataset.fileId === id) {
       el.classList.add("is-active");
+      el.setAttribute("aria-current", "page");
       const activeBadge = document.createElement("span");
       activeBadge.className = "badge-active";
       activeBadge.textContent = "active";
       el.appendChild(activeBadge);
     } else {
       el.classList.remove("is-active");
+      el.removeAttribute("aria-current");
     }
   }
 }
@@ -546,7 +548,7 @@ function renderBreadcrumb(route) {
       const isCurrent = index === allItems.length - 1 && allItems.length > 1;
       const escapedPart = escapeHtmlAttr(part);
       if (isCurrent) {
-        return `<span class="breadcrumb-current">${escapedPart}</span>`;
+        return `<span class="breadcrumb-current" aria-current="page">${escapedPart}</span>`;
       }
       return `<span class="breadcrumb-item">${escapedPart}</span>`;
     })
@@ -626,6 +628,7 @@ async function start() {
   const metaEl = document.getElementById("viewer-meta");
   const contentEl = document.getElementById("viewer-content");
   const navEl = document.getElementById("viewer-nav");
+  const a11yStatusEl = document.getElementById("a11y-status");
 
   let hideTreeTooltip = () => {};
   let disposeTreeTooltip = () => {};
@@ -633,6 +636,16 @@ async function start() {
   let activeResizePointerId = null;
   let resizeStartX = 0;
   let resizeStartWidth = desktopSidebarWidth;
+
+  const announceA11yStatus = (message) => {
+    if (!(a11yStatusEl instanceof HTMLElement)) {
+      return;
+    }
+    a11yStatusEl.textContent = "";
+    window.setTimeout(() => {
+      a11yStatusEl.textContent = message;
+    }, 20);
+  };
 
   const compactMediaQuery = window.matchMedia(COMPACT_LAYOUT_QUERY);
   const darkModeMediaQuery = window.matchMedia(DARK_MODE_QUERY);
@@ -1098,6 +1111,7 @@ async function start() {
         contentEl.innerHTML = '<p class="placeholder">요청한 경로에 해당하는 문서가 없습니다.</p>';
         navEl.innerHTML = "";
         markActive("");
+        announceA11yStatus("탐색 실패: 요청한 문서를 찾을 수 없습니다.");
         if (push) {
           history.pushState(null, "", toSafeUrlPath(route));
         }
@@ -1123,6 +1137,7 @@ async function start() {
       if (!res.ok) {
         contentEl.innerHTML = '<p class="placeholder">본문을 불러오지 못했습니다.</p>';
         navEl.innerHTML = "";
+        announceA11yStatus(`탐색 실패: ${doc.title} 문서를 불러오지 못했습니다.`);
         return;
       }
 
@@ -1158,6 +1173,7 @@ async function start() {
 
       document.title = `${doc.title} - File-System Blog`;
       document.querySelector(".viewer").scrollTo(0, 0);
+      announceA11yStatus(`탐색 완료: ${doc.title} 문서를 열었습니다.`);
     },
   };
 

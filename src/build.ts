@@ -3,7 +3,9 @@ import path from "node:path";
 import matter from "gray-matter";
 import type { BuildCache, BuildOptions, DocRecord, FileNode, FolderNode, Manifest, TreeNode, WikiResolver } from "./types";
 import { createMarkdownRenderer } from "./markdown";
+import { buildCanonicalUrl } from "./seo";
 import { render404Html, renderAppShellHtml } from "./template";
+import type { AppShellMeta } from "./template";
 import {
   buildExcluder,
   ensureDir,
@@ -22,6 +24,8 @@ const CACHE_VERSION = 1;
 const CACHE_DIR_NAME = ".cache";
 const CACHE_FILE_NAME = "build-index.json";
 const DEFAULT_BRANCH = "dev";
+const DEFAULT_SITE_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
+const DEFAULT_SITE_TITLE = "File-System Blog";
 
 interface BuildResult {
   totalDocs: number;
@@ -524,6 +528,77 @@ function buildManifest(docs: DocRecord[], tree: TreeNode[], options: BuildOption
   };
 }
 
+function pickSeoImageDefaults(
+  seo: BuildOptions["seo"],
+): { social: string | null; og: string | null; twitter: string | null } {
+  if (!seo) {
+    return { social: null, og: null, twitter: null };
+  }
+
+  const raw = seo as BuildOptions["seo"] & {
+    defaultSocialImage?: unknown;
+    defaultOgImage?: unknown;
+    defaultTwitterImage?: unknown;
+  };
+
+  const toAbsoluteImage = (value: unknown): string | null => {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    try {
+      return new URL(trimmed).toString();
+    } catch {
+      if (!trimmed.startsWith("/")) {
+        return null;
+      }
+      return new URL(trimmed, `${seo.siteUrl}/`).toString();
+    }
+  };
+
+  return {
+    social: toAbsoluteImage(raw.defaultSocialImage),
+    og: toAbsoluteImage(raw.defaultOgImage),
+    twitter: toAbsoluteImage(raw.defaultTwitterImage),
+  };
+}
+
+function buildStructuredData(route: string, doc: DocRecord | null, options: BuildOptions): unknown[] {
+  const canonicalUrl = options.seo ? buildCanonicalUrl(route, options.seo) : undefined;
+
+  if (!doc) {
+    const websiteSchema: Record<string, string> = {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: DEFAULT_SITE_TITLE,
+    };
+    if (canonicalUrl) {
+      websiteSchema.url = canonicalUrl;
+    }
+    return [websiteSchema];
+  }
+
+  const schemaType = /(^|\/)posts?\//i.test(doc.relNoExt) ? "BlogPosting" : "Article";
+  const articleSchema: Record<string, string> = {
+    "@context": "https://schema.org",
+    "@type": schemaType,
+    headline: doc.title,
+  };
+
+  if (canonicalUrl) {
+    articleSchema.url = canonicalUrl;
+  }
+  if (doc.date) {
+    articleSchema.datePublished = doc.date;
+  }
+
+  return [articleSchema];
+}
+
 async function writeRuntimeAssets(outDir: string): Promise<void> {
   const assetsDir = path.join(outDir, "assets");
   await ensureDir(assetsDir);
@@ -533,8 +608,33 @@ async function writeRuntimeAssets(outDir: string): Promise<void> {
   await fs.copyFile(path.join(runtimeDir, "app.css"), path.join(assetsDir, "app.css"));
 }
 
-async function writeShellPages(outDir: string, docs: DocRecord[]): Promise<void> {
-  const shell = renderAppShellHtml();
+function buildShellMeta(route: string, doc: DocRecord | null, options: BuildOptions): AppShellMeta {
+  const description = typeof doc?.description === "string" && doc.description.trim().length > 0 ? doc.description.trim() : undefined;
+  const canonicalUrl = options.seo ? buildCanonicalUrl(route, options.seo) : undefined;
+  const title = doc?.title ?? DEFAULT_SITE_TITLE;
+  const imageDefaults = pickSeoImageDefaults(options.seo);
+  const ogImage = imageDefaults.og ?? imageDefaults.social ?? undefined;
+  const twitterImage = imageDefaults.twitter ?? imageDefaults.social ?? undefined;
+
+  return {
+    title,
+    description,
+    canonicalUrl,
+    ogTitle: title,
+    ogType: doc ? "article" : "website",
+    ogUrl: canonicalUrl,
+    ogDescription: description ?? DEFAULT_SITE_DESCRIPTION,
+    twitterCard: "summary",
+    twitterTitle: title,
+    twitterDescription: description ?? DEFAULT_SITE_DESCRIPTION,
+    ogImage,
+    twitterImage,
+    jsonLd: buildStructuredData(route, doc, options),
+  };
+}
+
+async function writeShellPages(outDir: string, docs: DocRecord[], options: BuildOptions): Promise<void> {
+  const shell = renderAppShellHtml(buildShellMeta("/", null, options));
   await ensureDir(path.join(outDir, "_app"));
   await Bun.write(path.join(outDir, "_app", "index.html"), shell);
   await Bun.write(path.join(outDir, "index.html"), shell);
@@ -543,8 +643,50 @@ async function writeShellPages(outDir: string, docs: DocRecord[]): Promise<void>
   for (const doc of docs) {
     const routeDir = path.join(outDir, doc.route.replace(/^\/+/, "").replace(/\/+$/, ""));
     await ensureDir(routeDir);
-    await Bun.write(path.join(routeDir, "index.html"), shell);
+    await Bun.write(path.join(routeDir, "index.html"), renderAppShellHtml(buildShellMeta(doc.route, doc, options)));
   }
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function buildSitemapXml(urls: string[]): string {
+  const entries = urls.map((url) => `  <url><loc>${escapeXml(url)}</loc></url>`).join("\n");
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    entries,
+    "</urlset>",
+    "",
+  ].join("\n");
+}
+
+async function writeSeoArtifacts(outDir: string, docs: DocRecord[], options: BuildOptions): Promise<void> {
+  if (!options.seo) {
+    console.warn('[seo] Skipping robots.txt and sitemap.xml generation. Add "seo.siteUrl" to blog.config.* to enable SEO artifacts.');
+    return;
+  }
+
+  const seo = options.seo;
+
+  const routeSet = new Set<string>(["/"]);
+  for (const doc of docs) {
+    routeSet.add(doc.route);
+  }
+
+  const routes = Array.from(routeSet).sort((left, right) => left.localeCompare(right, "ko-KR"));
+  const urls = routes.map((route) => buildCanonicalUrl(route, seo));
+  const sitemapUrl = buildCanonicalUrl("/sitemap.xml", seo);
+  const robotsTxt = ["User-agent: *", "Allow: /", `Sitemap: ${sitemapUrl}`, ""].join("\n");
+
+  await Bun.write(path.join(outDir, "robots.txt"), robotsTxt);
+  await Bun.write(path.join(outDir, "sitemap.xml"), buildSitemapXml(urls));
 }
 
 async function cleanRemovedOutputs(outDir: string, oldCache: BuildCache, currentDocs: DocRecord[]): Promise<void> {
@@ -597,7 +739,8 @@ export async function buildSite(options: BuildOptions): Promise<BuildResult> {
   const manifest = buildManifest(docs, tree, options);
   await Bun.write(path.join(options.outDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 
-  await writeShellPages(options.outDir, docs);
+  await writeShellPages(options.outDir, docs, options);
+  await writeSeoArtifacts(options.outDir, docs, options);
 
   const markdownRenderer = await createMarkdownRenderer(options);
   const globalFingerprint = makeHash(docs.map((doc) => doc.relNoExt).sort().join("|"));

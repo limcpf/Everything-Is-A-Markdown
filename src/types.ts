@@ -1,5 +1,15 @@
 export type ImagePolicy = "keep" | "omit-local";
 
+export interface UserSeoConfig {
+  siteUrl?: string;
+  pathBase?: string;
+}
+
+export interface BuildSeoOptions {
+  siteUrl: string;
+  pathBase: string;
+}
+
 export interface PinnedMenuOption {
   label: string;
   sourceDir: string;
@@ -22,6 +32,7 @@ export interface UserConfig {
       theme?: string;
     };
   };
+  seo?: UserSeoConfig;
 }
 
 export interface BuildOptions {
@@ -35,6 +46,7 @@ export interface BuildOptions {
   imagePolicy: ImagePolicy;
   gfm: boolean;
   shikiTheme: string;
+  seo: BuildSeoOptions | null;
 }
 
 export interface DocRecord {
