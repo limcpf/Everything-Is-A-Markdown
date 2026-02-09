@@ -393,9 +393,11 @@ function normalizeWikiTarget(input: string): string {
 function extractWikiTargets(markdown: string): string[] {
   const targets = new Set<string>();
   const re = /\[\[([^\]]+)\]\]/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = re.exec(markdown)) !== null) {
+  while (true) {
+    const match = re.exec(markdown);
+    if (match === null) {
+      break;
+    }
     if (match.index > 0 && markdown.charAt(match.index - 1) === "!") {
       continue;
     }
@@ -410,7 +412,6 @@ function extractWikiTargets(markdown: string): string[] {
     if (!normalized) {
       continue;
     }
-
     targets.add(normalized);
   }
 
@@ -783,12 +784,6 @@ function pickSeoImageDefaults(
     return { social: null, og: null, twitter: null };
   }
 
-  const raw = seo as BuildOptions["seo"] & {
-    defaultSocialImage?: unknown;
-    defaultOgImage?: unknown;
-    defaultTwitterImage?: unknown;
-  };
-
   const toAbsoluteImage = (value: unknown): string | null => {
     if (typeof value !== "string") {
       return null;
@@ -809,20 +804,21 @@ function pickSeoImageDefaults(
   };
 
   return {
-    social: toAbsoluteImage(raw.defaultSocialImage),
-    og: toAbsoluteImage(raw.defaultOgImage),
-    twitter: toAbsoluteImage(raw.defaultTwitterImage),
+    social: toAbsoluteImage(seo.defaultSocialImage),
+    og: toAbsoluteImage(seo.defaultOgImage),
+    twitter: toAbsoluteImage(seo.defaultTwitterImage),
   };
 }
 
 function buildStructuredData(route: string, doc: DocRecord | null, options: BuildOptions): unknown[] {
   const canonicalUrl = options.seo ? buildCanonicalUrl(route, options.seo) : undefined;
+  const siteName = options.seo?.siteName ?? options.seo?.defaultTitle ?? DEFAULT_SITE_TITLE;
 
   if (!doc) {
     const websiteSchema: Record<string, string> = {
       "@context": "https://schema.org",
       "@type": "WebSite",
-      name: DEFAULT_SITE_TITLE,
+      name: siteName,
     };
     if (canonicalUrl) {
       websiteSchema.url = canonicalUrl;
@@ -880,9 +876,11 @@ async function writeRuntimeAssets(context: OutputWriteContext): Promise<void> {
 }
 
 function buildShellMeta(route: string, doc: DocRecord | null, options: BuildOptions): AppShellMeta {
+  const defaultTitle = options.seo?.defaultTitle ?? DEFAULT_SITE_TITLE;
+  const defaultDescription = options.seo?.defaultDescription ?? DEFAULT_SITE_DESCRIPTION;
   const description = typeof doc?.description === "string" && doc.description.trim().length > 0 ? doc.description.trim() : undefined;
   const canonicalUrl = options.seo ? buildCanonicalUrl(route, options.seo) : undefined;
-  const title = doc?.title ?? DEFAULT_SITE_TITLE;
+  const title = doc?.title ?? defaultTitle;
   const imageDefaults = pickSeoImageDefaults(options.seo);
   const ogImage = imageDefaults.og ?? imageDefaults.social ?? undefined;
   const twitterImage = imageDefaults.twitter ?? imageDefaults.social ?? undefined;
@@ -893,11 +891,15 @@ function buildShellMeta(route: string, doc: DocRecord | null, options: BuildOpti
     canonicalUrl,
     ogTitle: title,
     ogType: doc ? "article" : "website",
+    ogSiteName: options.seo?.siteName,
+    ogLocale: options.seo?.locale,
     ogUrl: canonicalUrl,
-    ogDescription: description ?? DEFAULT_SITE_DESCRIPTION,
-    twitterCard: "summary",
+    ogDescription: description ?? defaultDescription,
+    twitterCard: options.seo?.twitterCard ?? "summary",
     twitterTitle: title,
-    twitterDescription: description ?? DEFAULT_SITE_DESCRIPTION,
+    twitterDescription: description ?? defaultDescription,
+    twitterSite: options.seo?.twitterSite,
+    twitterCreator: options.seo?.twitterCreator,
     ogImage,
     twitterImage,
     jsonLd: buildStructuredData(route, doc, options),

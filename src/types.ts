@@ -3,11 +3,31 @@ export type ImagePolicy = "keep" | "omit-local";
 export interface UserSeoConfig {
   siteUrl?: string;
   pathBase?: string;
+  siteName?: string;
+  defaultTitle?: string;
+  defaultDescription?: string;
+  locale?: string;
+  twitterCard?: "summary" | "summary_large_image";
+  twitterSite?: string;
+  twitterCreator?: string;
+  defaultSocialImage?: string;
+  defaultOgImage?: string;
+  defaultTwitterImage?: string;
 }
 
 export interface BuildSeoOptions {
   siteUrl: string;
   pathBase: string;
+  siteName?: string;
+  defaultTitle?: string;
+  defaultDescription?: string;
+  locale?: string;
+  twitterCard?: "summary" | "summary_large_image";
+  twitterSite?: string;
+  twitterCreator?: string;
+  defaultSocialImage?: string;
+  defaultOgImage?: string;
+  defaultTwitterImage?: string;
 }
 
 export interface PinnedMenuOption {

@@ -57,9 +57,35 @@ export function normalizeSeoConfig(raw: UserSeoConfig | undefined): BuildSeoOpti
     throw new Error('[config] "seo.pathBase" must be a string when provided (for example: "/blog")');
   }
 
+  const normalizeOptionalString = (value: unknown, key: string): string | undefined => {
+    if (value == null) {
+      return undefined;
+    }
+    if (typeof value !== "string") {
+      throw new Error(`[config] "seo.${key}" must be a string when provided`);
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  };
+
+  const twitterCardRaw = raw.twitterCard;
+  if (twitterCardRaw != null && twitterCardRaw !== "summary" && twitterCardRaw !== "summary_large_image") {
+    throw new Error('[config] "seo.twitterCard" must be "summary" or "summary_large_image" when provided');
+  }
+
   return {
     siteUrl: parsed.origin,
     pathBase: normalizePathBase(pathBaseRaw ?? ""),
+    siteName: normalizeOptionalString(raw.siteName, "siteName"),
+    defaultTitle: normalizeOptionalString(raw.defaultTitle, "defaultTitle"),
+    defaultDescription: normalizeOptionalString(raw.defaultDescription, "defaultDescription"),
+    locale: normalizeOptionalString(raw.locale, "locale"),
+    twitterCard: twitterCardRaw,
+    twitterSite: normalizeOptionalString(raw.twitterSite, "twitterSite"),
+    twitterCreator: normalizeOptionalString(raw.twitterCreator, "twitterCreator"),
+    defaultSocialImage: normalizeOptionalString(raw.defaultSocialImage, "defaultSocialImage"),
+    defaultOgImage: normalizeOptionalString(raw.defaultOgImage, "defaultOgImage"),
+    defaultTwitterImage: normalizeOptionalString(raw.defaultTwitterImage, "defaultTwitterImage"),
   };
 }
 

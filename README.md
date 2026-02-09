@@ -122,6 +122,16 @@ export default {
   seo: {
     siteUrl: "https://example.com", // origin only (http/https)
     pathBase: "/blog", // optional, deploy base path
+    siteName: "Everything-Is-A-Markdown", // optional, og:site_name / WebSite.name
+    defaultTitle: "Dev Knowledge Base", // optional, fallback title
+    defaultDescription: "Public docs and engineering notes.", // optional, fallback description
+    locale: "ko_KR", // optional, og:locale
+    twitterCard: "summary_large_image", // optional: "summary" | "summary_large_image"
+    twitterSite: "@my_team", // optional
+    twitterCreator: "@author_handle", // optional
+    defaultSocialImage: "/assets/social/default.png", // optional, absolute URL or /-relative
+    defaultOgImage: "/assets/social/og.png", // optional, overrides defaultSocialImage for og:image
+    defaultTwitterImage: "/assets/social/twitter.png", // optional, overrides defaultSocialImage for twitter:image
   },
   ui: {
     newWithinDays: 7,
@@ -150,6 +160,14 @@ export default {
 SEO 설정 메모
 - `seo.siteUrl`: 필수. 절대 origin만 허용됩니다 (예: `https://example.com`, path/query/hash 불가).
 - `seo.pathBase`: 선택. `/blog` 같은 배포 base path를 canonical/OG/sitemap URL에 함께 붙입니다.
+- `seo.siteName`: 선택. `og:site_name` 및 루트 JSON-LD(WebSite.name)에 반영됩니다.
+- `seo.defaultTitle`: 선택. 문서 제목이 없을 때 fallback `<title>`로 사용됩니다.
+- `seo.defaultDescription`: 선택. 문서 설명이 없을 때 fallback description/OG/Twitter 설명으로 사용됩니다.
+- `seo.locale`: 선택. `og:locale` 값으로 출력됩니다 (예: `ko_KR`).
+- `seo.twitterCard`: 선택. `summary` 또는 `summary_large_image`.
+- `seo.twitterSite`, `seo.twitterCreator`: 선택. 각각 `twitter:site`, `twitter:creator`로 출력됩니다.
+- `seo.defaultSocialImage`: 선택. OG/Twitter 공통 기본 이미지.
+- `seo.defaultOgImage`, `seo.defaultTwitterImage`: 선택. 채널별 이미지 우선값(없으면 `defaultSocialImage` 사용).
 - `seo.siteUrl`이 없으면 `robots.txt`, `sitemap.xml`은 생성되지 않습니다.
 
 **콘텐츠 작성 규칙**

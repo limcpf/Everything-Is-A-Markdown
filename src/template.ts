@@ -9,6 +9,8 @@ export interface AppShellMeta {
   canonicalUrl?: string;
   ogTitle?: string;
   ogType?: string;
+  ogSiteName?: string;
+  ogLocale?: string;
   ogUrl?: string;
   ogDescription?: string;
   ogImage?: string;
@@ -16,6 +18,8 @@ export interface AppShellMeta {
   twitterTitle?: string;
   twitterDescription?: string;
   twitterImage?: string;
+  twitterSite?: string;
+  twitterCreator?: string;
   jsonLd?: unknown | unknown[];
 }
 
@@ -40,6 +44,8 @@ function renderHeadMeta(meta: AppShellMeta): string {
 
   const ogTitle = (meta.ogTitle ?? title).trim() || title;
   const ogType = (meta.ogType ?? "website").trim() || "website";
+  const ogSiteName = typeof meta.ogSiteName === "string" ? meta.ogSiteName.trim() : "";
+  const ogLocale = typeof meta.ogLocale === "string" ? meta.ogLocale.trim() : "";
   const ogUrl = typeof meta.ogUrl === "string" ? meta.ogUrl.trim() : "";
   const ogDescription = (meta.ogDescription ?? (description || DEFAULT_DESCRIPTION)).trim() || DEFAULT_DESCRIPTION;
   const ogImage = typeof meta.ogImage === "string" ? meta.ogImage.trim() : "";
@@ -48,6 +54,8 @@ function renderHeadMeta(meta: AppShellMeta): string {
   const twitterTitle = (meta.twitterTitle ?? title).trim() || title;
   const twitterDescription = (meta.twitterDescription ?? (description || DEFAULT_DESCRIPTION)).trim() || DEFAULT_DESCRIPTION;
   const twitterImage = typeof meta.twitterImage === "string" ? meta.twitterImage.trim() : "";
+  const twitterSite = typeof meta.twitterSite === "string" ? meta.twitterSite.trim() : "";
+  const twitterCreator = typeof meta.twitterCreator === "string" ? meta.twitterCreator.trim() : "";
   const jsonLd = normalizeJsonLd(meta.jsonLd);
 
   const headTags: string[] = [`    <title>${escapeHtmlAttribute(title)}</title>`];
@@ -67,6 +75,14 @@ function renderHeadMeta(meta: AppShellMeta): string {
     headTags.push(`    <meta property="og:url" content="${escapeHtmlAttribute(ogUrl)}" />`);
   }
 
+  if (ogSiteName) {
+    headTags.push(`    <meta property="og:site_name" content="${escapeHtmlAttribute(ogSiteName)}" />`);
+  }
+
+  if (ogLocale) {
+    headTags.push(`    <meta property="og:locale" content="${escapeHtmlAttribute(ogLocale)}" />`);
+  }
+
   headTags.push(`    <meta property="og:description" content="${escapeHtmlAttribute(ogDescription)}" />`);
 
   if (ogImage) {
@@ -79,6 +95,14 @@ function renderHeadMeta(meta: AppShellMeta): string {
 
   if (twitterImage) {
     headTags.push(`    <meta name="twitter:image" content="${escapeHtmlAttribute(twitterImage)}" />`);
+  }
+
+  if (twitterSite) {
+    headTags.push(`    <meta name="twitter:site" content="${escapeHtmlAttribute(twitterSite)}" />`);
+  }
+
+  if (twitterCreator) {
+    headTags.push(`    <meta name="twitter:creator" content="${escapeHtmlAttribute(twitterCreator)}" />`);
   }
 
   for (const schema of jsonLd) {

@@ -16,6 +16,13 @@ export interface MarkdownRenderer {
 }
 
 const FENCE_LANG_RE = /^```([\w-+#.]+)/gm;
+type RenderRule = NonNullable<MarkdownIt["renderer"]["rules"]["fence"]>;
+type RenderRuleArgs = Parameters<RenderRule>;
+type RuleTokens = RenderRuleArgs[0];
+type RuleOptions = RenderRuleArgs[2];
+type RuleEnv = RenderRuleArgs[3];
+type RuleSelf = RenderRuleArgs[4];
+type LinkOpenRule = NonNullable<MarkdownIt["renderer"]["rules"]["link_open"]>;
 
 function escapeMarkdownLabel(input: string): string {
   return input.replace(/[\[\]]/g, "");
@@ -87,13 +94,18 @@ function preprocessMarkdown(
   return { markdown: output, warnings };
 }
 
-type Highlighter = HighlighterGeneric<string, string>;
-
-async function loadFenceLanguages(highlighter: Highlighter, loaded: Set<string>, markdown: string): Promise<void> {
+async function loadFenceLanguages<L extends string, T extends string>(
+  highlighter: HighlighterGeneric<L, T>,
+  loaded: Set<string>,
+  markdown: string,
+): Promise<void> {
   const langs = new Set<string>();
   FENCE_LANG_RE.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = FENCE_LANG_RE.exec(markdown)) !== null) {
+  while (true) {
+    const match = FENCE_LANG_RE.exec(markdown);
+    if (match === null) {
+      break;
+    }
     if (match[1]) {
       langs.add(match[1].toLowerCase());
     }
@@ -104,7 +116,7 @@ async function loadFenceLanguages(highlighter: Highlighter, loaded: Set<string>,
       continue;
     }
     try {
-      await highlighter.loadLanguage(lang as never);
+      await highlighter.loadLanguage(lang as L);
       loaded.add(lang);
     } catch {
       // Unknown language: fallback to plaintext in fence renderer.
@@ -116,7 +128,11 @@ function escapeHtmlAttr(input: string): string {
   return input.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function createMarkdownIt(highlighter: Highlighter, theme: string, gfm: boolean): MarkdownIt {
+function createMarkdownIt<L extends string, T extends string>(
+  highlighter: HighlighterGeneric<L, T>,
+  theme: string,
+  gfm: boolean,
+): MarkdownIt {
   const md = new MarkdownIt({
     // Allow raw HTML in markdown (e.g. <img ... />).
     html: true,
@@ -129,7 +145,7 @@ function createMarkdownIt(highlighter: Highlighter, theme: string, gfm: boolean)
     md.disable(["table", "strikethrough"]);
   }
 
-  md.renderer.rules.fence = (tokens: any[], idx: number) => {
+  md.renderer.rules.fence = (tokens: RuleTokens, idx: number, _options: RuleOptions, _env: RuleEnv, _self: RuleSelf) => {
     const token = tokens[idx];
     const info = token.info.trim();
     const parts = info.split(/\s+/);
@@ -164,8 +180,8 @@ function createMarkdownIt(highlighter: Highlighter, theme: string, gfm: boolean)
     return `<div class="code-block">${header}${codeHtml}</div>`;
   };
 
-  const defaultLinkOpen = md.renderer.rules.link_open;
-  md.renderer.rules.link_open = (tokens: any[], idx: number, options: any, env: any, self: any) => {
+  const defaultLinkOpen = md.renderer.rules.link_open as LinkOpenRule | undefined;
+  md.renderer.rules.link_open = (tokens: RuleTokens, idx: number, options: RuleOptions, env: RuleEnv, self: RuleSelf) => {
     const hrefIdx = tokens[idx].attrIndex("href");
     if (hrefIdx >= 0) {
       const href = tokens[idx].attrs?.[hrefIdx]?.[1] ?? "";
