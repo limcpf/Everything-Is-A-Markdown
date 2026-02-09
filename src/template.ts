@@ -19,6 +19,32 @@ export interface AppShellMeta {
   jsonLd?: unknown | unknown[];
 }
 
+export interface AppShellAssets {
+  cssHref: string;
+  jsSrc: string;
+}
+
+export interface AppShellInitialView {
+  route: string;
+  docId: string;
+  title: string;
+  breadcrumbHtml: string;
+  metaHtml: string;
+  contentHtml: string;
+  navHtml: string;
+}
+
+interface AppShellInitialViewPayload {
+  route: string;
+  docId: string;
+  title: string;
+}
+
+const DEFAULT_ASSETS: AppShellAssets = {
+  cssHref: "/assets/app.css",
+  jsSrc: "/assets/app.js",
+};
+
 function normalizeJsonLd(value: unknown | unknown[] | undefined): unknown[] {
   if (Array.isArray(value)) {
     return value.filter((item) => item != null);
@@ -36,6 +62,7 @@ function stringifyJsonLd(value: unknown): string {
 function renderHeadMeta(meta: AppShellMeta): string {
   const title = (meta.title ?? DEFAULT_TITLE).trim() || DEFAULT_TITLE;
   const description = typeof meta.description === "string" ? meta.description.trim() : "";
+  const fallbackDescription = description || DEFAULT_DESCRIPTION;
   const canonicalUrl = typeof meta.canonicalUrl === "string" ? meta.canonicalUrl.trim() : "";
 
   const ogTitle = (meta.ogTitle ?? title).trim() || title;
@@ -52,9 +79,7 @@ function renderHeadMeta(meta: AppShellMeta): string {
 
   const headTags: string[] = [`    <title>${escapeHtmlAttribute(title)}</title>`];
 
-  if (description) {
-    headTags.push(`    <meta name="description" content="${escapeHtmlAttribute(description)}" />`);
-  }
+  headTags.push(`    <meta name="description" content="${escapeHtmlAttribute(fallbackDescription)}" />`);
 
   if (canonicalUrl) {
     headTags.push(`    <link rel="canonical" href="${escapeHtmlAttribute(canonicalUrl)}" />`);
@@ -88,8 +113,51 @@ function renderHeadMeta(meta: AppShellMeta): string {
   return headTags.join("\n");
 }
 
-export function renderAppShellHtml(meta: AppShellMeta = {}): string {
+function renderDeferredStylesheet(href: string): string {
+  return [
+    `    <link rel="preload" href="${escapeHtmlAttribute(href)}" as="style" />`,
+    `    <link rel="stylesheet" href="${escapeHtmlAttribute(href)}" media="print" onload="this.media='all'" />`,
+    `    <noscript><link rel="stylesheet" href="${escapeHtmlAttribute(href)}" /></noscript>`,
+  ].join("\n");
+}
+
+function renderInitialViewScript(initialView: AppShellInitialView | null): string {
+  if (!initialView) {
+    return "";
+  }
+
+  const payloadData: AppShellInitialViewPayload = {
+    route: initialView.route,
+    docId: initialView.docId,
+    title: initialView.title,
+  };
+
+  const payload = JSON.stringify(payloadData)
+    .replaceAll("<", "\\u003c")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
+
+  return `\n    <script id="initial-view-data" type="application/json">${payload}</script>`;
+}
+
+export function renderAppShellHtml(
+  meta: AppShellMeta = {},
+  assets: AppShellAssets = DEFAULT_ASSETS,
+  initialView: AppShellInitialView | null = null,
+): string {
   const headMeta = renderHeadMeta(meta);
+  const initialViewScript = renderInitialViewScript(initialView);
+  const textFontStylesheet =
+    "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=optional";
+  const symbolFontStylesheet =
+    "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=optional";
+  const initialTitle = initialView ? escapeHtmlAttribute(initialView.title) : "문서를 선택하세요";
+  const initialBreadcrumb = initialView ? initialView.breadcrumbHtml : "";
+  const initialMeta = initialView ? initialView.metaHtml : "";
+  const initialContent = initialView
+    ? initialView.contentHtml
+    : '<p class="placeholder">좌측 탐색기에서 문서를 선택하세요.</p>';
+  const initialNav = initialView ? initialView.navHtml : "";
 
   return `<!doctype html>
 <html lang="ko">
@@ -99,9 +167,9 @@ export function renderAppShellHtml(meta: AppShellMeta = {}): string {
 ${headMeta}
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/assets/app.css" />
+${renderDeferredStylesheet(textFontStylesheet)}
+${renderDeferredStylesheet(symbolFontStylesheet)}
+    <link rel="stylesheet" href="${escapeHtmlAttribute(assets.cssHref)}" />
   </head>
   <body>
     <a class="skip-link" href="#viewer-panel">본문으로 건너뛰기</a>
@@ -200,26 +268,30 @@ ${headMeta}
           <span>Files</span>
         </button>
         <div class="viewer-container">
-          <nav id="viewer-breadcrumb" class="viewer-breadcrumb" aria-label="경로"></nav>
+          <nav id="viewer-breadcrumb" class="viewer-breadcrumb" aria-label="경로">${initialBreadcrumb}</nav>
           <header id="viewer-header" class="viewer-header">
-            <h1 id="viewer-title" class="viewer-title">문서를 선택하세요</h1>
-            <div id="viewer-meta" class="viewer-meta"></div>
+            <h1 id="viewer-title" class="viewer-title">${initialTitle}</h1>
+            <div id="viewer-meta" class="viewer-meta">${initialMeta}</div>
           </header>
-          <article id="viewer-content" class="viewer-content">
-            <p class="placeholder">좌측 탐색기에서 문서를 선택하세요.</p>
-          </article>
-          <nav id="viewer-nav" class="viewer-nav"></nav>
+          <article id="viewer-content" class="viewer-content">${initialContent}</article>
+          <nav id="viewer-nav" class="viewer-nav">${initialNav}</nav>
         </div>
       </main>
     </div>
     <div id="tree-label-tooltip" class="tree-label-tooltip" role="tooltip" hidden></div>
-    <script type="module" src="/assets/app.js"></script>
+${initialViewScript}
+    <script type="module" src="${escapeHtmlAttribute(assets.jsSrc)}"></script>
   </body>
 </html>
 `;
 }
 
-export function render404Html(): string {
+export function render404Html(assets: AppShellAssets = DEFAULT_ASSETS): string {
+  const textFontStylesheet =
+    "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=optional";
+  const symbolFontStylesheet =
+    "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=optional";
+
   return `<!doctype html>
 <html lang="ko">
   <head>
@@ -228,9 +300,9 @@ export function render404Html(): string {
     <title>404 - File-System Blog</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/assets/app.css" />
+${renderDeferredStylesheet(textFontStylesheet)}
+${renderDeferredStylesheet(symbolFontStylesheet)}
+    <link rel="stylesheet" href="${escapeHtmlAttribute(assets.cssHref)}" />
   </head>
   <body>
     <main class="not-found">

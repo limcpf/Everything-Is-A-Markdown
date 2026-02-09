@@ -87,13 +87,19 @@ function preprocessMarkdown(
   return { markdown: output, warnings };
 }
 
-type Highlighter = HighlighterGeneric<string, string>;
-
-async function loadFenceLanguages(highlighter: Highlighter, loaded: Set<string>, markdown: string): Promise<void> {
+async function loadFenceLanguages<L extends string, T extends string>(
+  highlighter: HighlighterGeneric<L, T>,
+  loaded: Set<string>,
+  markdown: string,
+): Promise<void> {
   const langs = new Set<string>();
   FENCE_LANG_RE.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = FENCE_LANG_RE.exec(markdown)) !== null) {
+  while (true) {
+    const match = FENCE_LANG_RE.exec(markdown);
+    if (match == null) {
+      break;
+    }
+
     if (match[1]) {
       langs.add(match[1].toLowerCase());
     }
@@ -116,7 +122,11 @@ function escapeHtmlAttr(input: string): string {
   return input.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function createMarkdownIt(highlighter: Highlighter, theme: string, gfm: boolean): MarkdownIt {
+function createMarkdownIt<L extends string, T extends string>(
+  highlighter: HighlighterGeneric<L, T>,
+  theme: string,
+  gfm: boolean,
+): MarkdownIt {
   const md = new MarkdownIt({
     // Allow raw HTML in markdown (e.g. <img ... />).
     html: true,
@@ -129,7 +139,7 @@ function createMarkdownIt(highlighter: Highlighter, theme: string, gfm: boolean)
     md.disable(["table", "strikethrough"]);
   }
 
-  md.renderer.rules.fence = (tokens: any[], idx: number) => {
+  const fenceRule: NonNullable<typeof md.renderer.rules.fence> = (tokens, idx) => {
     const token = tokens[idx];
     const info = token.info.trim();
     const parts = info.split(/\s+/);
@@ -139,12 +149,12 @@ function createMarkdownIt(highlighter: Highlighter, theme: string, gfm: boolean)
     let codeHtml: string;
     try {
       codeHtml = highlighter.codeToHtml(token.content, {
-        lang: lang || "text",
+        lang: (lang || "text") as never,
         theme,
       });
     } catch {
       codeHtml = highlighter.codeToHtml(token.content, {
-        lang: "text",
+        lang: "text" as never,
         theme,
       });
     }
@@ -163,9 +173,10 @@ function createMarkdownIt(highlighter: Highlighter, theme: string, gfm: boolean)
 
     return `<div class="code-block">${header}${codeHtml}</div>`;
   };
+  md.renderer.rules.fence = fenceRule;
 
   const defaultLinkOpen = md.renderer.rules.link_open;
-  md.renderer.rules.link_open = (tokens: any[], idx: number, options: any, env: any, self: any) => {
+  const linkOpenRule: NonNullable<typeof md.renderer.rules.link_open> = (tokens, idx, options, env, self) => {
     const hrefIdx = tokens[idx].attrIndex("href");
     if (hrefIdx >= 0) {
       const href = tokens[idx].attrs?.[hrefIdx]?.[1] ?? "";
@@ -180,6 +191,7 @@ function createMarkdownIt(highlighter: Highlighter, theme: string, gfm: boolean)
     }
     return self.renderToken(tokens, idx, options);
   };
+  md.renderer.rules.link_open = linkOpenRule;
 
   return md;
 }

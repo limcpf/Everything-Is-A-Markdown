@@ -47,6 +47,41 @@ function normalizeRoute(pathname) {
   return route;
 }
 
+function loadInitialViewData() {
+  const script = document.getElementById("initial-view-data");
+  if (!(script instanceof HTMLScriptElement)) {
+    return null;
+  }
+
+  const raw = script.textContent;
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    const route = typeof parsed.route === "string" ? normalizeRoute(parsed.route) : null;
+    const docId = typeof parsed.docId === "string" ? parsed.docId : null;
+    const title = typeof parsed.title === "string" ? parsed.title : null;
+
+    if (!route || !docId || !title) {
+      return null;
+    }
+
+    return {
+      route,
+      docId,
+      title,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function resolveRouteFromLocation(routeMap) {
   const direct = normalizeRoute(location.pathname);
   if (routeMap[direct]) {
@@ -690,6 +725,8 @@ async function start() {
   const navEl = document.getElementById("viewer-nav");
   const a11yStatusEl = document.getElementById("a11y-status");
   const viewerEl = document.querySelector(".viewer");
+  const initialViewData = loadInitialViewData();
+  let hasHydratedInitialView = false;
 
   let hideTreeTooltip = () => {};
   let disposeTreeTooltip = () => {};
@@ -1155,7 +1192,7 @@ async function start() {
 
   const state = {
     expanded,
-    currentDocId: "",
+    currentDocId: initialViewData?.docId ?? "",
     async navigate(rawRoute, push) {
       hideTreeTooltip();
 
@@ -1206,6 +1243,23 @@ async function start() {
 
       state.currentDocId = id;
       markActive(treeFileRowsById, activeFileState, id);
+
+      const shouldUseInitialView =
+        !hasHydratedInitialView &&
+        initialViewData &&
+        initialViewData.docId === id &&
+        initialViewData.route === route;
+
+      if (shouldUseInitialView) {
+        hasHydratedInitialView = true;
+        document.title = `${initialViewData.title} - File-System Blog`;
+        if (viewerEl instanceof HTMLElement) {
+          viewerEl.scrollTo(0, 0);
+        }
+        announceA11yStatus(`탐색 완료: ${doc.title} 문서를 열었습니다.`);
+        return;
+      }
+
       breadcrumbEl.innerHTML = renderBreadcrumb(route);
       titleEl.textContent = doc.title;
       metaEl.innerHTML = renderMeta(doc);

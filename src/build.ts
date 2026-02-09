@@ -3,9 +3,9 @@ import path from "node:path";
 import matter from "gray-matter";
 import type { BuildCache, BuildOptions, DocRecord, FileNode, FolderNode, Manifest, TreeNode, WikiResolver } from "./types";
 import { createMarkdownRenderer } from "./markdown";
-import { buildCanonicalUrl } from "./seo";
+import { buildCanonicalUrl, escapeHtmlAttribute } from "./seo";
 import { render404Html, renderAppShellHtml } from "./template";
-import type { AppShellMeta } from "./template";
+import type { AppShellAssets, AppShellInitialView, AppShellMeta } from "./template";
 import {
   buildExcluder,
   ensureDir,
@@ -33,6 +33,11 @@ interface OutputWriteContext {
   outDir: string;
   previousHashes: Record<string, string>;
   nextHashes: Record<string, string>;
+}
+
+interface RuntimeAssets {
+  cssRelPath: string;
+  jsRelPath: string;
 }
 
 interface WikiLookup {
@@ -393,9 +398,12 @@ function normalizeWikiTarget(input: string): string {
 function extractWikiTargets(markdown: string): string[] {
   const targets = new Set<string>();
   const re = /\[\[([^\]]+)\]\]/g;
-  let match: RegExpExecArray | null;
+  while (true) {
+    const match = re.exec(markdown);
+    if (match == null) {
+      break;
+    }
 
-  while ((match = re.exec(markdown)) !== null) {
     if (match.index > 0 && markdown.charAt(match.index - 1) === "!") {
       continue;
     }
@@ -870,13 +878,46 @@ async function writeOutputIfChanged(
   await Bun.write(outputPath, content);
 }
 
-async function writeRuntimeAssets(context: OutputWriteContext): Promise<void> {
+function toRelativeAssetPath(fromOutputPath: string, assetOutputPath: string): string {
+  const fromDir = path.posix.dirname(fromOutputPath);
+  const relative = path.posix.relative(fromDir, assetOutputPath);
+  return relative.length > 0 ? relative : path.posix.basename(assetOutputPath);
+}
+
+function buildAppShellAssetsForOutput(outputPath: string, runtimeAssets: RuntimeAssets): AppShellAssets {
+  return {
+    cssHref: toRelativeAssetPath(outputPath, runtimeAssets.cssRelPath),
+    jsSrc: toRelativeAssetPath(outputPath, runtimeAssets.jsRelPath),
+  };
+}
+
+async function writeRuntimeAssets(context: OutputWriteContext): Promise<RuntimeAssets> {
   const runtimeDir = path.join(import.meta.dir, "runtime");
   const runtimeJs = await Bun.file(path.join(runtimeDir, "app.js")).text();
   const runtimeCss = await Bun.file(path.join(runtimeDir, "app.css")).text();
 
-  await writeOutputIfChanged(context, "assets/app.js", runtimeJs);
-  await writeOutputIfChanged(context, "assets/app.css", runtimeCss);
+  const jsRelPath = `assets/app.${makeHash(runtimeJs).slice(0, 12)}.js`;
+  const cssRelPath = `assets/app.${makeHash(runtimeCss).slice(0, 12)}.css`;
+
+  for (const previousPath of Object.keys(context.previousHashes)) {
+    const isLegacyRuntimeAsset =
+      previousPath.startsWith("assets/app") &&
+      (previousPath.endsWith(".js") || previousPath.endsWith(".css")) &&
+      previousPath !== jsRelPath &&
+      previousPath !== cssRelPath;
+    if (!isLegacyRuntimeAsset) {
+      continue;
+    }
+    await removeFileIfExists(path.join(context.outDir, previousPath));
+  }
+
+  await writeOutputIfChanged(context, jsRelPath, runtimeJs);
+  await writeOutputIfChanged(context, cssRelPath, runtimeCss);
+
+  return {
+    cssRelPath,
+    jsRelPath,
+  };
 }
 
 function buildShellMeta(route: string, doc: DocRecord | null, options: BuildOptions): AppShellMeta {
@@ -904,17 +945,135 @@ function buildShellMeta(route: string, doc: DocRecord | null, options: BuildOpti
   };
 }
 
-async function writeShellPages(context: OutputWriteContext, docs: DocRecord[], options: BuildOptions): Promise<void> {
-  const shell = renderAppShellHtml(buildShellMeta("/", null, options));
+function renderInitialBreadcrumb(route: string): string {
+  const parts = route.split("/").filter(Boolean);
+  const allItems = ["~", ...parts];
+  return allItems
+    .map((part, index) => {
+      const isCurrent = index === allItems.length - 1 && allItems.length > 1;
+      const escapedPart = escapeHtmlAttribute(part);
+      if (isCurrent) {
+        return `<span class="breadcrumb-current" aria-current="page">${escapedPart}</span>`;
+      }
+      return `<span class="breadcrumb-item">${escapedPart}</span>`;
+    })
+    .join('<span class="material-symbols-outlined breadcrumb-sep">chevron_right</span>');
+}
+
+function formatMetaDateTime(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) {
+    return null;
+  }
+
+  const yyyy = parsed.getFullYear();
+  const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+  const dd = String(parsed.getDate()).padStart(2, "0");
+  const hh = String(parsed.getHours()).padStart(2, "0");
+  const mi = String(parsed.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+}
+
+function normalizeTags(tags: string[]): string[] {
+  return tags.map((tag) => String(tag).trim().replace(/^#+/, "")).filter(Boolean);
+}
+
+function renderInitialMeta(doc: DocRecord): string {
+  const items: string[] = [];
+
+  const createdAt = formatMetaDateTime(doc.date);
+  if (createdAt) {
+    items.push(
+      `<span class="meta-item"><span class="material-symbols-outlined">calendar_today</span>${escapeHtmlAttribute(createdAt)}</span>`,
+    );
+  }
+
+  const updatedAt = formatMetaDateTime(doc.updatedDate);
+  if (updatedAt) {
+    items.push(
+      `<span class="meta-item"><span class="material-symbols-outlined">schedule</span>updated ${escapeHtmlAttribute(updatedAt)}</span>`,
+    );
+  }
+
+  const tags = normalizeTags(doc.tags);
+  if (tags.length > 0) {
+    const tagsStr = tags.map((tag) => `#${escapeHtmlAttribute(tag)}`).join(" ");
+    items.push(`<span class="meta-item meta-tags">${tagsStr}</span>`);
+  }
+
+  return items.join("");
+}
+
+function renderInitialNav(docs: DocRecord[], currentId: string): string {
+  const currentIndex = docs.findIndex((doc) => doc.id === currentId);
+  if (currentIndex === -1) {
+    return "";
+  }
+
+  const prev = currentIndex > 0 ? docs[currentIndex - 1] : null;
+  const next = currentIndex < docs.length - 1 ? docs[currentIndex + 1] : null;
+
+  let html = "";
+  if (prev) {
+    html += `<a href="${escapeHtmlAttribute(prev.route)}" class="nav-link nav-link-prev" data-route="${escapeHtmlAttribute(prev.route)}"><div class="nav-link-label"><span class="material-symbols-outlined">arrow_back</span>Previous</div><div class="nav-link-title">${escapeHtmlAttribute(prev.title)}</div></a>`;
+  }
+  if (next) {
+    html += `<a href="${escapeHtmlAttribute(next.route)}" class="nav-link nav-link-next" data-route="${escapeHtmlAttribute(next.route)}"><div class="nav-link-label">Next<span class="material-symbols-outlined">arrow_forward</span></div><div class="nav-link-title">${escapeHtmlAttribute(next.title)}</div></a>`;
+  }
+
+  return html;
+}
+
+function buildInitialView(doc: DocRecord, docs: DocRecord[], contentHtml: string): AppShellInitialView {
+  return {
+    route: doc.route,
+    docId: doc.id,
+    title: doc.title,
+    breadcrumbHtml: renderInitialBreadcrumb(doc.route),
+    metaHtml: renderInitialMeta(doc),
+    contentHtml,
+    navHtml: renderInitialNav(docs, doc.id),
+  };
+}
+
+async function writeShellPages(
+  context: OutputWriteContext,
+  docs: DocRecord[],
+  options: BuildOptions,
+  runtimeAssets: RuntimeAssets,
+  contentByDocId: Map<string, string>,
+): Promise<void> {
+  const indexDoc = docs[0] ?? null;
+  const indexOutputPath = "index.html";
+  const indexInitialView = indexDoc ? buildInitialView(indexDoc, docs, contentByDocId.get(indexDoc.id) ?? "") : null;
+  const shell = renderAppShellHtml(
+    buildShellMeta("/", null, options),
+    buildAppShellAssetsForOutput(indexOutputPath, runtimeAssets),
+    indexInitialView,
+  );
   await writeOutputIfChanged(context, "_app/index.html", shell);
-  await writeOutputIfChanged(context, "index.html", shell);
-  await writeOutputIfChanged(context, "404.html", render404Html());
+  await writeOutputIfChanged(context, indexOutputPath, shell);
+  await writeOutputIfChanged(
+    context,
+    "404.html",
+    render404Html(buildAppShellAssetsForOutput("404.html", runtimeAssets)),
+  );
 
   for (const doc of docs) {
+    const routeOutputPath = toRouteOutputPath(doc.route);
+    const initialView = buildInitialView(doc, docs, contentByDocId.get(doc.id) ?? "");
     await writeOutputIfChanged(
       context,
-      toRouteOutputPath(doc.route),
-      renderAppShellHtml(buildShellMeta(doc.route, doc, options)),
+      routeOutputPath,
+      renderAppShellHtml(
+        buildShellMeta(doc.route, doc, options),
+        buildAppShellAssetsForOutput(routeOutputPath, runtimeAssets),
+        initialView,
+      ),
     );
   }
 }
@@ -1028,17 +1187,15 @@ export async function buildSite(options: BuildOptions): Promise<BuildResult> {
     previousHashes: previousOutputHashes,
     nextHashes: {},
   };
-  await writeRuntimeAssets(outputContext);
+  const runtimeAssets = await writeRuntimeAssets(outputContext);
 
   const tree = buildTree(docs, options);
   const manifest = buildManifest(docs, tree, options);
   await writeOutputIfChanged(outputContext, "manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
 
-  await writeShellPages(outputContext, docs, options);
-  await writeSeoArtifacts(outputContext, docs, options);
-
   const markdownRenderer = await createMarkdownRenderer(options);
   const wikiLookup = createWikiLookup(docs);
+  const contentByDocId = new Map<string, string>();
 
   let renderedDocs = 0;
   let skippedDocs = 0;
@@ -1076,6 +1233,14 @@ export async function buildSite(options: BuildOptions): Promise<BuildResult> {
 
     if (unchanged) {
       skippedDocs += 1;
+      const outputFile = Bun.file(outputPath);
+      if (await outputFile.exists()) {
+        contentByDocId.set(doc.id, await outputFile.text());
+      } else {
+        const resolver = createWikiResolver(wikiLookup, doc);
+        const renderResult = await markdownRenderer.render(doc.body, resolver);
+        contentByDocId.set(doc.id, renderResult.html);
+      }
       continue;
     }
 
@@ -1088,8 +1253,12 @@ export async function buildSite(options: BuildOptions): Promise<BuildResult> {
     }
 
     await Bun.write(outputPath, renderResult.html);
+    contentByDocId.set(doc.id, renderResult.html);
     renderedDocs += 1;
   }
+
+  await writeShellPages(outputContext, docs, options, runtimeAssets, contentByDocId);
+  await writeSeoArtifacts(outputContext, docs, options);
 
   await writeCache(cachePath, nextCache);
 
