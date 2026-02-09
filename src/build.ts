@@ -1042,6 +1042,7 @@ function buildInitialView(doc: DocRecord, docs: DocRecord[], contentHtml: string
 async function writeShellPages(
   context: OutputWriteContext,
   docs: DocRecord[],
+  manifest: Manifest,
   options: BuildOptions,
   runtimeAssets: RuntimeAssets,
   contentByDocId: Map<string, string>,
@@ -1053,6 +1054,7 @@ async function writeShellPages(
     buildShellMeta("/", null, options),
     buildAppShellAssetsForOutput(indexOutputPath, runtimeAssets),
     indexInitialView,
+    manifest,
   );
   await writeOutputIfChanged(context, "_app/index.html", shell);
   await writeOutputIfChanged(context, indexOutputPath, shell);
@@ -1072,6 +1074,7 @@ async function writeShellPages(
         buildShellMeta(doc.route, doc, options),
         buildAppShellAssetsForOutput(routeOutputPath, runtimeAssets),
         initialView,
+        manifest,
       ),
     );
   }
@@ -1256,7 +1259,7 @@ export async function buildSite(options: BuildOptions): Promise<BuildResult> {
     renderedDocs += 1;
   }
 
-  await writeShellPages(outputContext, docs, options, runtimeAssets, contentByDocId);
+  await writeShellPages(outputContext, docs, manifest, options, runtimeAssets, contentByDocId);
   await writeSeoArtifacts(outputContext, docs, options);
 
   await writeCache(cachePath, nextCache);

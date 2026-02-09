@@ -82,6 +82,37 @@ function loadInitialViewData() {
   }
 }
 
+function loadInitialManifestData() {
+  const script = document.getElementById("initial-manifest-data");
+  if (!(script instanceof HTMLScriptElement)) {
+    return null;
+  }
+
+  const raw = script.textContent;
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    if (!Array.isArray(parsed.docs) || !Array.isArray(parsed.tree)) {
+      return null;
+    }
+
+    if (!parsed.routeMap || typeof parsed.routeMap !== "object") {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function resolveRouteFromLocation(routeMap) {
   const direct = normalizeRoute(location.pathname);
   if (routeMap[direct]) {
@@ -1077,12 +1108,14 @@ async function start() {
     }
   });
 
-  const manifestRes = await fetch("/manifest.json");
-  if (!manifestRes.ok) {
-    throw new Error(`Failed to load manifest: ${manifestRes.status}`);
+  let manifest = loadInitialManifestData();
+  if (!manifest) {
+    const manifestRes = await fetch("/manifest.json");
+    if (!manifestRes.ok) {
+      throw new Error(`Failed to load manifest: ${manifestRes.status}`);
+    }
+    manifest = await manifestRes.json();
   }
-
-  const manifest = await manifestRes.json();
   const defaultBranch = normalizeBranch(manifest.defaultBranch) || DEFAULT_BRANCH;
   const availableBranchSet = new Set([defaultBranch]);
   for (const doc of manifest.docs) {

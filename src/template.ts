@@ -1,4 +1,5 @@
 import { escapeHtmlAttribute } from "./seo";
+import type { Manifest } from "./types";
 
 const DEFAULT_TITLE = "File-System Blog";
 const DEFAULT_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
@@ -43,6 +44,8 @@ interface AppShellInitialViewPayload {
   docId: string;
   title: string;
 }
+
+interface AppShellManifestPayload extends Manifest {}
 
 const DEFAULT_ASSETS: AppShellAssets = {
   cssHref: "/assets/app.css",
@@ -137,14 +140,6 @@ function renderHeadMeta(meta: AppShellMeta): string {
   return headTags.join("\n");
 }
 
-function renderDeferredStylesheet(href: string): string {
-  return [
-    `    <link rel="preload" href="${escapeHtmlAttribute(href)}" as="style" />`,
-    `    <link rel="stylesheet" href="${escapeHtmlAttribute(href)}" media="print" onload="this.media='all'" />`,
-    `    <noscript><link rel="stylesheet" href="${escapeHtmlAttribute(href)}" /></noscript>`,
-  ].join("\n");
-}
-
 function renderInitialViewScript(initialView: AppShellInitialView | null): string {
   if (!initialView) {
     return "";
@@ -164,17 +159,30 @@ function renderInitialViewScript(initialView: AppShellInitialView | null): strin
   return `\n    <script id="initial-view-data" type="application/json">${payload}</script>`;
 }
 
+function renderInitialManifestScript(manifest: AppShellManifestPayload | null): string {
+  if (!manifest) {
+    return "";
+  }
+
+  const payload = JSON.stringify(manifest)
+    .replaceAll("<", "\\u003c")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
+
+  return `\n    <script id="initial-manifest-data" type="application/json">${payload}</script>`;
+}
+
 export function renderAppShellHtml(
   meta: AppShellMeta = {},
   assets: AppShellAssets = DEFAULT_ASSETS,
   initialView: AppShellInitialView | null = null,
+  manifest: AppShellManifestPayload | null = null,
 ): string {
   const headMeta = renderHeadMeta(meta);
   const initialViewScript = renderInitialViewScript(initialView);
-  const textFontStylesheet =
-    "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=optional";
+  const initialManifestScript = renderInitialManifestScript(manifest);
   const symbolFontStylesheet =
-    "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=optional";
+    "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap";
   const initialTitle = initialView ? escapeHtmlAttribute(initialView.title) : "문서를 선택하세요";
   const initialBreadcrumb = initialView ? initialView.breadcrumbHtml : "";
   const initialMeta = initialView ? initialView.metaHtml : "";
@@ -191,8 +199,7 @@ export function renderAppShellHtml(
 ${headMeta}
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-${renderDeferredStylesheet(textFontStylesheet)}
-${renderDeferredStylesheet(symbolFontStylesheet)}
+    <link rel="stylesheet" href="${escapeHtmlAttribute(symbolFontStylesheet)}" />
     <link rel="stylesheet" href="${escapeHtmlAttribute(assets.cssHref)}" />
   </head>
   <body>
@@ -298,12 +305,13 @@ ${renderDeferredStylesheet(symbolFontStylesheet)}
             <div id="viewer-meta" class="viewer-meta">${initialMeta}</div>
           </header>
           <article id="viewer-content" class="viewer-content">${initialContent}</article>
-          <nav id="viewer-nav" class="viewer-nav">${initialNav}</nav>
+          <nav id="viewer-nav" class="viewer-nav" aria-label="문서 이전/다음 탐색">${initialNav}</nav>
         </div>
       </main>
     </div>
     <div id="tree-label-tooltip" class="tree-label-tooltip" role="tooltip" hidden></div>
 ${initialViewScript}
+${initialManifestScript}
     <script type="module" src="${escapeHtmlAttribute(assets.jsSrc)}"></script>
   </body>
 </html>
@@ -311,10 +319,8 @@ ${initialViewScript}
 }
 
 export function render404Html(assets: AppShellAssets = DEFAULT_ASSETS): string {
-  const textFontStylesheet =
-    "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=optional";
   const symbolFontStylesheet =
-    "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=optional";
+    "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap";
 
   return `<!doctype html>
 <html lang="ko">
@@ -324,8 +330,7 @@ export function render404Html(assets: AppShellAssets = DEFAULT_ASSETS): string {
     <title>404 - File-System Blog</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-${renderDeferredStylesheet(textFontStylesheet)}
-${renderDeferredStylesheet(symbolFontStylesheet)}
+    <link rel="stylesheet" href="${escapeHtmlAttribute(symbolFontStylesheet)}" />
     <link rel="stylesheet" href="${escapeHtmlAttribute(assets.cssHref)}" />
   </head>
   <body>

@@ -5,8 +5,8 @@
   --latte-crust: #dce0e8;
   --latte-text: #4c4f69;
   --latte-subtext0: #6c6f85;
-  --latte-subtext1: #5c5f77;
-  --latte-overlay0: #9ca0b0;
+  --latte-subtext1: #555974;
+  --latte-overlay0: #5f637a;
   --latte-surface0: #ccd0da;
   --latte-surface1: #bcc0cc;
   --latte-surface2: #acb0be;
@@ -30,7 +30,7 @@
   --mocha-text: #cdd6f4;
   --mocha-subtext0: #a6adc8;
   --mocha-subtext1: #bac2de;
-  --mocha-overlay0: #6c7086;
+  --mocha-overlay0: #a0a7c6;
   --mocha-surface0: #313244;
   --mocha-surface1: #45475a;
   --mocha-surface2: #585b70;
@@ -121,7 +121,7 @@ body {
 body {
   background: var(--latte-base);
   color: var(--latte-text);
-  font-family: "Inter", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "Pretendard Variable", "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
@@ -192,11 +192,21 @@ a:hover {
 }
 
 .material-symbols-outlined {
+  font-family: "Material Symbols Outlined", "Material Icons", sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: "liga";
+  -webkit-font-feature-settings: "liga";
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1em;
-  height: 1em;
+  min-width: 1em;
+  min-height: 1em;
   flex: 0 0 auto;
   font-size: 20px;
   line-height: 1;
@@ -571,7 +581,7 @@ a:hover {
 }
 
 .status-encoding {
-  font-family: "JetBrains Mono", monospace;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   color: var(--latte-overlay0);
 }
 
@@ -752,7 +762,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   align-items: center;
   gap: 4px;
   font-size: 0.85rem;
-  font-family: "JetBrains Mono", monospace;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   color: var(--latte-overlay0);
   margin-bottom: 24px;
   flex-wrap: nowrap;
@@ -818,7 +828,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   gap: 16px;
   min-height: 22px;
   font-size: 0.85rem;
-  font-family: "JetBrains Mono", monospace;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   color: var(--latte-subtext0);
 }
 
@@ -914,7 +924,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   border: 1px solid var(--latte-surface0);
   border-radius: 4px;
   padding: 2px 6px;
-  font-family: "JetBrains Mono", monospace;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 0.88em;
   color: var(--latte-mauve);
 }
@@ -955,7 +965,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 
 .code-filename {
   flex: 1;
-  font-family: "JetBrains Mono", monospace;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 0.75rem;
   color: #aeb7c2;
   text-align: center;
@@ -1000,7 +1010,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   display: block;
   padding: 18px 20px;
   overflow-x: auto;
-  font-family: "JetBrains Mono", monospace;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 0.95rem;
   font-weight: 500;
   line-height: 1.72;
@@ -1041,7 +1051,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   display: block;
   padding: 16px;
   overflow-x: auto;
-  font-family: "JetBrains Mono", monospace;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 0.875rem;
   line-height: 1.6;
 }
