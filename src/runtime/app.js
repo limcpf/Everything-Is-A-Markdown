@@ -889,11 +889,15 @@ async function start() {
     }
 
     if (!isCompactLayout()) {
-      sidebar.removeAttribute("aria-hidden");
+      sidebar.removeAttribute("inert");
       return;
     }
 
-    sidebar.setAttribute("aria-hidden", String(!isOpen));
+    if (isOpen) {
+      sidebar.removeAttribute("inert");
+    } else {
+      sidebar.setAttribute("inert", "");
+    }
   };
 
   const openSidebar = () => {

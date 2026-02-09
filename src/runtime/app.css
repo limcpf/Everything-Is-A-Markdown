@@ -60,6 +60,8 @@
   --sidebar-mobile-shadow: 0 24px 48px rgba(76, 79, 105, 0.2);
   --accent-hover: #7030d0;
   --accent-strong: #6732ca;
+  --badge-new-bg: var(--latte-red);
+  --badge-new-fg: #ffffff;
   --desktop-sidebar-default: 420px;
   --desktop-sidebar-min: 320px;
   --desktop-viewer-min: 680px;
@@ -103,6 +105,8 @@
   --sidebar-mobile-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
   --accent-hover: #a985f6;
   --accent-strong: #dfcbff;
+  --badge-new-bg: var(--mocha-red);
+  --badge-new-fg: var(--mocha-crust);
 }
 
 * {
@@ -483,7 +487,7 @@ a:hover {
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--latte-overlay1);
+  color: var(--latte-subtext1);
 }
 
 .tree-label {
@@ -534,8 +538,8 @@ a:hover {
   letter-spacing: 0.03em;
   padding: 2px 6px;
   border-radius: 999px;
-  color: white;
-  background: var(--latte-red);
+  color: var(--badge-new-fg);
+  background: var(--badge-new-bg);
 }
 
 /* Active badge */
@@ -590,7 +594,7 @@ a:hover {
 
 .status-encoding {
   font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  color: var(--latte-overlay0);
+  color: var(--latte-subtext1);
 }
 
 .sidebar-footer-actions {
@@ -837,7 +841,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   min-height: 22px;
   font-size: 0.85rem;
   font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  color: var(--latte-subtext0);
+  color: var(--latte-subtext1);
 }
 
 .meta-item {
@@ -855,7 +859,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.03em;
-  color: var(--latte-overlay1);
+  color: var(--latte-subtext1);
 }
 
 .meta-tags {
@@ -873,7 +877,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   max-width: 72ch;
   margin: 0 auto;
   text-wrap: pretty;
-  color: var(--latte-subtext0);
+  color: var(--latte-subtext1);
 }
 
 .viewer-content h1,
@@ -930,7 +934,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   background: rgba(230, 233, 239, 0.5);
   border-radius: 0 8px 8px 0;
   font-style: normal;
-  color: var(--latte-subtext0);
+  color: var(--latte-subtext1);
 }
 
 /* Inline code */
