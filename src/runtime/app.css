@@ -64,6 +64,8 @@
   --badge-new-fg: #ffffff;
   --mobile-toggle-bg: var(--latte-mauve);
   --mobile-toggle-fg: #ffffff;
+  --content-heading-accent-soft: rgba(136, 57, 239, 0.32);
+  --content-heading-subtle: var(--latte-subtext1);
   --desktop-sidebar-default: 420px;
   --desktop-sidebar-min: 320px;
   --desktop-viewer-min: 680px;
@@ -111,6 +113,8 @@
   --badge-new-fg: var(--mocha-crust);
   --mobile-toggle-bg: var(--mocha-mauve);
   --mobile-toggle-fg: var(--mocha-crust);
+  --content-heading-accent-soft: rgba(203, 166, 247, 0.34);
+  --content-heading-subtle: var(--mocha-subtext0);
 }
 
 * {
@@ -884,20 +888,55 @@ body.mobile-toggle-left .mobile-menu-toggle {
   color: var(--latte-subtext1);
 }
 
+.viewer-content > :first-child {
+  margin-top: 0;
+}
+
 .viewer-content h1,
 .viewer-content h2,
 .viewer-content h3,
 .viewer-content h4 {
   color: var(--latte-text);
-  font-weight: 600;
-  line-height: 1.35;
-  margin-top: 2rem;
-  margin-bottom: 1rem;
+  font-weight: 650;
+  line-height: 1.33;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+  margin-top: 2.2rem;
+  margin-bottom: 0.95rem;
+  scroll-margin-top: 20px;
 }
 
-.viewer-content h1 { font-size: 2rem; }
-.viewer-content h2 { font-size: 1.5rem; }
-.viewer-content h3 { font-size: 1.25rem; }
+.viewer-content h1 {
+  font-size: 2.08rem;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+  margin-top: 2.8rem;
+  margin-bottom: 1.1rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--latte-surface0);
+}
+
+.viewer-content h2 {
+  font-size: 1.62rem;
+  margin-top: 2.6rem;
+  margin-bottom: 1.04rem;
+  padding: 0.1rem 0 0.18rem 0.55rem;
+  border-left: 3px solid var(--content-heading-accent-soft);
+}
+
+.viewer-content h3 {
+  font-size: 1.34rem;
+  color: var(--content-heading-subtle);
+  margin-top: 2.15rem;
+  margin-bottom: 0.92rem;
+}
+
+.viewer-content h4 {
+  font-size: 1.14rem;
+  color: var(--content-heading-subtle);
+  margin-top: 1.85rem;
+  margin-bottom: 0.8rem;
+}
 
 .viewer-content p {
   margin-bottom: 1.25rem;
@@ -1318,15 +1357,15 @@ body.mobile-toggle-left .mobile-menu-toggle {
   }
 
   .viewer-content h1 {
-    font-size: 1.72rem;
+    font-size: 1.82rem;
   }
 
   .viewer-content h2 {
-    font-size: 1.34rem;
+    font-size: 1.42rem;
   }
 
   .viewer-content h3 {
-    font-size: 1.16rem;
+    font-size: 1.22rem;
   }
 
   .viewer-content table {
