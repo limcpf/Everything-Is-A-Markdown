@@ -40,6 +40,31 @@ bun run blog [build|dev|clean] [options]
 - `--exclude <glob>`: 제외 패턴 추가 (반복 가능)
 - `--port <n>`: 개발 서버 포트 (기본 `3000`)
 
+## 설정 파일 (`blog.config.ts`)
+
+SEO/UI/정적 파일 설정은 config 파일에서 관리할 수 있습니다.
+
+```ts
+const config = {
+  vaultDir: "./vault",
+  outDir: "./dist",
+  staticPaths: ["assets", "public/favicon.ico"],
+  seo: {
+    siteUrl: "https://example.com",
+    defaultOgImage: "/assets/og.png",
+  },
+};
+
+export default config;
+```
+
+`staticPaths`:
+
+- 볼트 기준 상대 경로 배열
+- 폴더와 파일 모두 지정 가능
+- 지정한 경로의 파일들을 `dist`에 같은 상대 경로로 복사
+- 예: 볼트 `assets/og.png` -> `dist/assets/og.png`
+
 예시:
 
 ```bash

@@ -132,6 +132,45 @@ function normalizePinnedMenu(raw: unknown, errorPrefix = "[config]"): PinnedMenu
   };
 }
 
+function normalizeStaticPaths(raw: unknown, errorPrefix = "[config]"): string[] {
+  if (raw == null) {
+    return [];
+  }
+  if (!Array.isArray(raw)) {
+    throw new Error(`${errorPrefix} "staticPaths" must be an array of strings`);
+  }
+
+  const normalized = new Set<string>();
+  for (const [index, value] of raw.entries()) {
+    if (typeof value !== "string") {
+      throw new Error(`${errorPrefix} "staticPaths[${index}]" must be a string`);
+    }
+
+    const cleaned = value
+      .trim()
+      .replace(/\\/g, "/")
+      .replace(/^\.\/+/, "")
+      .replace(/\/+$/, "");
+
+    if (
+      !cleaned ||
+      cleaned === "." ||
+      cleaned === ".." ||
+      cleaned.startsWith("../") ||
+      cleaned.startsWith("/") ||
+      path.isAbsolute(value.trim())
+    ) {
+      throw new Error(
+        `${errorPrefix} "staticPaths[${index}]" must be a non-empty vault-relative path (for example: "assets")`,
+      );
+    }
+
+    normalized.add(cleaned);
+  }
+
+  return Array.from(normalized);
+}
+
 export async function loadPinnedMenuConfig(
   configPath: string | undefined,
   cwd = process.cwd(),
@@ -166,9 +205,12 @@ export function resolveBuildOptions(
   pinnedMenu: PinnedMenuOption | null,
   cwd = process.cwd(),
 ): BuildOptions {
+  const vaultDir = path.resolve(cwd, cli.vaultDir ?? userConfig.vaultDir ?? DEFAULTS.vaultDir);
+  const outDir = path.resolve(cwd, cli.outDir ?? userConfig.outDir ?? DEFAULTS.outDir);
   const cfgExclude = userConfig.exclude ?? [];
   const cliExclude = cli.exclude ?? [];
   const mergedExclude = Array.from(new Set([...DEFAULTS.exclude, ...cfgExclude, ...cliExclude]));
+  const staticPaths = normalizeStaticPaths(userConfig.staticPaths, "[config]");
   const seo = normalizeSeoConfig(userConfig.seo);
   const siteTitleRaw = userConfig.seo?.siteName ?? userConfig.seo?.defaultTitle;
   const siteTitle =
@@ -179,9 +221,10 @@ export function resolveBuildOptions(
   const resolvedPinnedMenu = pinnedMenu ?? configPinnedMenu;
 
   return {
-    vaultDir: path.resolve(cwd, cli.vaultDir ?? userConfig.vaultDir ?? DEFAULTS.vaultDir),
-    outDir: path.resolve(cwd, cli.outDir ?? userConfig.outDir ?? DEFAULTS.outDir),
+    vaultDir,
+    outDir,
     exclude: mergedExclude,
+    staticPaths,
     newWithinDays: cli.newWithinDays ?? userConfig.ui?.newWithinDays ?? DEFAULTS.newWithinDays,
     recentLimit: cli.recentLimit ?? userConfig.ui?.recentLimit ?? DEFAULTS.recentLimit,
     siteTitle,

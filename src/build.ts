@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
@@ -16,6 +17,7 @@ import {
   removeEmptyParents,
   removeFileIfExists,
   stripMdExt,
+  toPosixPath,
   toDocId,
   toRoute,
 } from "./utils";
@@ -655,7 +657,7 @@ function isNewByFrontmatterDate(date: string | undefined, newThreshold: number):
   return publishedAt != null && publishedAt >= newThreshold;
 }
 
-function getRecentSortEpochMs(doc: DocRecord): number {
+function getRecentSortEpochMs(doc: DocRecord): number | null {
   return parseDateToEpochMs(doc.updatedDate) ?? parseDateToEpochMs(doc.date);
 }
 
@@ -922,6 +924,92 @@ async function writeOutputIfChanged(
 
   await ensureDir(path.dirname(outputPath));
   await Bun.write(outputPath, content);
+}
+
+async function copyOutputFileIfChanged(
+  context: OutputWriteContext,
+  relOutputPath: string,
+  sourcePath: string,
+): Promise<void> {
+  const bytes = new Uint8Array(await Bun.file(sourcePath).arrayBuffer());
+  const outputHash = crypto.createHash("sha1").update(bytes).digest("hex");
+  context.nextHashes[relOutputPath] = outputHash;
+
+  const outputPath = path.join(context.outDir, relOutputPath);
+  const unchanged = context.previousHashes[relOutputPath] === outputHash;
+  if (unchanged && (await Bun.file(outputPath).exists())) {
+    return;
+  }
+
+  await ensureDir(path.dirname(outputPath));
+  await Bun.write(outputPath, bytes);
+}
+
+async function listFilesRecursively(baseDir: string): Promise<string[]> {
+  const entries = await fs.readdir(baseDir, { withFileTypes: true });
+  entries.sort((left, right) => left.name.localeCompare(right.name, "ko-KR"));
+
+  const files: string[] = [];
+  for (const entry of entries) {
+    const absolutePath = path.join(baseDir, entry.name);
+    if (entry.isDirectory()) {
+      const children = await listFilesRecursively(absolutePath);
+      for (const child of children) {
+        files.push(path.join(entry.name, child));
+      }
+      continue;
+    }
+
+    if (entry.isFile()) {
+      files.push(entry.name);
+    }
+  }
+
+  return files;
+}
+
+async function copyStaticPaths(context: OutputWriteContext, options: BuildOptions): Promise<void> {
+  for (const staticPath of options.staticPaths) {
+    const sourcePath = path.resolve(options.vaultDir, staticPath);
+
+    let sourceStat;
+    try {
+      sourceStat = await fs.stat(sourcePath);
+    } catch {
+      console.warn(`[static] path not found: ${staticPath}`);
+      continue;
+    }
+
+    if (sourceStat.isDirectory()) {
+      const files = await listFilesRecursively(sourcePath);
+      for (const file of files) {
+        const relFilePath = toPosixPath(file);
+        const relOutputPath = path.posix.join(staticPath, relFilePath);
+        const filePath = path.join(sourcePath, file);
+        await copyOutputFileIfChanged(context, relOutputPath, filePath);
+      }
+      continue;
+    }
+
+    if (sourceStat.isFile()) {
+      await copyOutputFileIfChanged(context, staticPath, sourcePath);
+      continue;
+    }
+
+    console.warn(`[static] unsupported path type, skipped: ${staticPath}`);
+  }
+}
+
+async function removeStaleOutputs(context: OutputWriteContext): Promise<void> {
+  for (const previousPath of Object.keys(context.previousHashes)) {
+    if (Object.hasOwn(context.nextHashes, previousPath)) {
+      continue;
+    }
+
+    const outputPath = path.join(context.outDir, previousPath);
+    await removeFileIfExists(outputPath);
+    await removeEmptyParents(path.dirname(outputPath), context.outDir);
+  }
 }
 
 function toRelativeAssetPath(fromOutputPath: string, assetOutputPath: string): string {
@@ -1242,6 +1330,7 @@ export async function buildSite(options: BuildOptions): Promise<BuildResult> {
     nextHashes: {},
   };
   const runtimeAssets = await writeRuntimeAssets(outputContext);
+  await copyStaticPaths(outputContext, options);
 
   const tree = buildTree(docs, options);
   const manifest = buildManifest(docs, tree, options);
@@ -1313,6 +1402,7 @@ export async function buildSite(options: BuildOptions): Promise<BuildResult> {
 
   await writeShellPages(outputContext, docs, manifest, options, runtimeAssets, contentByDocId);
   await writeSeoArtifacts(outputContext, docs, options);
+  await removeStaleOutputs(outputContext);
 
   await writeCache(cachePath, nextCache);
 

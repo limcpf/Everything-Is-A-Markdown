@@ -40,6 +40,31 @@ Common options:
 - `--exclude <glob>`: Add exclude pattern (repeatable)
 - `--port <n>`: Dev server port (default `3000`)
 
+## Config File (`blog.config.ts`)
+
+Use a config file for SEO/UI/static assets.
+
+```ts
+const config = {
+  vaultDir: "./vault",
+  outDir: "./dist",
+  staticPaths: ["assets", "public/favicon.ico"],
+  seo: {
+    siteUrl: "https://example.com",
+    defaultOgImage: "/assets/og.png",
+  },
+};
+
+export default config;
+```
+
+`staticPaths`:
+
+- Array of vault-relative paths
+- Supports both folders and files
+- Copies all matched files into the same relative location in `dist`
+- Example: `assets/og.png` in vault becomes `dist/assets/og.png`
+
 Examples:
 
 ```bash

@@ -39,6 +39,7 @@ export interface UserConfig {
   vaultDir?: string;
   outDir?: string;
   exclude?: string[];
+  staticPaths?: string[];
   pinnedMenu?: {
     label?: string;
     sourceDir: string;
@@ -63,6 +64,7 @@ export interface BuildOptions {
   vaultDir: string;
   outDir: string;
   exclude: string[];
+  staticPaths: string[];
   newWithinDays: number;
   recentLimit: number;
   siteTitle?: string;

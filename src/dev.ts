@@ -8,6 +8,10 @@ interface DevOptions {
   port: number;
 }
 
+function isStaticPathMatch(relPath: string, staticPath: string): boolean {
+  return relPath === staticPath || relPath.startsWith(`${staticPath}/`);
+}
+
 async function resolveOutputFile(outDir: string, pathname: string): Promise<string | null> {
   const decoded = decodeURIComponent(pathname);
   const clean = decoded.replace(/^\/+/, "");
@@ -89,7 +93,14 @@ export async function runDev(options: BuildOptions, devOptions: DevOptions): Pro
   };
 
   watcher.on("all", (_event, changedPath) => {
-    if (!/\.md$/i.test(changedPath)) {
+    const relPath = path.relative(options.vaultDir, changedPath).split(path.sep).join("/");
+    if (!relPath || relPath.startsWith("..")) {
+      return;
+    }
+
+    const isMarkdownChange = /\.md$/i.test(changedPath);
+    const isStaticChange = options.staticPaths.some((staticPath) => isStaticPathMatch(relPath, staticPath));
+    if (!isMarkdownChange && !isStaticChange) {
       return;
     }
     scheduleRebuild();
