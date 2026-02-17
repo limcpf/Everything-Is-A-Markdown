@@ -9,13 +9,12 @@ test.describe("prefix 라우팅/백링크/자동 브랜치 전환", () => {
     await page.goto("/BC-VO-00/");
 
     await expect(page.locator("#viewer-title")).toHaveText("About");
-    await expect(page.locator("#sidebar-branch-info")).toContainText("dev + unclassified");
+    await expect(page.locator('.branch-pill.is-active[data-branch="dev"]')).toBeVisible();
 
-    const navLink = page.locator("#viewer-nav .nav-link");
-    await expect(navLink).toHaveCount(1);
-    await expect(navLink.first()).toHaveAttribute("data-route", "/BC-VO-02/");
+    const nextToSetupGuide = page.locator('#viewer-nav .nav-link[data-route="/BC-VO-02/"]');
+    await expect(nextToSetupGuide).toBeVisible();
 
-    await navLink.first().click();
+    await nextToSetupGuide.click();
     await expect(page).toHaveURL(/\/BC-VO-02\/$/);
     await expect(page.locator("#viewer-title")).toHaveText("Setup Guide");
   });
@@ -36,7 +35,7 @@ test.describe("prefix 라우팅/백링크/자동 브랜치 전환", () => {
 
     await expect(page).toHaveURL(/\/BC-VO-00\/$/);
     await expect(page.locator("#viewer-title")).toHaveText("About");
-    await expect(page.locator("#sidebar-branch-info")).toContainText("dev + unclassified");
-    await expect(page.locator("#viewer-nav .nav-link").first()).toHaveAttribute("data-route", "/BC-VO-02/");
+    await expect(page.locator('.branch-pill.is-active[data-branch="dev"]')).toBeVisible();
+    await expect(page.locator('#viewer-nav .nav-link[data-route="/BC-VO-02/"]')).toBeVisible();
   });
 });

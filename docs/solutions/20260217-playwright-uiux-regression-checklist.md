@@ -53,6 +53,7 @@ related: [
   - UI 상태 전이가 포함된 기능은 최소 1회 Playwright 상호작용 검증을 Work Log에 기록한다.
 - 자동으로 잡히게 할 장치(테스트/린트/체크리스트):
   - CI에서 `bun run test:e2e`를 기본 품질 게이트로 실행
+  - E2E assertion은 텍스트 문구/고정 개수보다 route/상태 기반 검증(`data-route`, `.branch-pill.is-active`)을 우선한다.
   - 아래 체크리스트를 PR 전 점검 항목으로 사용
 
 ## UI 회귀 체크리스트 (Prefix/Backlinks)
