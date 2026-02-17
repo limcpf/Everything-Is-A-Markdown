@@ -20,7 +20,9 @@
     "blog": "bun run src/cli.ts",
     "build": "bun run src/cli.ts build",
     "dev": "bun run src/cli.ts dev",
-    "clean": "bun run src/cli.ts clean"
+    "clean": "bun run src/cli.ts clean",
+    "test:e2e": "playwright test",
+    "test:e2e:focus-trap": "playwright test tests/e2e/mobile-sidebar-focus-trap.spec.ts"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
@@ -30,6 +32,7 @@
     "shiki": "^3.2.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/markdown-it": "^14.1.2",
     "@types/picomatch": "^4.0.2",
     "bun-types": "^1.3.8"

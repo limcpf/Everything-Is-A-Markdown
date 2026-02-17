@@ -83,6 +83,9 @@ bun run build -- --vault ./test-vault --out ./dist
 
 - `publish: true`  
   이 값이 `true`인 문서만 빌드 결과에 포함됩니다.
+- `prefix: "A-01"`  
+  문서의 공개 식별자이자 라우트(`/A-01/`) 기준입니다.  
+  `publish: true`인데 `prefix`가 없으면 빌드 경고를 출력하고 문서를 제외합니다.
 
 선택:
 
@@ -90,8 +93,6 @@ bun run build -- --vault ./test-vault --out ./dist
   `publish: true`여도 문서를 제외합니다.
 - `title: "..."`  
   문서 제목. 없으면 파일명을 사용합니다.
-- `prefix: "A-01"`  
-  탐색기 제목 앞과 본문 메타 줄에 표시할 짧은 코드.
 - `branch: dev`  
   브랜치 필터 분류값.
 - `description: "..."`  

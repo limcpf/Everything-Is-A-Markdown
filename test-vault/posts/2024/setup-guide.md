@@ -1,5 +1,6 @@
 ---
 publish: true
+prefix: BC-VO-02
 branch: dev
 title: Setup Guide
 date: "2024-09-15"
@@ -48,3 +49,5 @@ export default {
 ```
 
 That's it! You're ready to start building.
+
+관련 글: [[BC-VO-01|Building a File-System Blog]]

@@ -147,6 +147,13 @@ export interface Manifest {
     description?: string;
     isNew: boolean;
     branch: string | null;
+    wikiTargets: string[];
+    backlinks: Array<{
+      id: string;
+      route: string;
+      title: string;
+      prefix?: string;
+    }>;
   }>;
 }
 

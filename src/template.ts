@@ -36,6 +36,7 @@ export interface AppShellInitialView {
   breadcrumbHtml: string;
   metaHtml: string;
   contentHtml: string;
+  backlinksHtml: string;
   navHtml: string;
 }
 
@@ -192,6 +193,7 @@ export function renderAppShellHtml(
   const initialContent = initialView
     ? initialView.contentHtml
     : '<p class="placeholder">좌측 탐색기에서 문서를 선택하세요.</p>';
+  const initialBacklinks = initialView ? initialView.backlinksHtml : "";
   const initialNav = initialView ? initialView.navHtml : "";
 
   return `<!doctype html>
@@ -211,8 +213,8 @@ ${headMeta}
     <a class="skip-link" href="#viewer-panel">본문으로 건너뛰기</a>
     <div id="a11y-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     <div class="app-root">
-      <div id="sidebar-overlay" class="sidebar-overlay" hidden></div>
-      <aside id="sidebar-panel" class="sidebar" aria-label="문서 탐색기 패널">
+      <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true" hidden></div>
+      <aside id="sidebar-panel" class="sidebar" role="complementary" aria-label="문서 탐색기 패널">
         <div class="sidebar-header">
           <h1 class="sidebar-title">
             <span class="material-symbols-outlined icon-terminal">terminal</span>
@@ -310,6 +312,7 @@ ${headMeta}
             <div id="viewer-meta" class="viewer-meta">${initialMeta}</div>
           </header>
           <article id="viewer-content" class="viewer-content">${initialContent}</article>
+          <section id="viewer-backlinks" class="viewer-backlinks" aria-label="문서를 참조한 링크" ${initialBacklinks ? "" : "hidden"}>${initialBacklinks}</section>
           <nav id="viewer-nav" class="viewer-nav" aria-label="문서 이전/다음 탐색">${initialNav}</nav>
         </div>
       </main>

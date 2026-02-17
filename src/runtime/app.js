@@ -229,6 +229,7 @@ function buildBranchView(manifest, branch, defaultBranch) {
 
   return {
     docs,
+    visibleDocIds,
     tree,
     routeMap,
     docIndexById,
@@ -342,7 +343,25 @@ function getFocusableElements(container) {
     if (!(el instanceof HTMLElement)) {
       return false;
     }
-    return !el.hasAttribute("hidden") && el.getAttribute("aria-hidden") !== "true";
+
+    if (el.hasAttribute("hidden") || el.getAttribute("aria-hidden") === "true") {
+      return false;
+    }
+
+    if (el.closest("[hidden], [inert], [aria-hidden='true']")) {
+      return false;
+    }
+
+    if (el instanceof HTMLInputElement && el.type === "hidden") {
+      return false;
+    }
+
+    const style = window.getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden") {
+      return false;
+    }
+
+    return el.getClientRects().length > 0;
   });
 }
 
@@ -758,6 +777,25 @@ function renderNav(docs, docIndexById, currentId) {
   return html;
 }
 
+function renderBacklinks(doc) {
+  const backlinks = Array.isArray(doc.backlinks) ? doc.backlinks : [];
+  if (backlinks.length === 0) {
+    return "";
+  }
+
+  let html = '<h2 class="backlinks-title">Backlinks</h2><ul class="backlinks-list">';
+  for (const backlink of backlinks) {
+    const prefix = typeof backlink.prefix === "string" && backlink.prefix.trim().length > 0
+      ? `<span class="backlink-prefix">${escapeHtmlAttr(backlink.prefix.trim())}</span>`
+      : "";
+    const route = typeof backlink.route === "string" ? normalizeRoute(backlink.route) : "/";
+    const title = typeof backlink.title === "string" && backlink.title.trim().length > 0 ? backlink.title : route;
+    html += `<li class="backlinks-item"><a href="${toSafeUrlPath(route)}" class="backlink-link" data-route="${escapeHtmlAttr(route)}">${prefix}<span class="backlink-text">${escapeHtmlAttr(title)}</span></a></li>`;
+  }
+  html += "</ul>";
+  return html;
+}
+
 async function start() {
   const treeRoot = document.getElementById("tree-root");
   const appRoot = document.querySelector(".app-root");
@@ -778,6 +816,7 @@ async function start() {
   const titleEl = document.getElementById("viewer-title");
   const metaEl = document.getElementById("viewer-meta");
   const contentEl = document.getElementById("viewer-content");
+  const backlinksEl = document.getElementById("viewer-backlinks");
   const navEl = document.getElementById("viewer-nav");
   const a11yStatusEl = document.getElementById("a11y-status");
   const viewerEl = document.querySelector(".viewer");
@@ -897,24 +936,56 @@ async function start() {
     closeSettings();
   };
 
+  const setViewerInteractiveState = (isInteractive) => {
+    if (!(viewerEl instanceof HTMLElement)) {
+      return;
+    }
+
+    if (isInteractive) {
+      viewerEl.removeAttribute("inert");
+      viewerEl.removeAttribute("aria-hidden");
+      return;
+    }
+
+    viewerEl.setAttribute("inert", "");
+    viewerEl.setAttribute("aria-hidden", "true");
+  };
+
   const syncSidebarA11y = (isOpen) => {
     if (sidebarToggle) {
       sidebarToggle.setAttribute("aria-expanded", String(isOpen));
     }
 
-    if (!sidebar) {
+    if (sidebarOverlay) {
+      sidebarOverlay.setAttribute("aria-hidden", String(!isOpen));
+    }
+
+    if (!(sidebar instanceof HTMLElement)) {
+      setViewerInteractiveState(true);
       return;
     }
 
     if (!isCompactLayout()) {
       sidebar.removeAttribute("inert");
+      sidebar.removeAttribute("aria-hidden");
+      sidebar.removeAttribute("aria-modal");
+      sidebar.setAttribute("role", "complementary");
+      setViewerInteractiveState(true);
       return;
     }
 
     if (isOpen) {
       sidebar.removeAttribute("inert");
+      sidebar.removeAttribute("aria-hidden");
+      sidebar.setAttribute("role", "dialog");
+      sidebar.setAttribute("aria-modal", "true");
+      setViewerInteractiveState(false);
     } else {
       sidebar.setAttribute("inert", "");
+      sidebar.setAttribute("aria-hidden", "true");
+      sidebar.removeAttribute("aria-modal");
+      sidebar.setAttribute("role", "complementary");
+      setViewerInteractiveState(true);
     }
   };
 
@@ -1253,6 +1324,20 @@ async function start() {
     markActive(treeFileRowsById, activeFileState, state.currentDocId || "");
   };
 
+  const updateBacklinks = (doc) => {
+    if (!(backlinksEl instanceof HTMLElement)) {
+      return;
+    }
+    if (!doc) {
+      backlinksEl.innerHTML = "";
+      backlinksEl.hidden = true;
+      return;
+    }
+    const html = renderBacklinks(doc);
+    backlinksEl.innerHTML = html;
+    backlinksEl.hidden = html.length === 0;
+  };
+
   const state = {
     expanded,
     currentDocId: initialViewData?.docId ?? "",
@@ -1270,8 +1355,9 @@ async function start() {
         const globalId = manifest.routeMap?.[route];
         const globalDoc = globalId ? docsById.get(globalId) : null;
         const globalDocBranch = normalizeBranch(globalDoc?.branch);
-        if (globalDoc && globalDocBranch && globalDocBranch !== activeBranch && availableBranchSet.has(globalDocBranch)) {
-          activeBranch = globalDocBranch;
+        const targetBranch = globalDocBranch ?? defaultBranch;
+        if (globalDoc && targetBranch !== activeBranch && availableBranchSet.has(targetBranch)) {
+          activeBranch = targetBranch;
           view = getBranchView(activeBranch);
           updateBranchInfo();
           renderTree(state);
@@ -1286,6 +1372,7 @@ async function start() {
         titleEl.textContent = "문서를 찾을 수 없습니다";
         metaEl.innerHTML = "";
         contentEl.innerHTML = '<p class="placeholder">요청한 경로에 해당하는 문서가 없습니다.</p>';
+        updateBacklinks(null);
         navEl.innerHTML = "";
         markActive(treeFileRowsById, activeFileState, "");
         announceA11yStatus("탐색 실패: 요청한 문서를 찾을 수 없습니다.");
@@ -1315,6 +1402,7 @@ async function start() {
 
       if (shouldUseInitialView) {
         hasHydratedInitialView = true;
+        updateBacklinks(doc);
         document.title = composeDocumentTitle(initialViewData.title, siteTitle);
         if (viewerEl instanceof HTMLElement) {
           viewerEl.scrollTo(0, 0);
@@ -1330,6 +1418,7 @@ async function start() {
       const res = await fetch(toSafeUrlPath(doc.contentUrl));
       if (!res.ok) {
         contentEl.innerHTML = '<p class="placeholder">본문을 불러오지 못했습니다.</p>';
+        updateBacklinks(null);
         navEl.innerHTML = "";
         announceA11yStatus(`탐색 실패: ${doc.title} 문서를 불러오지 못했습니다.`);
         return;
@@ -1337,6 +1426,7 @@ async function start() {
 
       contentEl.innerHTML = await res.text();
 
+      updateBacklinks(doc);
       navEl.innerHTML = renderNav(view.docs, view.docIndexById, id);
 
       document.title = composeDocumentTitle(doc.title, siteTitle);
@@ -1447,6 +1537,30 @@ async function start() {
 
       const link = target.closest(".nav-link");
       if (!(link instanceof HTMLAnchorElement) || !navEl.contains(link)) {
+        return;
+      }
+
+      event.preventDefault();
+      const route = link.dataset.route;
+      if (!route) {
+        return;
+      }
+      state.navigate(route, true);
+      if (viewerEl instanceof HTMLElement) {
+        viewerEl.scrollTo(0, 0);
+      }
+    });
+  }
+
+  if (backlinksEl instanceof HTMLElement) {
+    backlinksEl.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      const link = target.closest(".backlink-link");
+      if (!(link instanceof HTMLAnchorElement) || !backlinksEl.contains(link)) {
         return;
       }
 

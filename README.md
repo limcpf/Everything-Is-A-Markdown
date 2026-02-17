@@ -83,6 +83,9 @@ Required:
 
 - `publish: true`  
   Only documents with this value are included in build output.
+- `prefix: "A-01"`  
+  Public identifier for the document route (`/A-01/`).  
+  If `publish: true` but `prefix` is missing, the document is skipped with a build warning.
 
 Optional:
 
@@ -90,8 +93,6 @@ Optional:
   Excludes the document even if `publish: true`.
 - `title: "..."`  
   Display title. If missing, file name is used.
-- `prefix: "A-01"`  
-  Short code shown before the title in the explorer and meta line.
 - `branch: dev`  
   Branch filter label.
 - `description: "..."`  

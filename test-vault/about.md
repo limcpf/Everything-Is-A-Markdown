@@ -1,5 +1,6 @@
 ---
 publish: true
+prefix: BC-VO-00
 title: About
 description: About this blog
 ---

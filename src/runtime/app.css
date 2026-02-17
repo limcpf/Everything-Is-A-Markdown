@@ -1168,6 +1168,62 @@ body.mobile-toggle-left .mobile-menu-toggle {
   border-top: 1px solid var(--latte-surface0);
 }
 
+.viewer-backlinks {
+  margin-top: 44px;
+  padding-top: 28px;
+  border-top: 1px solid var(--latte-surface0);
+}
+
+.backlinks-title {
+  margin: 0 0 14px;
+  font-size: 1.05rem;
+  color: var(--latte-subtext0);
+}
+
+.backlinks-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.backlinks-item {
+  margin: 0;
+}
+
+.backlink-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--latte-text);
+  padding: 8px 10px;
+  border: 1px solid var(--latte-surface0);
+  border-radius: 8px;
+  background: var(--active-surface-bg);
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.backlink-link:hover {
+  border-color: var(--latte-mauve);
+  color: var(--latte-mauve);
+}
+
+.backlink-prefix {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--latte-overlay0);
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--latte-surface0);
+}
+
+.backlink-text {
+  font-size: 0.9rem;
+}
+
 .nav-link {
   flex: 1;
   padding: 16px;
@@ -1295,12 +1351,17 @@ body.mobile-toggle-left .mobile-menu-toggle {
     border-bottom: 0;
     box-shadow: var(--sidebar-mobile-shadow);
     transform: translateX(-102%);
-    transition: transform 0.2s ease;
+    transition: transform 0.2s ease, visibility 0.2s step-end;
+    visibility: hidden;
+    pointer-events: none;
     z-index: 100;
   }
 
   .app-root.sidebar-open .sidebar {
     transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+    transition: transform 0.2s ease, visibility 0s;
   }
 
   .mobile-menu-toggle {

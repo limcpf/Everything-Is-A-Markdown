@@ -19,7 +19,6 @@ import {
   stripMdExt,
   toPosixPath,
   toDocId,
-  toRoute,
 } from "./utils";
 
 const CACHE_VERSION = 3;
@@ -44,6 +43,7 @@ interface RuntimeAssets {
 
 interface WikiLookup {
   byPath: Map<string, DocRecord>;
+  byPrefix: Map<string, DocRecord[]>;
   byStem: Map<string, DocRecord[]>;
 }
 
@@ -364,6 +364,20 @@ function appendRouteSuffix(route: string, suffix: string): string {
   return `/${segments.join("/")}/`;
 }
 
+function toPrefixRoute(prefix: string): string {
+  const normalized = prefix
+    .normalize("NFKC")
+    .trim()
+    .replace(/['’]/g, "")
+    .replace(/[\s_]+/g, "-")
+    .replace(/\//g, "-")
+    .replace(/[^\p{Letter}\p{Number}-]+/gu, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return `/${normalized || "untitled"}/`;
+}
+
 function ensureUniqueRoutes(docs: DocRecord[]): void {
   const initialBuckets = new Map<string, DocRecord[]>();
   for (const doc of docs) {
@@ -480,7 +494,7 @@ function toDocRecord(
     relPath,
     relNoExt,
     id,
-    route: toRoute(relNoExt),
+    route: toPrefixRoute(entry.prefix ?? ""),
     contentUrl: `/content/${toContentFileName(id)}`,
     fileName,
     title: entry.title ?? makeTitleFromFileName(fileName),
@@ -544,6 +558,11 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
     if (!completeEntry.publish || completeEntry.draft) {
       continue;
     }
+
+    if (!completeEntry.prefix) {
+      console.warn(`[publish] Skipped published doc without prefix: ${relPath}`);
+      continue;
+    }
     docs.push(toDocRecord(sourcePath, relPath, completeEntry, newThreshold));
   }
 
@@ -553,25 +572,32 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
 
 function createWikiLookup(docs: DocRecord[]): WikiLookup {
   const byPath = new Map<string, DocRecord>();
+  const byPrefix = new Map<string, DocRecord[]>();
   const byStem = new Map<string, DocRecord[]>();
 
   for (const doc of docs) {
     byPath.set(doc.relNoExt.toLowerCase(), doc);
+    if (doc.prefix) {
+      const prefixKey = normalizeWikiTarget(doc.prefix);
+      const prefixBucket = byPrefix.get(prefixKey) ?? [];
+      prefixBucket.push(doc);
+      byPrefix.set(prefixKey, prefixBucket);
+    }
     const stem = path.basename(doc.relNoExt).toLowerCase();
     const bucket = byStem.get(stem) ?? [];
     bucket.push(doc);
     byStem.set(stem, bucket);
   }
 
-  return { byPath, byStem };
+  return { byPath, byPrefix, byStem };
 }
 
-function resolveWikiTarget(
+function resolveWikiTargetDoc(
   lookup: WikiLookup,
   input: string,
   currentDoc: DocRecord,
   warnOnDuplicate: boolean,
-): { route: string; label: string } | null {
+): DocRecord | null {
   const normalized = normalizeWikiTarget(input);
   if (!normalized) {
     return null;
@@ -579,7 +605,21 @@ function resolveWikiTarget(
 
   const direct = lookup.byPath.get(normalized);
   if (direct) {
-    return { route: direct.route, label: direct.title };
+    return direct;
+  }
+
+  const prefixMatches = lookup.byPrefix.get(normalized) ?? [];
+  if (prefixMatches.length === 1) {
+    return prefixMatches[0];
+  }
+
+  if (warnOnDuplicate && prefixMatches.length > 1) {
+    console.warn(
+      `[wikilink] Duplicate prefix target "${input}" in ${currentDoc.relPath}. Candidates: ${prefixMatches
+        .map((item) => item.relPath)
+        .join(", ")}`,
+    );
+    return null;
   }
 
   if (normalized.includes("/")) {
@@ -588,7 +628,7 @@ function resolveWikiTarget(
 
   const stemMatches = lookup.byStem.get(normalized) ?? [];
   if (stemMatches.length === 1) {
-    return { route: stemMatches[0].route, label: stemMatches[0].title };
+    return stemMatches[0];
   }
 
   if (warnOnDuplicate && stemMatches.length > 1) {
@@ -598,6 +638,20 @@ function resolveWikiTarget(
   }
 
   return null;
+}
+
+function resolveWikiTarget(
+  lookup: WikiLookup,
+  input: string,
+  currentDoc: DocRecord,
+  warnOnDuplicate: boolean,
+): { route: string; label: string } | null {
+  const resolved = resolveWikiTargetDoc(lookup, input, currentDoc, warnOnDuplicate);
+  if (!resolved) {
+    return null;
+  }
+
+  return { route: resolved.route, label: resolved.title };
 }
 
 function createWikiResolver(lookup: WikiLookup, currentDoc: DocRecord): WikiResolver {
@@ -773,6 +827,9 @@ function buildManifest(docs: DocRecord[], tree: TreeNode[], options: BuildOption
     routeMap[doc.route] = doc.id;
   }
 
+  const wikiLookup = createWikiLookup(docs);
+  const backlinksByDocId = buildBacklinksByDocId(docs, wikiLookup);
+
   const docsForManifest = docs.map((doc) => ({
     id: doc.id,
     route: doc.route,
@@ -785,6 +842,8 @@ function buildManifest(docs: DocRecord[], tree: TreeNode[], options: BuildOption
     isNew: doc.isNew,
     contentUrl: doc.contentUrl,
     branch: doc.branch,
+    wikiTargets: doc.wikiTargets,
+    backlinks: backlinksByDocId.get(doc.id) ?? [],
   }));
 
   const branchSet = new Set<string>([DEFAULT_BRANCH]);
@@ -1167,7 +1226,29 @@ function renderInitialNav(docs: DocRecord[], currentId: string): string {
   return html;
 }
 
-function buildInitialView(doc: DocRecord, docs: DocRecord[], contentHtml: string): AppShellInitialView {
+function renderInitialBacklinks(backlinks: Manifest["docs"][number]["backlinks"]): string {
+  if (backlinks.length === 0) {
+    return "";
+  }
+
+  let html = '<h2 class="backlinks-title">Backlinks</h2><ul class="backlinks-list">';
+  for (const backlink of backlinks) {
+    const prefixHtml = backlink.prefix
+      ? `<span class="backlink-prefix">${escapeHtmlAttribute(backlink.prefix)}</span>`
+      : "";
+    html += `<li class="backlinks-item"><a href="${escapeHtmlAttribute(backlink.route)}" class="backlink-link" data-route="${escapeHtmlAttribute(backlink.route)}">${prefixHtml}<span class="backlink-text">${escapeHtmlAttribute(backlink.title)}</span></a></li>`;
+  }
+  html += "</ul>";
+  return html;
+}
+
+function buildInitialView(
+  doc: DocRecord,
+  docs: DocRecord[],
+  contentHtml: string,
+  manifestDocById: Map<string, Manifest["docs"][number]>,
+): AppShellInitialView {
+  const manifestDoc = manifestDocById.get(doc.id);
   return {
     route: doc.route,
     docId: doc.id,
@@ -1175,6 +1256,7 @@ function buildInitialView(doc: DocRecord, docs: DocRecord[], contentHtml: string
     breadcrumbHtml: renderInitialBreadcrumb(doc.route),
     metaHtml: renderInitialMeta(doc),
     contentHtml,
+    backlinksHtml: renderInitialBacklinks(manifestDoc?.backlinks ?? []),
     navHtml: renderInitialNav(docs, doc.id),
   };
 }
@@ -1187,9 +1269,12 @@ async function writeShellPages(
   runtimeAssets: RuntimeAssets,
   contentByDocId: Map<string, string>,
 ): Promise<void> {
+  const manifestDocById = new Map(manifest.docs.map((doc) => [doc.id, doc]));
   const indexDoc = pickHomeDoc(docs);
   const indexOutputPath = "index.html";
-  const indexInitialView = indexDoc ? buildInitialView(indexDoc, docs, contentByDocId.get(indexDoc.id) ?? "") : null;
+  const indexInitialView = indexDoc
+    ? buildInitialView(indexDoc, docs, contentByDocId.get(indexDoc.id) ?? "", manifestDocById)
+    : null;
   const shell = renderAppShellHtml(
     buildShellMeta("/", null, options),
     buildAppShellAssetsForOutput(indexOutputPath, runtimeAssets),
@@ -1206,7 +1291,7 @@ async function writeShellPages(
 
   for (const doc of docs) {
     const routeOutputPath = toRouteOutputPath(doc.route);
-    const initialView = buildInitialView(doc, docs, contentByDocId.get(doc.id) ?? "");
+    const initialView = buildInitialView(doc, docs, contentByDocId.get(doc.id) ?? "", manifestDocById);
     await writeOutputIfChanged(
       context,
       routeOutputPath,
@@ -1309,6 +1394,41 @@ function buildWikiResolutionSignature(doc: DocRecord, lookup: WikiLookup): strin
     segments.push(`${target}->${resolved?.route ?? "null"}`);
   }
   return segments.join("|");
+}
+
+function buildBacklinksByDocId(
+  docs: DocRecord[],
+  lookup: WikiLookup,
+): Map<string, Manifest["docs"][number]["backlinks"]> {
+  const buckets = new Map<string, Map<string, Manifest["docs"][number]["backlinks"][number]>>();
+
+  for (const doc of docs) {
+    for (const target of doc.wikiTargets) {
+      const targetDoc = resolveWikiTargetDoc(lookup, target, doc, false);
+      if (!targetDoc || targetDoc.id === doc.id) {
+        continue;
+      }
+
+      const bucket = buckets.get(targetDoc.id) ?? new Map<string, Manifest["docs"][number]["backlinks"][number]>();
+      bucket.set(doc.id, {
+        id: doc.id,
+        route: doc.route,
+        title: doc.title,
+        prefix: doc.prefix,
+      });
+      buckets.set(targetDoc.id, bucket);
+    }
+  }
+
+  const backlinksByDocId = new Map<string, Manifest["docs"][number]["backlinks"]>();
+  for (const doc of docs) {
+    const source = buckets.get(doc.id) ?? new Map<string, Manifest["docs"][number]["backlinks"][number]>();
+    const backlinks = Array.from(source.values()).sort((left, right) =>
+      left.route.localeCompare(right.route, "ko-KR"),
+    );
+    backlinksByDocId.set(doc.id, backlinks);
+  }
+  return backlinksByDocId;
 }
 
 export async function buildSite(options: BuildOptions): Promise<BuildResult> {
