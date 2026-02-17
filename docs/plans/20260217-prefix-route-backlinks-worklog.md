@@ -589,3 +589,43 @@ Review에서 집중적으로 봐야 할 위험 지점(있으면):
 
 Review에서 집중적으로 봐야 할 위험 지점(있으면):
 - 테스트에서 `initial-manifest-data` 파싱 실패 시 에러가 명확히 노출되는지
+
+## 추가 COMPOUND (재발 방지 축적물) - 2026-02-17 21:36:45 KST
+
+### 진행 요약
+- COMPOUND 승인 항목 1~3을 모두 반영했다.
+- 기본 브랜치 동적 파싱/검증 로직을 E2E 공용 유틸(`tests/e2e/utils/manifest.ts`)로 분리해 재사용 가능하게 만들었다.
+- 기본 브랜치 하드코딩 회귀 방지 solution 문서를 신규 추가했다.
+- PR 단계에서 즉시 활용 가능한 E2E 리뷰 체크리스트를 별도 문서로 추가했다.
+
+### 변경 파일
+- `tests/e2e/utils/manifest.ts`
+- `tests/e2e/prefix-backlinks-branch.spec.ts`
+- `docs/solutions/20260217-e2e-default-branch-guardrail.md`
+- `docs/checklists/e2e-review-checklist.md`
+- `docs/solutions/20260217-playwright-uiux-regression-checklist.md`
+- `docs/plans/20260217-prefix-route-backlinks-worklog.md`
+
+### 자동으로 잡히는가? 자문
+- 질문: 같은 문제가 다시 생기면, 다음엔 테스트/규칙/가드레일이 자동으로 잡아줄까?
+- 답변: 상당 부분 자동으로 잡힌다.
+  - 이유: CI `bun run test:e2e`와 동적 기본 브랜치 검증이 기본 경로 회귀를 탐지한다.
+- 자동으로 100% 잡히지 않는 부분은?
+  - `initial-manifest-data` 자체가 비정상/누락된 경우는 원인 파악에 맥락이 필요하다.
+- 그래서 무엇을 남겼는가?
+  - `docs/solutions/20260217-e2e-default-branch-guardrail.md`
+  - `docs/checklists/e2e-review-checklist.md`
+
+### 실행한 검증 커맨드와 결과
+- `bun run test:e2e`
+  - 결과: 성공(3 passed)
+  - 확인 포인트:
+    - `prefix-backlinks-branch.spec.ts` 2건 통과
+    - `mobile-sidebar-focus-trap.spec.ts` 1건 통과
+- `bun run build -- --vault ./test-vault --out ./dist`
+  - 결과: 성공
+  - 확인 포인트: `publish:true && prefix 없음` 경고 유지, 빌드 실패 없음
+
+### 커밋/PR 식별자
+- 신규 커밋: `b0a1dc3`
+- PR: 없음
