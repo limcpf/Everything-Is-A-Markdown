@@ -488,3 +488,50 @@ Review에서 집중적으로 봐야 할 위험 지점(있으면):
 
 Review에서 집중적으로 봐야 할 위험 지점(있으면):
 - CI에서 E2E 전체 실행으로 전환되며 실행 시간 증가 가능성
+
+## 추가 WORK (REVIEW 후속 6차: P3-1 즉시 처리 + .codex 포함) - 2026-02-17 20:40:32 KST
+
+### 진행 요약
+- REVIEW에서 남은 P3-1(테스트 취약 assertion)을 즉시 수정했다.
+- 브랜치 상태 검증을 텍스트 기반(`sidebar-branch-info`)에서 활성 pill 상태(`.branch-pill.is-active`) 기반으로 전환했다.
+- nav 검증은 개수 고정(`toHaveCount(1)`)에서 목적 route 존재(`data-route`) 검증으로 완화했다.
+- 사용자 요청에 따라 `.codex/config.toml`를 이번 커밋 범위에 포함한다.
+
+### 변경 파일
+- `tests/e2e/prefix-backlinks-branch.spec.ts`
+- `.codex/config.toml` (커밋 포함 대상)
+
+### 세부 반영 사항
+- `tests/e2e/prefix-backlinks-branch.spec.ts`
+  - `toContainText("dev + unclassified")` 제거 후 `.branch-pill.is-active[data-branch="dev"]` 검증으로 변경.
+  - `toHaveCount(1)` 제거 후 `#viewer-nav .nav-link[data-route="/BC-VO-02/"]` 존재/클릭 검증으로 변경.
+
+### 체크리스트 진행 상황
+- [x] P3-1 테스트 내구성 개선(텍스트/개수 하드코딩 완화)
+- [x] 사용자 정책 반영(.codex 포함 커밋 준비)
+
+### 실행한 검증 커맨드와 결과
+- `bun run test:e2e`
+  - 결과: 성공(3 passed)
+  - 확인 포인트:
+    - `prefix-backlinks-branch.spec.ts` 2건 통과
+    - `mobile-sidebar-focus-trap.spec.ts` 1건 통과
+- `bun run build -- --vault ./test-vault --out ./dist`
+  - 결과: 성공
+  - 확인 포인트: `publish:true && prefix 없음` 경고 유지, 빌드 실패 없음
+
+### Plan Drift 기록
+- 없음
+
+### 커밋/PR 식별자
+- 신규 커밋: `7135af3`
+- PR: 없음
+
+이번 Work에서 완료된 체크리스트 항목:
+- P3-1 즉시 처리, `.codex` 포함 정책 반영
+
+지금 상태에서 통과한 검증(테스트/린트/타입체크 등):
+- Playwright E2E 3건 통과, 빌드 통과
+
+Review에서 집중적으로 봐야 할 위험 지점(있으면):
+- `.codex` 설정 파일 포함이 팀 운영 정책과 충돌하지 않는지
