@@ -54,6 +54,7 @@ related: [
 - 자동으로 잡히게 할 장치(테스트/린트/체크리스트):
   - CI에서 `bun run test:e2e`를 기본 품질 게이트로 실행
   - E2E assertion은 텍스트 문구/고정 개수보다 route/상태 기반 검증(`data-route`, `.branch-pill.is-active`)을 우선한다.
+  - 기본 브랜치 검증은 문자열 상수 하드코딩 대신 manifest의 `defaultBranch`를 동적으로 읽어 검증한다.
   - 아래 체크리스트를 PR 전 점검 항목으로 사용
 
 ## UI 회귀 체크리스트 (Prefix/Backlinks)
