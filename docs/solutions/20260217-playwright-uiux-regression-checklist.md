@@ -5,6 +5,8 @@ severity: "P2"
 related: [
   "docs/plans/20260217-prefix-route-backlinks-worklog.md",
   "src/runtime/app.js",
+  "tests/e2e/prefix-backlinks-branch.spec.ts",
+  ".github/workflows/ci.yml",
   "artifacts/uiux-s1-tree-setup.png",
   "artifacts/uiux-s2-autobranch-about.png",
   "artifacts/uiux-s3-backlinks-visible.png",
@@ -22,16 +24,22 @@ related: [
 
 ## 해결
 - 적용한 접근:
-  - Playwright MCP 기반으로 S1~S4 UI 상호작용 시나리오를 표준 회귀 항목으로 고정.
+  - Playwright MCP 기반 수동 검증(S1~S4)을 기준 시나리오로 정리했다.
+  - 핵심 경로(prefix 라우팅/백링크/자동 브랜치 전환)를 Playwright 자동 테스트로 코드화했다.
 - 변경 범위(파일/모듈):
+  - `tests/e2e/prefix-backlinks-branch.spec.ts`
+  - `.github/workflows/ci.yml`
   - `docs/plans/20260217-prefix-route-backlinks-worklog.md`
   - `artifacts/*.png` (증적 스크린샷)
   - 본 문서
 - 트레이드오프:
-  - 자동 테스트 코드가 아니라 수동/반자동 점검 문서이므로, 실행자의 일관성이 필요함.
+  - 자동 회귀가 추가되어 신뢰성은 높아졌지만 CI 실행 시간은 소폭 증가한다.
 
 ## 검증
 - 확인한 테스트:
+  - `bun run test:e2e` (3 passed)
+    - `mobile-sidebar-focus-trap.spec.ts`
+    - `prefix-backlinks-branch.spec.ts`
   - S1 트리 탐색/문서 이동
   - S2 브랜치 자동 전환
   - S3 백링크 렌더/이동
@@ -44,6 +52,7 @@ related: [
 - AGENTS.MD에 추가할 규칙/패턴:
   - UI 상태 전이가 포함된 기능은 최소 1회 Playwright 상호작용 검증을 Work Log에 기록한다.
 - 자동으로 잡히게 할 장치(테스트/린트/체크리스트):
+  - CI에서 `bun run test:e2e`를 기본 품질 게이트로 실행
   - 아래 체크리스트를 PR 전 점검 항목으로 사용
 
 ## UI 회귀 체크리스트 (Prefix/Backlinks)

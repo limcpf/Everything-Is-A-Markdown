@@ -434,3 +434,57 @@ Review에서 집중적으로 봐야 할 위험 지점(있으면):
 
 Review에서 집중적으로 봐야 할 위험 지점(있으면):
 - CI에서 브라우저 설치 단계가 추가되어 실행 시간 증가 가능성
+
+## 추가 WORK (REVIEW 후속 5차: P2-1 수정 + P2-2 포함 + P3 정리) - 2026-02-17 20:33:16 KST
+
+### 진행 요약
+- P2-1 이슈를 해결하기 위해 자동 브랜치 전환 후 초기 hydration 분기에서도 breadcrumb/meta/nav를 활성 브랜치 기준으로 동기화했다.
+- P2-2 범위를 포함해 prefix 라우팅/백링크/자동 브랜치 전환 회귀를 검증하는 Playwright E2E 시나리오 2건을 추가했다.
+- CI E2E 실행 대상을 단일 focus-trap에서 전체 E2E로 확장해 핵심 요구 회귀를 기본 게이트로 반영했다.
+- P3 정리 항목으로 문서에 참조되지 않는 미추적 스크린샷 5개를 제거했다.
+
+### 변경 파일
+- `src/runtime/app.js`
+- `tests/e2e/prefix-backlinks-branch.spec.ts`
+- `.github/workflows/ci.yml`
+
+### 세부 반영 사항
+- `src/runtime/app.js`
+  - `shouldUseInitialView` 분기에서 `renderBreadcrumb(route)`, `renderMeta(doc)`, `renderNav(view.docs, view.docIndexById, id)`를 즉시 반영해 초기 SSR 상태와 활성 브랜치 상태 불일치를 제거.
+  - 문서 타이틀 동기화 기준을 `initialViewData.title`에서 `doc.title`로 통일.
+- `tests/e2e/prefix-backlinks-branch.spec.ts`
+  - 시나리오 1: `fsblog.branch=main` 저장 상태에서 `/BC-VO-00/` 직접 진입 시 `dev + unclassified` 자동 전환과 nav(`/BC-VO-02/`) 동기화 검증.
+  - 시나리오 2: `/BC-VO-01/`의 backlinks에서 `/BC-VO-00/` 클릭 시 prefix 경로 이동 + 자동 브랜치 전환 + nav 동기화 검증.
+- `.github/workflows/ci.yml`
+  - E2E 단계 실행 커맨드를 `bun run test:e2e:focus-trap` → `bun run test:e2e`로 확장.
+
+### 체크리스트 진행 상황
+- [x] D1(P2-1) 초기 hydration nav 불일치 수정
+- [x] D2(P2-2) prefix/backlinks/자동 전환 자동 회귀 포함
+- [x] D3(P3-1) 불필요 아티팩트 정리
+
+### 실행한 검증 커맨드와 결과
+- `bun run test:e2e`
+  - 결과: 성공(3 passed)
+  - 확인 포인트:
+    - `mobile-sidebar-focus-trap.spec.ts` 통과
+    - `prefix-backlinks-branch.spec.ts` 2건 통과
+- `bun run build -- --vault ./test-vault --out ./dist`
+  - 결과: 성공
+  - 확인 포인트: `publish:true && prefix 없음` 경고 유지, 빌드 실패 없음
+
+### Plan Drift 기록
+- 없음
+
+### 커밋/PR 식별자
+- 신규 커밋: `2f630c9`
+- PR: 없음
+
+이번 Work에서 완료된 체크리스트 항목:
+- D1(P2-1), D2(P2-2), D3(P3-1) 완료
+
+지금 상태에서 통과한 검증(테스트/린트/타입체크 등):
+- Playwright E2E 3건 통과, 빌드 통과
+
+Review에서 집중적으로 봐야 할 위험 지점(있으면):
+- CI에서 E2E 전체 실행으로 전환되며 실행 시간 증가 가능성
