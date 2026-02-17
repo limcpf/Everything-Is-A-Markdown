@@ -629,3 +629,54 @@ Review에서 집중적으로 봐야 할 위험 지점(있으면):
 ### 커밋/PR 식별자
 - 신규 커밋: `b0a1dc3`
 - PR: 없음
+
+## 추가 WORK (릴리즈: v0.5.4) - 2026-02-17 22:17:55 KST
+
+### 진행 요약
+- 릴리즈 버전을 `0.5.4`로 상향했다.
+- 태그 기반 배포 워크플로우(`Publish Bunx Package`, `Release Single File`)를 트리거하기 위한 릴리즈 준비를 완료했다.
+- 릴리즈 전 검증으로 E2E/빌드(배포 워크플로우 경로 포함)를 실행해 통과를 확인했다.
+- 태그/버전 정합성 불변식을 유지하기 위해 릴리즈 커밋 후 `v0.5.4` 태그를 생성할 예정이다.
+
+### 변경 파일
+- `package.json`
+- `docs/plans/20260217-prefix-route-backlinks-worklog.md`
+
+### 체크리스트 진행 상황
+- [x] W1 사전 점검(브랜치/태그 충돌/원격 확인)
+- [x] W2 버전 업데이트(`0.5.4`)
+- [x] W3 릴리즈 전 검증(E2E/빌드)
+- [ ] W4 릴리즈 커밋
+- [ ] W5 태그 생성(`v0.5.4`)
+- [ ] W6 원격 푸시(메인 + 태그)
+- [ ] W7 배포 결과 확인(npm + GitHub Release)
+
+### 실행한 검증 커맨드와 결과
+- `bun run test:e2e`
+  - 결과: 성공(3 passed)
+  - 확인 포인트:
+    - `prefix-backlinks-branch.spec.ts` 2건 통과
+    - `mobile-sidebar-focus-trap.spec.ts` 1건 통과
+- `bun run build -- --vault ./test-vault --out ./dist`
+  - 결과: 성공
+  - 확인 포인트: `publish:true && prefix 없음` 경고 유지, 빌드 실패 없음
+- `bun run build`
+  - 결과: 성공
+  - 확인 포인트: release workflow와 동일 경로 빌드 통과
+
+### Plan Drift 기록
+- 없음
+
+### 커밋/PR 식별자
+- 신규 커밋: (이 섹션 작성 시점 기준 미생성)
+- 태그: (미생성)
+- PR: 없음
+
+이번 Work에서 완료된 체크리스트 항목:
+- W1, W2, W3 완료
+
+지금 상태에서 통과한 검증(테스트/린트/타입체크 등):
+- Playwright E2E 3건 통과, 빌드 2회 통과
+
+Review에서 집중적으로 봐야 할 위험 지점(있으면):
+- GitHub Actions 시크릿(`NPM_TOKEN`)과 원격 권한 상태에 따라 실제 publish 성공/실패가 갈릴 수 있음
