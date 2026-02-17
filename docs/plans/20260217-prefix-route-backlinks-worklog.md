@@ -508,7 +508,7 @@ Review에서 집중적으로 봐야 할 위험 지점(있으면):
 
 ### 체크리스트 진행 상황
 - [x] P3-1 테스트 내구성 개선(텍스트/개수 하드코딩 완화)
-- [x] 사용자 정책 반영(.codex 포함 커밋 준비)
+- [x] 사용자 정책 반영(.codex 포함 커밋 완료)
 
 ### 실행한 검증 커맨드와 결과
 - `bun run test:e2e`
@@ -535,3 +535,57 @@ Review에서 집중적으로 봐야 할 위험 지점(있으면):
 
 Review에서 집중적으로 봐야 할 위험 지점(있으면):
 - `.codex` 설정 파일 포함이 팀 운영 정책과 충돌하지 않는지
+
+## 추가 WORK (REVIEW 후속 7차: 기본 브랜치 하드코딩 제거) - 2026-02-17 21:30:39 KST
+
+### 진행 요약
+- REVIEW에서 남은 P3-1 하위 이슈를 추가 WORK로 처리했다.
+- `prefix-backlinks-branch` E2E에서 활성 브랜치 검증의 `"dev"` 하드코딩을 제거하고 manifest `defaultBranch` 기반 동적 검증으로 전환했다.
+- `/BC-VO-00/`의 next nav target도 기본 브랜치 가시 문서 목록에서 동적으로 계산하도록 보강했다.
+- 이전 6차 Work Log의 상태 문구(`커밋 준비`)를 실제 상태에 맞춰 `커밋 완료`로 정정했다.
+
+### 변경 파일
+- `tests/e2e/prefix-backlinks-branch.spec.ts`
+- `docs/plans/20260217-prefix-route-backlinks-worklog.md`
+- `docs/solutions/20260217-playwright-uiux-regression-checklist.md`
+
+### 세부 반영 사항
+- `tests/e2e/prefix-backlinks-branch.spec.ts`
+  - `getInitialManifest`/`getNextRouteInDefaultBranch` 헬퍼를 추가해 테스트 실행 시점의 `defaultBranch`와 next route를 동적으로 계산.
+  - 활성 브랜치 assertion을 `.branch-pill.is-active[data-branch=\"{defaultBranch}\"]`로 변경.
+  - nav assertion을 고정 route 대신 계산된 `nextRoute` 기준으로 검증.
+- `docs/plans/...worklog.md`
+  - 6차 섹션 체크리스트 문구를 `커밋 완료`로 정정.
+- `docs/solutions/...checklist.md`
+  - 기본 브랜치 검증은 상수 하드코딩 대신 manifest 동적 읽기 원칙을 추가.
+
+### 체크리스트 진행 상황
+- [x] P3-1-1 기본 브랜치 하드코딩 제거
+- [x] P3-1-2 테스트 탐지력 유지(route/title/state 동시 검증)
+- [x] P3-2 Work Log 문구 정정
+
+### 실행한 검증 커맨드와 결과
+- `bun run test:e2e`
+  - 결과: 성공(3 passed)
+  - 확인 포인트:
+    - `prefix-backlinks-branch.spec.ts` 2건 통과
+    - `mobile-sidebar-focus-trap.spec.ts` 1건 통과
+- `bun run build -- --vault ./test-vault --out ./dist`
+  - 결과: 성공
+  - 확인 포인트: `publish:true && prefix 없음` 경고 유지, 빌드 실패 없음
+
+### Plan Drift 기록
+- 없음
+
+### 커밋/PR 식별자
+- 신규 커밋: `3186315`
+- PR: 없음
+
+이번 Work에서 완료된 체크리스트 항목:
+- P3-1-1, P3-1-2, P3-2 완료
+
+지금 상태에서 통과한 검증(테스트/린트/타입체크 등):
+- Playwright E2E 3건 통과, 빌드 통과
+
+Review에서 집중적으로 봐야 할 위험 지점(있으면):
+- 테스트에서 `initial-manifest-data` 파싱 실패 시 에러가 명확히 노출되는지
