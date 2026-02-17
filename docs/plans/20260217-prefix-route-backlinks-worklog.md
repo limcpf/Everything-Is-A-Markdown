@@ -634,9 +634,9 @@ Review에서 집중적으로 봐야 할 위험 지점(있으면):
 
 ### 진행 요약
 - 릴리즈 버전을 `0.5.4`로 상향했다.
-- 태그 기반 배포 워크플로우(`Publish Bunx Package`, `Release Single File`)를 트리거하기 위한 릴리즈 준비를 완료했다.
+- 릴리즈 커밋(`aada045`)과 태그(`v0.5.4`) 생성까지 완료했다.
 - 릴리즈 전 검증으로 E2E/빌드(배포 워크플로우 경로 포함)를 실행해 통과를 확인했다.
-- 태그/버전 정합성 불변식을 유지하기 위해 릴리즈 커밋 후 `v0.5.4` 태그를 생성할 예정이다.
+- 원격 푸시 단계에서 GitHub OAuth App 권한(`workflow` scope) 부족으로 배포 트리거가 차단되었다.
 
 ### 변경 파일
 - `package.json`
@@ -646,9 +646,9 @@ Review에서 집중적으로 봐야 할 위험 지점(있으면):
 - [x] W1 사전 점검(브랜치/태그 충돌/원격 확인)
 - [x] W2 버전 업데이트(`0.5.4`)
 - [x] W3 릴리즈 전 검증(E2E/빌드)
-- [ ] W4 릴리즈 커밋
-- [ ] W5 태그 생성(`v0.5.4`)
-- [ ] W6 원격 푸시(메인 + 태그)
+- [x] W4 릴리즈 커밋
+- [x] W5 태그 생성(`v0.5.4`)
+- [ ] W6 원격 푸시(메인 + 태그) — 권한 오류로 중단
 - [ ] W7 배포 결과 확인(npm + GitHub Release)
 
 ### 실행한 검증 커맨드와 결과
@@ -663,20 +663,28 @@ Review에서 집중적으로 봐야 할 위험 지점(있으면):
 - `bun run build`
   - 결과: 성공
   - 확인 포인트: release workflow와 동일 경로 빌드 통과
+- `git push origin main`
+  - 결과: 실패
+  - 오류: `refusing to allow an OAuth App to create or update workflow '.github/workflows/ci.yml' without 'workflow' scope`
+- `git push origin v0.5.4`
+  - 결과: 실패
+  - 오류: `refusing to allow an OAuth App to create or update workflow '.github/workflows/ci.yml' without 'workflow' scope`
 
 ### Plan Drift 기록
-- 없음
+- 없음(기능/정책 범위 변경은 없음)
+- 외부 제약 이슈:
+  - 원격 푸시 자격 증명에 `workflow` scope가 없어 W6/W7 진행 불가
 
 ### 커밋/PR 식별자
-- 신규 커밋: (이 섹션 작성 시점 기준 미생성)
-- 태그: (미생성)
+- 신규 커밋: `aada045`
+- 태그: `v0.5.4`
 - PR: 없음
 
 이번 Work에서 완료된 체크리스트 항목:
-- W1, W2, W3 완료
+- W1, W2, W3, W4, W5 완료
 
 지금 상태에서 통과한 검증(테스트/린트/타입체크 등):
 - Playwright E2E 3건 통과, 빌드 2회 통과
 
 Review에서 집중적으로 봐야 할 위험 지점(있으면):
-- GitHub Actions 시크릿(`NPM_TOKEN`)과 원격 권한 상태에 따라 실제 publish 성공/실패가 갈릴 수 있음
+- 원격 푸시 계정의 `workflow` scope 부재로 태그 기반 배포 워크플로우가 트리거되지 않은 상태
