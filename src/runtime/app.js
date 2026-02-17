@@ -1402,8 +1402,12 @@ async function start() {
 
       if (shouldUseInitialView) {
         hasHydratedInitialView = true;
+        breadcrumbEl.innerHTML = renderBreadcrumb(route);
+        titleEl.textContent = doc.title;
+        metaEl.innerHTML = renderMeta(doc);
         updateBacklinks(doc);
-        document.title = composeDocumentTitle(initialViewData.title, siteTitle);
+        navEl.innerHTML = renderNav(view.docs, view.docIndexById, id);
+        document.title = composeDocumentTitle(doc.title, siteTitle);
         if (viewerEl instanceof HTMLElement) {
           viewerEl.scrollTo(0, 0);
         }

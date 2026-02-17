@@ -30,8 +30,8 @@ jobs:
       - name: Build site
         run: bun run build -- --vault ./test-vault --out ./dist
 
-      - name: Run E2E focus trap
-        run: bun run test:e2e:focus-trap
+      - name: Run E2E tests
+        run: bun run test:e2e
 
       - name: Upload Playwright artifacts on failure
         if: failure()
