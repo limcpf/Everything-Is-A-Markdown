@@ -193,7 +193,8 @@ flowchart LR
 
 Rendering happens in the browser on first load and when navigating to another document.
 Mermaid fences are rendered inside a dedicated diagram container (`.mermaid-block`) instead of the regular code block UI, so they do not show code headers, filenames, or copy buttons.
-Rendered SVG output is centered and constrained to the container width on both desktop and mobile.
+Rendered SVG output is centered and automatically constrained to `min(100%, 720px)` on both desktop and mobile.
+Regular content images inside the viewer follow the same width policy to keep reading flow stable.
 If Mermaid is disabled in config or CDN loading fails, the source block is shown as-is in the same container and a warning message appears below it.
 
 Configuration options (`blog.config.ts`):
