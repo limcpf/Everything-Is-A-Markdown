@@ -127,6 +127,7 @@ export type TreeNode = FolderNode | FileNode;
 export interface Manifest {
   generatedAt: string;
   siteTitle: string;
+  pathBase: string;
   defaultBranch: string;
   branches: string[];
   ui: {

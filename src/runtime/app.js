@@ -37,15 +37,63 @@ function toSafeUrlPath(input) {
     .join("/");
 }
 
+function normalizePathname(pathname) {
+  let normalized = "/";
+  try {
+    normalized = decodeURIComponent(pathname || "/");
+  } catch {
+    normalized = String(pathname || "/");
+  }
+  if (!normalized.startsWith("/")) {
+    normalized = `/${normalized}`;
+  }
+  return normalized.replace(/\/+/g, "/") || "/";
+}
+
 function normalizeRoute(pathname) {
-  let route = decodeURIComponent(pathname || "/");
-  if (!route.startsWith("/")) {
-    route = `/${route}`;
+  const normalized = normalizePathname(pathname);
+  if (normalized.endsWith("/")) {
+    return normalized;
   }
-  if (!route.endsWith("/")) {
-    route = `${route}/`;
+  return `${normalized}/`;
+}
+
+function normalizePathBase(pathBase) {
+  if (typeof pathBase !== "string") {
+    return "";
   }
-  return route;
+
+  const cleaned = pathBase.trim().replace(/\\/g, "/");
+  if (!cleaned || cleaned === "/") {
+    return "";
+  }
+
+  return `/${cleaned.replace(/^\/+/, "").replace(/\/+$/, "")}`;
+}
+
+function stripPathBase(pathname, pathBase) {
+  const normalizedPath = normalizePathname(pathname);
+  if (!pathBase) {
+    return normalizedPath;
+  }
+  if (normalizedPath === pathBase) {
+    return "/";
+  }
+  if (normalizedPath.startsWith(`${pathBase}/`)) {
+    return normalizedPath.slice(pathBase.length) || "/";
+  }
+  return normalizedPath;
+}
+
+function toPathWithBase(pathname, pathBase) {
+  const normalizedPath = normalizePathname(pathname);
+  if (!pathBase) {
+    return toSafeUrlPath(normalizedPath);
+  }
+  if (normalizedPath === "/") {
+    return toSafeUrlPath(`${pathBase}/`);
+  }
+  return toSafeUrlPath(`${pathBase}${normalizedPath}`);
 }
 
 function loadInitialViewData() {
@@ -114,21 +162,9 @@ function loadInitialManifestData() {
   }
 }
 
-function resolveRouteFromLocation(routeMap) {
-  const direct = normalizeRoute(location.pathname);
-  if (routeMap[direct]) {
-    return direct;
-  }
-
-  if (location.search.length > 1) {
-    const recovered = normalizeRoute(`${location.pathname}?${location.search.slice(1)}`);
-    if (routeMap[recovered]) {
-      history.replaceState(null, "", toSafeUrlPath(recovered));
-      return recovered;
-    }
-  }
-
-  return direct;
+function resolveRouteFromLocation(routeMap, pathBase) {
+  const direct = normalizeRoute(stripPathBase(location.pathname, pathBase));
+  return routeMap[direct] ? direct : direct;
 }
 
 function resolveSiteTitle(manifest) {
@@ -612,7 +648,7 @@ function initializeTreeLabelTooltip(treeRoot, tooltipEl) {
   };
 }
 
-function createFolderNode(node, expandedSet, fileRowsById, depth = 0) {
+function createFolderNode(node, expandedSet, fileRowsById, pathBase, depth = 0) {
   const wrapper = document.createElement("div");
   wrapper.className = node.virtual ? "tree-folder virtual" : "tree-folder";
   wrapper.style.setProperty("--tree-depth", String(depth));
@@ -627,7 +663,7 @@ function createFolderNode(node, expandedSet, fileRowsById, depth = 0) {
   const isExpanded = node.virtual ? true : expandedSet.has(node.path);
   const iconName = isExpanded ? "folder_open" : "folder";
 
-  row.innerHTML = `<span class="material-symbols-outlined">${iconName}</span><span class="tree-label">${node.name}</span>`;
+  row.innerHTML = `<span class="material-symbols-outlined">${iconName}</span><span class="tree-label">${escapeHtmlAttr(node.name)}</span>`;
   row.setAttribute("aria-expanded", String(isExpanded));
 
   const children = document.createElement("div");
@@ -638,9 +674,9 @@ function createFolderNode(node, expandedSet, fileRowsById, depth = 0) {
 
   for (const child of node.children) {
     if (child.type === "folder") {
-      children.appendChild(createFolderNode(child, expandedSet, fileRowsById, depth + 1));
+      children.appendChild(createFolderNode(child, expandedSet, fileRowsById, pathBase, depth + 1));
     } else {
-      children.appendChild(createFileNode(child, fileRowsById, depth + 1));
+      children.appendChild(createFileNode(child, fileRowsById, pathBase, depth + 1));
     }
   }
 
@@ -649,9 +685,9 @@ function createFolderNode(node, expandedSet, fileRowsById, depth = 0) {
   return wrapper;
 }
 
-function createFileNode(node, fileRowsById, depth = 0) {
+function createFileNode(node, fileRowsById, pathBase, depth = 0) {
   const row = document.createElement("a");
-  row.href = node.route;
+  row.href = toPathWithBase(node.route, pathBase);
   row.className = "tree-row tree-file-row";
   row.dataset.rowType = "file";
   row.dataset.route = node.route;
@@ -751,7 +787,7 @@ function renderMeta(doc) {
   return items.join("");
 }
 
-function renderNav(docs, docIndexById, currentId) {
+function renderNav(docs, docIndexById, currentId, pathBase) {
   const currentIndex = docIndexById.get(currentId) ?? -1;
   if (currentIndex === -1) return "";
 
@@ -761,23 +797,23 @@ function renderNav(docs, docIndexById, currentId) {
   let html = "";
 
   if (prev) {
-    html += `<a href="${toSafeUrlPath(prev.route)}" class="nav-link nav-link-prev" data-route="${escapeHtmlAttr(prev.route)}">
+    html += `<a href="${toPathWithBase(prev.route, pathBase)}" class="nav-link nav-link-prev" data-route="${escapeHtmlAttr(prev.route)}">
       <div class="nav-link-label"><span class="material-symbols-outlined">arrow_back</span>Previous</div>
-      <div class="nav-link-title">${prev.title}</div>
+      <div class="nav-link-title">${escapeHtmlAttr(prev.title)}</div>
     </a>`;
   }
 
   if (next) {
-    html += `<a href="${toSafeUrlPath(next.route)}" class="nav-link nav-link-next" data-route="${escapeHtmlAttr(next.route)}">
+    html += `<a href="${toPathWithBase(next.route, pathBase)}" class="nav-link nav-link-next" data-route="${escapeHtmlAttr(next.route)}">
       <div class="nav-link-label">Next<span class="material-symbols-outlined">arrow_forward</span></div>
-      <div class="nav-link-title">${next.title}</div>
+      <div class="nav-link-title">${escapeHtmlAttr(next.title)}</div>
     </a>`;
   }
 
   return html;
 }
 
-function renderBacklinks(doc) {
+function renderBacklinks(doc, pathBase) {
   const backlinks = Array.isArray(doc.backlinks) ? doc.backlinks : [];
   if (backlinks.length === 0) {
     return "";
@@ -790,7 +826,7 @@ function renderBacklinks(doc) {
       : "";
     const route = typeof backlink.route === "string" ? normalizeRoute(backlink.route) : "/";
     const title = typeof backlink.title === "string" && backlink.title.trim().length > 0 ? backlink.title : route;
-    html += `<li class="backlinks-item"><a href="${toSafeUrlPath(route)}" class="backlink-link" data-route="${escapeHtmlAttr(route)}">${prefix}<span class="backlink-text">${escapeHtmlAttr(title)}</span></a></li>`;
+    html += `<li class="backlinks-item"><a href="${toPathWithBase(route, pathBase)}" class="backlink-link" data-route="${escapeHtmlAttr(route)}">${prefix}<span class="backlink-text">${escapeHtmlAttr(title)}</span></a></li>`;
   }
   html += "</ul>";
   return html;
@@ -1209,13 +1245,15 @@ async function start() {
   });
 
   let manifest = loadInitialManifestData();
+  const initialPathBase = normalizePathBase(manifest?.pathBase);
   if (!manifest) {
-    const manifestRes = await fetch("/manifest.json");
+    const manifestRes = await fetch(toPathWithBase("/manifest.json", initialPathBase));
     if (!manifestRes.ok) {
       throw new Error(`Failed to load manifest: ${manifestRes.status}`);
     }
     manifest = await manifestRes.json();
   }
+  const pathBase = normalizePathBase(manifest.pathBase);
   const siteTitle = resolveSiteTitle(manifest);
   const defaultBranch = normalizeBranch(manifest.defaultBranch) || DEFAULT_BRANCH;
   const availableBranchSet = new Set([defaultBranch]);
@@ -1312,9 +1350,9 @@ async function start() {
 
     for (const node of view.tree) {
       if (node.type === "folder") {
-        treeRoot.appendChild(createFolderNode(node, state.expanded, treeFileRowsById));
+        treeRoot.appendChild(createFolderNode(node, state.expanded, treeFileRowsById, pathBase));
       } else {
-        treeRoot.appendChild(createFileNode(node, treeFileRowsById));
+        treeRoot.appendChild(createFileNode(node, treeFileRowsById, pathBase));
       }
     }
 
@@ -1333,7 +1371,7 @@ async function start() {
       backlinksEl.hidden = true;
       return;
     }
-    const html = renderBacklinks(doc);
+    const html = renderBacklinks(doc, pathBase);
     backlinksEl.innerHTML = html;
     backlinksEl.hidden = html.length === 0;
   };
@@ -1377,7 +1415,7 @@ async function start() {
         markActive(treeFileRowsById, activeFileState, "");
         announceA11yStatus("탐색 실패: 요청한 문서를 찾을 수 없습니다.");
         if (push) {
-          history.pushState(null, "", toSafeUrlPath(route));
+          history.pushState(null, "", toPathWithBase(route, pathBase));
         }
         return;
       }
@@ -1388,7 +1426,7 @@ async function start() {
       }
 
       if (push) {
-        history.pushState(null, "", toSafeUrlPath(route));
+        history.pushState(null, "", toPathWithBase(route, pathBase));
       }
 
       state.currentDocId = id;
@@ -1406,7 +1444,7 @@ async function start() {
         titleEl.textContent = doc.title;
         metaEl.innerHTML = renderMeta(doc);
         updateBacklinks(doc);
-        navEl.innerHTML = renderNav(view.docs, view.docIndexById, id);
+        navEl.innerHTML = renderNav(view.docs, view.docIndexById, id, pathBase);
         document.title = composeDocumentTitle(doc.title, siteTitle);
         if (viewerEl instanceof HTMLElement) {
           viewerEl.scrollTo(0, 0);
@@ -1419,7 +1457,7 @@ async function start() {
       titleEl.textContent = doc.title;
       metaEl.innerHTML = renderMeta(doc);
 
-      const res = await fetch(toSafeUrlPath(doc.contentUrl));
+      const res = await fetch(toPathWithBase(doc.contentUrl, pathBase));
       if (!res.ok) {
         contentEl.innerHTML = '<p class="placeholder">본문을 불러오지 못했습니다.</p>';
         updateBacklinks(null);
@@ -1431,7 +1469,7 @@ async function start() {
       contentEl.innerHTML = await res.text();
 
       updateBacklinks(doc);
-      navEl.innerHTML = renderNav(view.docs, view.docIndexById, id);
+      navEl.innerHTML = renderNav(view.docs, view.docIndexById, id, pathBase);
 
       document.title = composeDocumentTitle(doc.title, siteTitle);
       if (viewerEl instanceof HTMLElement) {
@@ -1594,7 +1632,7 @@ async function start() {
     updateBranchInfo();
     renderTree(state);
 
-    const currentRoute = resolveRouteFromLocation(view.routeMap);
+    const currentRoute = resolveRouteFromLocation(view.routeMap, pathBase);
     if (view.routeMap[currentRoute]) {
       await state.navigate(currentRoute, false);
       return;
@@ -1608,20 +1646,25 @@ async function start() {
   updateBranchInfo();
   renderTree(state);
 
-  const currentRoute = resolveRouteFromLocation(view.routeMap);
+  const currentRoute = resolveRouteFromLocation(view.routeMap, pathBase);
   const initialRoute = currentRoute === "/" ? pickHomeRoute(view) : currentRoute;
   handleLayoutChange();
   await state.navigate(initialRoute, currentRoute === "/" && initialRoute !== "/");
 
   window.addEventListener("popstate", async () => {
-    await state.navigate(resolveRouteFromLocation(view.routeMap), false);
+    await state.navigate(resolveRouteFromLocation(view.routeMap, pathBase), false);
   });
 }
 
 start().catch((error) => {
   const contentEl = document.getElementById("viewer-content");
   if (contentEl) {
-    contentEl.innerHTML = `<p class="placeholder">초기화 실패: ${error.message}</p>`;
+    const message = error instanceof Error ? error.message : String(error);
+    contentEl.innerHTML = "";
+    const placeholder = document.createElement("p");
+    placeholder.className = "placeholder";
+    placeholder.textContent = `초기화 실패: ${message}`;
+    contentEl.appendChild(placeholder);
   }
   console.error(error);
 });

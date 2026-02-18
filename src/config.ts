@@ -199,6 +199,13 @@ export async function loadPinnedMenuConfig(
   return normalizePinnedMenu((parsed as Record<string, unknown>).pinnedMenu, "[menu-config]");
 }
 
+function ensureIntegerOption(value: unknown, optionLabel: string, min: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value < min) {
+    throw new Error(`[config] "${optionLabel}" must be an integer >= ${min}`);
+  }
+  return value;
+}
+
 export function resolveBuildOptions(
   cli: CliArgs,
   userConfig: UserConfig,
@@ -219,14 +226,24 @@ export function resolveBuildOptions(
       : undefined;
   const configPinnedMenu = normalizePinnedMenu(userConfig.pinnedMenu, "[config]");
   const resolvedPinnedMenu = pinnedMenu ?? configPinnedMenu;
+  const newWithinDays = ensureIntegerOption(
+    cli.newWithinDays ?? userConfig.ui?.newWithinDays ?? DEFAULTS.newWithinDays,
+    "--new-within-days (or ui.newWithinDays)",
+    0,
+  );
+  const recentLimit = ensureIntegerOption(
+    cli.recentLimit ?? userConfig.ui?.recentLimit ?? DEFAULTS.recentLimit,
+    "--recent-limit (or ui.recentLimit)",
+    1,
+  );
 
   return {
     vaultDir,
     outDir,
     exclude: mergedExclude,
     staticPaths,
-    newWithinDays: cli.newWithinDays ?? userConfig.ui?.newWithinDays ?? DEFAULTS.newWithinDays,
-    recentLimit: cli.recentLimit ?? userConfig.ui?.recentLimit ?? DEFAULTS.recentLimit,
+    newWithinDays,
+    recentLimit,
     siteTitle,
     pinnedMenu: resolvedPinnedMenu,
     wikilinks: userConfig.markdown?.wikilinks ?? DEFAULTS.wikilinks,

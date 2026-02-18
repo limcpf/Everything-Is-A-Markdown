@@ -38,6 +38,8 @@ bun run blog [build|dev|clean] [options]
 - `--vault <path>`: Markdown 루트 디렉터리 (기본 `.`)
 - `--out <path>`: 출력 디렉터리 (기본 `dist`)
 - `--exclude <glob>`: 제외 패턴 추가 (반복 가능)
+- `--new-within-days <n>`: NEW 배지 기준 일수 (정수 `>= 0`, 기본 `7`)
+- `--recent-limit <n>`: Recent 폴더 문서 수 제한 (정수 `>= 1`, 기본 `5`)
 - `--port <n>`: 개발 서버 포트 (기본 `3000`)
 
 ## 설정 파일 (`blog.config.ts`)
@@ -51,6 +53,7 @@ const config = {
   staticPaths: ["assets", "public/favicon.ico"],
   seo: {
     siteUrl: "https://example.com",
+    pathBase: "/blog",
     defaultOgImage: "/assets/og.png",
   },
 };
@@ -64,6 +67,12 @@ export default config;
 - 폴더와 파일 모두 지정 가능
 - 지정한 경로의 파일들을 `dist`에 같은 상대 경로로 복사
 - 예: 볼트 `assets/og.png` -> `dist/assets/og.png`
+
+`seo.pathBase`:
+
+- 서브패스 배포(예: `/blog`)를 정식 지원합니다.
+- 내부 라우팅/본문 fetch 링크에 동일한 base path가 적용됩니다.
+- 루트 배포는 빈 문자열(`""`)을 사용합니다.
 
 예시:
 

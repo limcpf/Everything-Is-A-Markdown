@@ -866,6 +866,7 @@ function buildManifest(docs: DocRecord[], tree: TreeNode[], options: BuildOption
   return {
     generatedAt: new Date().toISOString(),
     siteTitle: resolveSiteTitle(options),
+    pathBase: options.seo?.pathBase ?? "",
     defaultBranch: DEFAULT_BRANCH,
     branches,
     ui: {
@@ -1206,7 +1207,23 @@ function renderInitialMeta(doc: DocRecord): string {
   return items.join("");
 }
 
-function renderInitialNav(docs: DocRecord[], currentId: string): string {
+function toPathWithBase(pathname: string, pathBase: string): string {
+  const cleanBase = pathBase.trim().replace(/\\/g, "/");
+  const normalizedBase = !cleanBase || cleanBase === "/"
+    ? ""
+    : `/${cleanBase.replace(/^\/+/, "").replace(/\/+$/, "")}`;
+  if (!normalizedBase) {
+    return pathname;
+  }
+
+  if (pathname === "/") {
+    return `${normalizedBase}/`;
+  }
+  const normalizedPathname = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  return `${normalizedBase}${normalizedPathname}`;
+}
+
+function renderInitialNav(docs: DocRecord[], currentId: string, pathBase: string): string {
   const currentIndex = docs.findIndex((doc) => doc.id === currentId);
   if (currentIndex === -1) {
     return "";
@@ -1217,16 +1234,16 @@ function renderInitialNav(docs: DocRecord[], currentId: string): string {
 
   let html = "";
   if (prev) {
-    html += `<a href="${escapeHtmlAttribute(prev.route)}" class="nav-link nav-link-prev" data-route="${escapeHtmlAttribute(prev.route)}"><div class="nav-link-label"><span class="material-symbols-outlined">arrow_back</span>Previous</div><div class="nav-link-title">${escapeHtmlAttribute(prev.title)}</div></a>`;
+    html += `<a href="${escapeHtmlAttribute(toPathWithBase(prev.route, pathBase))}" class="nav-link nav-link-prev" data-route="${escapeHtmlAttribute(prev.route)}"><div class="nav-link-label"><span class="material-symbols-outlined">arrow_back</span>Previous</div><div class="nav-link-title">${escapeHtmlAttribute(prev.title)}</div></a>`;
   }
   if (next) {
-    html += `<a href="${escapeHtmlAttribute(next.route)}" class="nav-link nav-link-next" data-route="${escapeHtmlAttribute(next.route)}"><div class="nav-link-label">Next<span class="material-symbols-outlined">arrow_forward</span></div><div class="nav-link-title">${escapeHtmlAttribute(next.title)}</div></a>`;
+    html += `<a href="${escapeHtmlAttribute(toPathWithBase(next.route, pathBase))}" class="nav-link nav-link-next" data-route="${escapeHtmlAttribute(next.route)}"><div class="nav-link-label">Next<span class="material-symbols-outlined">arrow_forward</span></div><div class="nav-link-title">${escapeHtmlAttribute(next.title)}</div></a>`;
   }
 
   return html;
 }
 
-function renderInitialBacklinks(backlinks: Manifest["docs"][number]["backlinks"]): string {
+function renderInitialBacklinks(backlinks: Manifest["docs"][number]["backlinks"], pathBase: string): string {
   if (backlinks.length === 0) {
     return "";
   }
@@ -1236,7 +1253,7 @@ function renderInitialBacklinks(backlinks: Manifest["docs"][number]["backlinks"]
     const prefixHtml = backlink.prefix
       ? `<span class="backlink-prefix">${escapeHtmlAttribute(backlink.prefix)}</span>`
       : "";
-    html += `<li class="backlinks-item"><a href="${escapeHtmlAttribute(backlink.route)}" class="backlink-link" data-route="${escapeHtmlAttribute(backlink.route)}">${prefixHtml}<span class="backlink-text">${escapeHtmlAttribute(backlink.title)}</span></a></li>`;
+    html += `<li class="backlinks-item"><a href="${escapeHtmlAttribute(toPathWithBase(backlink.route, pathBase))}" class="backlink-link" data-route="${escapeHtmlAttribute(backlink.route)}">${prefixHtml}<span class="backlink-text">${escapeHtmlAttribute(backlink.title)}</span></a></li>`;
   }
   html += "</ul>";
   return html;
@@ -1247,6 +1264,7 @@ function buildInitialView(
   docs: DocRecord[],
   contentHtml: string,
   manifestDocById: Map<string, Manifest["docs"][number]>,
+  pathBase: string,
 ): AppShellInitialView {
   const manifestDoc = manifestDocById.get(doc.id);
   return {
@@ -1256,8 +1274,8 @@ function buildInitialView(
     breadcrumbHtml: renderInitialBreadcrumb(doc.route),
     metaHtml: renderInitialMeta(doc),
     contentHtml,
-    backlinksHtml: renderInitialBacklinks(manifestDoc?.backlinks ?? []),
-    navHtml: renderInitialNav(docs, doc.id),
+    backlinksHtml: renderInitialBacklinks(manifestDoc?.backlinks ?? [], pathBase),
+    navHtml: renderInitialNav(docs, doc.id, pathBase),
   };
 }
 
@@ -1270,10 +1288,11 @@ async function writeShellPages(
   contentByDocId: Map<string, string>,
 ): Promise<void> {
   const manifestDocById = new Map(manifest.docs.map((doc) => [doc.id, doc]));
+  const pathBase = options.seo?.pathBase ?? "";
   const indexDoc = pickHomeDoc(docs);
   const indexOutputPath = "index.html";
   const indexInitialView = indexDoc
-    ? buildInitialView(indexDoc, docs, contentByDocId.get(indexDoc.id) ?? "", manifestDocById)
+    ? buildInitialView(indexDoc, docs, contentByDocId.get(indexDoc.id) ?? "", manifestDocById, pathBase)
     : null;
   const shell = renderAppShellHtml(
     buildShellMeta("/", null, options),
@@ -1291,7 +1310,7 @@ async function writeShellPages(
 
   for (const doc of docs) {
     const routeOutputPath = toRouteOutputPath(doc.route);
-    const initialView = buildInitialView(doc, docs, contentByDocId.get(doc.id) ?? "", manifestDocById);
+    const initialView = buildInitialView(doc, docs, contentByDocId.get(doc.id) ?? "", manifestDocById, pathBase);
     await writeOutputIfChanged(
       context,
       routeOutputPath,
@@ -1495,16 +1514,12 @@ export async function buildSite(options: BuildOptions): Promise<BuildResult> {
     outputContext.nextHashes[contentRelPath] = sourceHash;
 
     if (unchanged) {
-      skippedDocs += 1;
       const outputFile = Bun.file(outputPath);
       if (await outputFile.exists()) {
+        skippedDocs += 1;
         contentByDocId.set(doc.id, await outputFile.text());
-      } else {
-        const resolver = createWikiResolver(wikiLookup, doc);
-        const renderResult = await markdownRenderer.render(doc.body, resolver);
-        contentByDocId.set(doc.id, renderResult.html);
+        continue;
       }
-      continue;
     }
 
     const resolver = createWikiResolver(wikiLookup, doc);

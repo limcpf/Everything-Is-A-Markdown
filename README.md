@@ -38,6 +38,8 @@ Common options:
 - `--vault <path>`: Markdown root directory (default `.`)
 - `--out <path>`: Output directory (default `dist`)
 - `--exclude <glob>`: Add exclude pattern (repeatable)
+- `--new-within-days <n>`: NEW badge threshold days (integer `>= 0`, default `7`)
+- `--recent-limit <n>`: Recent folder item limit (integer `>= 1`, default `5`)
 - `--port <n>`: Dev server port (default `3000`)
 
 ## Config File (`blog.config.ts`)
@@ -51,6 +53,7 @@ const config = {
   staticPaths: ["assets", "public/favicon.ico"],
   seo: {
     siteUrl: "https://example.com",
+    pathBase: "/blog",
     defaultOgImage: "/assets/og.png",
   },
 };
@@ -64,6 +67,12 @@ export default config;
 - Supports both folders and files
 - Copies all matched files into the same relative location in `dist`
 - Example: `assets/og.png` in vault becomes `dist/assets/og.png`
+
+`seo.pathBase`:
+
+- Deploy under a subpath (for example `/blog`)
+- Internal routing/content fetch links are generated with this base path
+- Keep empty (`""`) for root deployment
 
 Examples:
 
