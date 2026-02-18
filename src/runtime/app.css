@@ -1098,29 +1098,54 @@ body.mobile-toggle-left .mobile-menu-toggle {
   tab-size: 2;
 }
 
-.viewer-content .code-block pre.mermaid {
+.viewer-content .mermaid-block {
+  margin: 1.5rem 0;
+  padding: 16px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--latte-surface0);
+  background: linear-gradient(180deg, var(--latte-base), var(--latte-mantle));
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
+}
+
+.viewer-content .mermaid-block pre.mermaid {
   margin: 0;
+  padding: 0;
   border: none;
   border-radius: 0;
-  padding: 0;
+  box-shadow: none;
   background: transparent !important;
-  color: inherit;
+  color: var(--latte-subtext1);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.9rem;
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow: visible;
 }
 
-.viewer-content .code-block pre.mermaid svg {
-  width: 100%;
-  height: auto;
+.viewer-content .mermaid-block pre.mermaid[data-mermaid-rendered="true"] {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: inherit;
+  font-family: inherit;
+  white-space: normal;
+}
+
+.viewer-content .mermaid-block pre.mermaid[data-mermaid-rendered="true"] svg {
   display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
 }
 
-.viewer-content .mermaid-render-error {
-  margin: 0;
-  padding: 10px 16px;
+.viewer-content .mermaid-block .mermaid-render-error {
+  margin: 12px 0 0;
+  padding: 10px 12px;
   border: 1px solid rgba(244, 63, 94, 0.35);
-  border-radius: 0 0 8px 8px;
-  border-top: none;
+  border-radius: 8px;
   color: var(--latte-red);
   background: rgba(244, 63, 94, 0.08);
   font-size: 0.84rem;

@@ -167,21 +167,9 @@ function createMarkdownIt<L extends string, T extends string>(
 
     if (lang === MERMAID_LANG) {
       const source = escapeHtmlText(token.content);
-      const filename = fileName ? escapeHtmlAttr(fileName) : MERMAID_LANG;
-      return `<div class="code-block mermaid-block">
-        <div class="code-header">
-          <div class="code-dots">
-            <span class="dot dot-red"></span>
-            <span class="dot dot-yellow"></span>
-            <span class="dot dot-green"></span>
-          </div>
-          <span class="code-filename">${filename}</span>
-          <button class="code-copy" title="Copy code" data-code="${escapeHtmlAttr(token.content)}">
-            <span class="material-symbols-outlined">content_copy</span>
-          </button>
-        </div>
+      return `<figure class="mermaid-block">
         <pre class="mermaid">${source}</pre>
-      </div>`;
+      </figure>`;
     }
 
     let codeHtml: string;

@@ -103,6 +103,46 @@ function showMermaidError(preview, message) {
   preview.parentElement.appendChild(createMermaidLoadError(message));
 }
 
+function parseSvgSize(value) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (!normalized) {
+    return null;
+  }
+  if (normalized.endsWith("%")) {
+    return null;
+  }
+
+  const match = normalized.match(/^(\d+(?:\.\d+)?)/);
+  if (!match) {
+    return null;
+  }
+
+  const parsed = Number(match[1]);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function normalizeRenderedMermaidSvg(block) {
+  if (!(block instanceof HTMLElement)) {
+    return;
+  }
+
+  const svg = block.querySelector("svg");
+  if (!(svg instanceof SVGElement)) {
+    return;
+  }
+
+  const intrinsicWidth = parseSvgSize(svg.getAttribute("width"));
+  svg.style.display = "block";
+  svg.style.width = "100%";
+  svg.style.height = "auto";
+  svg.style.margin = "0 auto";
+  svg.style.maxWidth = intrinsicWidth ? `${intrinsicWidth}px` : "100%";
+}
+
 function parseMermaidNodes() {
   const contentEl = document.getElementById("viewer-content");
   if (!(contentEl instanceof HTMLElement)) {
@@ -231,10 +271,12 @@ async function renderMermaidBlocks(config) {
       try {
         if (typeof mermaid.run === "function") {
           await mermaid.run({ nodes: [block] });
+          normalizeRenderedMermaidSvg(block);
           continue;
         }
         if (typeof mermaid.init === "function") {
           await mermaid.init({ startOnLoad: false }, [block]);
+          normalizeRenderedMermaidSvg(block);
           continue;
         }
         throw new Error("Mermaid 렌더러 API가 존재하지 않습니다.");

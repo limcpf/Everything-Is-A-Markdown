@@ -191,7 +191,10 @@ flowchart LR
 ```
 ````
 
-Rendering happens in the browser on first load and when navigating to another document. If Mermaid is disabled in config or CDN loading fails, the source block is shown as-is and a warning message appears.
+Rendering happens in the browser on first load and when navigating to another document.
+Mermaid fences are rendered inside a dedicated diagram container (`.mermaid-block`) instead of the regular code block UI, so they do not show code headers, filenames, or copy buttons.
+Rendered SVG output is centered and constrained to the container width on both desktop and mobile.
+If Mermaid is disabled in config or CDN loading fails, the source block is shown as-is in the same container and a warning message appears below it.
 
 Configuration options (`blog.config.ts`):
 

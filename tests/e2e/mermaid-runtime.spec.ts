@@ -116,6 +116,11 @@ title: Mermaid Runtime Test
 flowchart LR
   A --> B
 \`\`\`
+
+\`\`\`ts sample.ts
+const greeting = "hello";
+console.log(greeting);
+\`\`\`
 `,
   );
 }
@@ -128,7 +133,7 @@ function writeMockMermaidScript(vaultDir: string): void {
   run: async function ({ nodes }) {
     for (const node of nodes) {
       node.setAttribute("data-mermaid-rendered", "true");
-      node.innerHTML = '<svg data-mermaid-mock="ok" role="img"></svg>';
+      node.innerHTML = '<svg data-mermaid-mock="ok" role="img" width="1600" height="420" viewBox="0 0 1600 420"></svg>';
     }
   },
 };
@@ -172,7 +177,7 @@ function writePartialFailureMermaidScript(vaultDir: string): void {
         throw new Error("Parse error on line 2");
       }
       node.setAttribute("data-mermaid-rendered", "true");
-      node.innerHTML = '<svg data-mermaid-mock="ok" role="img"></svg>';
+      node.innerHTML = '<svg data-mermaid-mock="ok" role="img" width="1600" height="420" viewBox="0 0 1600 420"></svg>';
     }
   },
 };
@@ -232,8 +237,95 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
       try {
         await page.goto(`${server.baseUrl}${TEST_ROUTE}`);
         await expect(page.locator("#viewer-title")).toHaveText("Mermaid Runtime Test");
-        await expect(page.locator("pre.mermaid svg[data-mermaid-mock='ok']")).toBeVisible();
+        const mermaidBlock = page.locator(".mermaid-block");
+        await expect(mermaidBlock).toHaveCount(1);
+        await expect(mermaidBlock.locator(".code-header")).toHaveCount(0);
+        await expect(mermaidBlock.locator(".code-copy")).toHaveCount(0);
+        await expect(mermaidBlock.locator("pre.mermaid svg[data-mermaid-mock='ok']")).toBeVisible();
+        await expect(mermaidBlock.locator("pre.mermaid")).toHaveAttribute("data-mermaid-rendered", "true");
+        await expect(mermaidBlock.locator("pre.mermaid")).toHaveCSS("display", "flex");
+        await expect(mermaidBlock.locator("pre.mermaid")).toHaveCSS("justify-content", "center");
+
+        await expect(page.locator(".code-block .code-header")).toHaveCount(1);
+        await expect(page.locator(".code-block .code-copy")).toHaveCount(1);
+
+        const layout = await mermaidBlock.evaluate((block) => {
+          const svg = block.querySelector("pre.mermaid svg");
+          if (!(svg instanceof SVGElement)) {
+            return null;
+          }
+          const blockRect = block.getBoundingClientRect();
+          const svgRect = svg.getBoundingClientRect();
+          return {
+            blockClientWidth: block.clientWidth,
+            blockScrollWidth: block.scrollWidth,
+            blockWidth: blockRect.width,
+            svgWidth: svgRect.width,
+          };
+        });
+        expect(layout).not.toBeNull();
+        if (!layout) {
+          throw new Error("Mermaid SVG 레이아웃 정보를 읽지 못했습니다.");
+        }
+        expect(layout.blockScrollWidth).toBeLessThanOrEqual(layout.blockClientWidth + 1);
+        expect(layout.svgWidth).toBeLessThanOrEqual(layout.blockWidth + 1);
         await expect(page.locator(".mermaid-render-error")).toHaveCount(0);
+      } finally {
+        await server.close();
+      }
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("모바일 뷰포트에서도 Mermaid 다이어그램이 잘리지 않는다", async ({ page }) => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-mermaid-mobile-"));
+    const { vaultDir, outDir } = createFixture(workDir, {
+      enabled: true,
+      cdnUrl: "/assets/mermaid-mock.js",
+      theme: "forest",
+      mockScript: true,
+    });
+
+    try {
+      const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(build.status, build.output).toBe(0);
+
+      const server = await startStaticServer(outDir);
+      try {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto(`${server.baseUrl}${TEST_ROUTE}`);
+        const mermaidBlock = page.locator(".mermaid-block");
+        await expect(mermaidBlock.locator("pre.mermaid svg[data-mermaid-mock='ok']")).toBeVisible();
+
+        const mobileLayout = await mermaidBlock.evaluate((block) => {
+          const pre = block.querySelector("pre.mermaid");
+          const svg = block.querySelector("pre.mermaid svg");
+          if (!(pre instanceof HTMLElement) || !(svg instanceof SVGElement)) {
+            return null;
+          }
+
+          const preStyle = window.getComputedStyle(pre);
+          const blockRect = block.getBoundingClientRect();
+          const svgRect = svg.getBoundingClientRect();
+          return {
+            blockClientWidth: block.clientWidth,
+            blockScrollWidth: block.scrollWidth,
+            blockWidth: blockRect.width,
+            svgWidth: svgRect.width,
+            preDisplay: preStyle.display,
+            preJustifyContent: preStyle.justifyContent,
+          };
+        });
+
+        expect(mobileLayout).not.toBeNull();
+        if (!mobileLayout) {
+          throw new Error("모바일 Mermaid 레이아웃 정보를 읽지 못했습니다.");
+        }
+        expect(mobileLayout.preDisplay).toBe("flex");
+        expect(mobileLayout.preJustifyContent).toBe("center");
+        expect(mobileLayout.blockScrollWidth).toBeLessThanOrEqual(mobileLayout.blockClientWidth + 1);
+        expect(mobileLayout.svgWidth).toBeLessThanOrEqual(mobileLayout.blockWidth + 1);
       } finally {
         await server.close();
       }
@@ -258,8 +350,12 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
       const server = await startStaticServer(outDir);
       try {
         await page.goto(`${server.baseUrl}${TEST_ROUTE}`);
-        await expect(page.locator("pre.mermaid")).toContainText("flowchart LR");
-        await expect(page.locator(".mermaid-render-error")).toContainText("비활성화");
+        const mermaidBlock = page.locator(".mermaid-block");
+        await expect(mermaidBlock).toHaveCount(1);
+        await expect(mermaidBlock.locator(".code-header")).toHaveCount(0);
+        await expect(mermaidBlock.locator(".code-copy")).toHaveCount(0);
+        await expect(mermaidBlock.locator("pre.mermaid")).toContainText("flowchart LR");
+        await expect(mermaidBlock.locator(".mermaid-render-error")).toContainText("비활성화");
 
         const scriptCount = await page.evaluate(() => document.querySelectorAll("#mermaid-runtime").length);
         expect(scriptCount).toBe(0);
@@ -287,8 +383,10 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
       const server = await startStaticServer(outDir);
       try {
         await page.goto(`${server.baseUrl}${TEST_ROUTE}`);
-        await expect(page.locator("pre.mermaid")).toContainText("flowchart LR");
-        await expect(page.locator(".mermaid-render-error")).toContainText("Mermaid 렌더링 실패");
+        const mermaidBlock = page.locator(".mermaid-block");
+        await expect(mermaidBlock).toHaveCount(1);
+        await expect(mermaidBlock.locator("pre.mermaid")).toContainText("flowchart LR");
+        await expect(mermaidBlock.locator(".mermaid-render-error")).toContainText("Mermaid 렌더링 실패");
       } finally {
         await server.close();
       }
@@ -316,10 +414,10 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
       const server = await startStaticServer(outDir);
       try {
         await page.goto(`${server.baseUrl}${TEST_ROUTE}`);
-        await expect(page.locator("pre.mermaid svg[data-mermaid-mock='ok']")).toHaveCount(1);
-        await expect(page.locator(".mermaid-render-error")).toHaveCount(1);
-        await expect(page.locator(".mermaid-render-error")).toContainText("Parse error on line 2");
-        await expect(page.locator("pre.mermaid").first()).toContainText("BROKEN --> NODE");
+        await expect(page.locator(".mermaid-block pre.mermaid svg[data-mermaid-mock='ok']")).toHaveCount(1);
+        await expect(page.locator(".mermaid-block .mermaid-render-error")).toHaveCount(1);
+        await expect(page.locator(".mermaid-block .mermaid-render-error")).toContainText("Parse error on line 2");
+        await expect(page.locator(".mermaid-block pre.mermaid").first()).toContainText("BROKEN --> NODE");
       } finally {
         await server.close();
       }
