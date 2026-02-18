@@ -15,6 +15,19 @@ const DEFAULT_SITE_TITLE = "File-System Blog";
 const BRANCH_KEY = "fsblog.branch";
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
+const MERMAID_DEFAULT_THEME = "default";
+const MERMAID_SELECTOR = "pre.mermaid";
+const MERMAID_ERROR_CLASS = "mermaid-render-error";
+const MERMAID_THEME_VALIDATION_RE = /^[a-zA-Z][a-zA-Z0-9._-]*$/;
+const MERMAID_URL_VALIDATION_RE = /^(https?:\/\/|\/|\.{1,2}\/)[^\s"'<>]+$/;
+const mermaidRuntime = {
+  initialized: false,
+  loadingPromise: null,
+  scriptElement: null,
+  lastCdnUrl: "",
+  lastTheme: "",
+};
 
 function escapeHtmlAttr(input) {
   return String(input)
@@ -22,6 +35,212 @@ function escapeHtmlAttr(input) {
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+function resolveMermaidConfig(manifest) {
+  const mermaid = manifest?.mermaid;
+  return {
+    enabled: mermaid?.enabled !== false,
+    cdnUrl:
+      typeof mermaid?.cdnUrl === "string" && mermaid.cdnUrl.trim()
+        ? mermaid.cdnUrl.trim()
+        : MERMAID_CDN,
+    theme:
+      typeof mermaid?.theme === "string" &&
+      MERMAID_THEME_VALIDATION_RE.test(mermaid.theme.trim())
+        ? mermaid.theme.trim()
+        : MERMAID_DEFAULT_THEME,
+  };
+}
+
+function toAbsoluteUrl(value) {
+  try {
+    return new URL(value, window.location.href).href;
+  } catch {
+    return value;
+  }
+}
+
+function normalizeMermaidTheme(value) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (!normalized || !MERMAID_THEME_VALIDATION_RE.test(normalized)) {
+    return MERMAID_DEFAULT_THEME;
+  }
+  return normalized;
+}
+
+function normalizeMermaidUrl(value) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (!normalized || !MERMAID_URL_VALIDATION_RE.test(normalized)) {
+    return MERMAID_CDN;
+  }
+  return normalized;
+}
+
+function createMermaidLoadError(message) {
+  const paragraph = document.createElement("p");
+  paragraph.className = MERMAID_ERROR_CLASS;
+  paragraph.textContent = message;
+  return paragraph;
+}
+
+function removeMermaidErrorMessage(container) {
+  if (!(container instanceof HTMLElement)) {
+    return;
+  }
+
+  for (const message of container.querySelectorAll(`.${MERMAID_ERROR_CLASS}`)) {
+    message.remove();
+  }
+}
+
+function showMermaidError(preview, message) {
+  if (!(preview instanceof HTMLElement) || !(preview.parentElement instanceof HTMLElement)) {
+    return;
+  }
+
+  removeMermaidErrorMessage(preview.parentElement);
+  preview.parentElement.appendChild(createMermaidLoadError(message));
+}
+
+function parseMermaidNodes() {
+  const contentEl = document.getElementById("viewer-content");
+  if (!(contentEl instanceof HTMLElement)) {
+    return [];
+  }
+
+  return Array.from(contentEl.querySelectorAll(MERMAID_SELECTOR));
+}
+
+function resetMermaidNodes(nodes) {
+  for (const node of nodes) {
+    node.removeAttribute("data-mermaid-rendered");
+    if (node.parentElement instanceof HTMLElement) {
+      removeMermaidErrorMessage(node.parentElement);
+    }
+  }
+}
+
+async function loadMermaidLibrary(config) {
+  if (!config.enabled) {
+    return null;
+  }
+
+  const normalized = {
+    ...config,
+    theme: normalizeMermaidTheme(config.theme),
+    cdnUrl: normalizeMermaidUrl(config.cdnUrl),
+  };
+
+  if (window.mermaid) {
+    if (!mermaidRuntime.initialized || mermaidRuntime.lastTheme !== normalized.theme) {
+      window.mermaid.initialize({
+        startOnLoad: false,
+        theme: normalized.theme,
+      });
+      mermaidRuntime.initialized = true;
+      mermaidRuntime.lastTheme = normalized.theme;
+    }
+    return window.mermaid;
+  }
+
+  if (mermaidRuntime.loadingPromise) {
+    return mermaidRuntime.loadingPromise;
+  }
+
+  const expectedAbsoluteUrl = toAbsoluteUrl(normalized.cdnUrl);
+  const existingScript = document.getElementById("mermaid-runtime");
+  if (existingScript instanceof HTMLScriptElement) {
+    // 이전 로드가 비정상 종료된 스크립트 잔존을 막기 위해 재시도 전에 정리한다.
+    existingScript.remove();
+    mermaidRuntime.scriptElement = null;
+    mermaidRuntime.initialized = false;
+    mermaidRuntime.lastTheme = "";
+    mermaidRuntime.lastCdnUrl = "";
+  }
+
+  mermaidRuntime.loadingPromise = new Promise((resolve, reject) => {
+    let script = mermaidRuntime.scriptElement;
+    if (!(script instanceof HTMLScriptElement)) {
+      script = document.createElement("script");
+      script.id = "mermaid-runtime";
+      script.src = normalized.cdnUrl;
+      script.async = true;
+      script.crossOrigin = "anonymous";
+      mermaidRuntime.scriptElement = script;
+      mermaidRuntime.lastCdnUrl = expectedAbsoluteUrl;
+    }
+
+    const finalize = (error) => {
+      mermaidRuntime.loadingPromise = null;
+      if (error) {
+        if (mermaidRuntime.scriptElement instanceof HTMLScriptElement) {
+          mermaidRuntime.scriptElement.remove();
+          mermaidRuntime.scriptElement = null;
+        }
+        mermaidRuntime.initialized = false;
+        mermaidRuntime.lastTheme = "";
+        mermaidRuntime.lastCdnUrl = "";
+        reject(error);
+        return;
+      }
+      resolve(window.mermaid ?? null);
+    };
+
+    script.addEventListener("load", () => {
+      if (window.mermaid && (!mermaidRuntime.initialized || mermaidRuntime.lastTheme !== normalized.theme)) {
+        window.mermaid.initialize({
+          startOnLoad: false,
+          theme: normalized.theme,
+        });
+        mermaidRuntime.initialized = true;
+        mermaidRuntime.lastTheme = normalized.theme;
+      }
+      finalize();
+    });
+    script.addEventListener("error", () => {
+      finalize(new Error(`Mermaid 라이브러리 로드 실패: ${normalized.cdnUrl}`));
+    });
+
+    if (!script.isConnected) {
+      document.head.appendChild(script);
+    }
+  });
+
+  return mermaidRuntime.loadingPromise;
+}
+
+async function renderMermaidBlocks(config) {
+  const blocks = parseMermaidNodes();
+  if (blocks.length === 0) {
+    return;
+  }
+
+  resetMermaidNodes(blocks);
+
+  try {
+    const mermaid = await loadMermaidLibrary(config);
+    if (!mermaid) {
+      for (const block of blocks) {
+        showMermaidError(block, "Mermaid 렌더링이 비활성화되어 코드 블록을 그대로 표시합니다.");
+      }
+      return;
+    }
+    if (typeof mermaid.run === "function") {
+      await mermaid.run({ nodes: blocks });
+      return;
+    }
+    if (typeof mermaid.init === "function") {
+      await mermaid.init({ startOnLoad: false }, blocks);
+      return;
+    }
+    throw new Error("Mermaid 렌더러 API가 존재하지 않습니다.");
+  } catch (error) {
+    const message = `Mermaid 렌더링 실패: ${error instanceof Error ? error.message : String(error)}`;
+    for (const block of blocks) {
+      showMermaidError(block, message);
+    }
+  }
 }
 
 function toSafeUrlPath(input) {
@@ -1253,6 +1472,7 @@ async function start() {
     }
     manifest = await manifestRes.json();
   }
+  const mermaidConfig = resolveMermaidConfig(manifest);
   const pathBase = normalizePathBase(manifest.pathBase);
   const siteTitle = resolveSiteTitle(manifest);
   const defaultBranch = normalizeBranch(manifest.defaultBranch) || DEFAULT_BRANCH;
@@ -1445,6 +1665,7 @@ async function start() {
         metaEl.innerHTML = renderMeta(doc);
         updateBacklinks(doc);
         navEl.innerHTML = renderNav(view.docs, view.docIndexById, id, pathBase);
+        await renderMermaidBlocks(mermaidConfig);
         document.title = composeDocumentTitle(doc.title, siteTitle);
         if (viewerEl instanceof HTMLElement) {
           viewerEl.scrollTo(0, 0);
@@ -1470,6 +1691,7 @@ async function start() {
 
       updateBacklinks(doc);
       navEl.innerHTML = renderNav(view.docs, view.docIndexById, id, pathBase);
+      await renderMermaidBlocks(mermaidConfig);
 
       document.title = composeDocumentTitle(doc.title, siteTitle);
       if (viewerEl instanceof HTMLElement) {

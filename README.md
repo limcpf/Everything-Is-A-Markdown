@@ -78,6 +78,13 @@ const config = {
     pathBase: "/blog",
     defaultOgImage: "/assets/og.png",
   },
+  markdown: {
+    mermaid: {
+      enabled: true,
+      cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
+      theme: "default",
+    },
+  },
 };
 
 export default config;
@@ -172,6 +179,37 @@ draft: true
 title: Work In Progress
 ---
 ```
+
+## Mermaid Diagram Support
+
+This project supports Mermaid diagrams written as fenced code blocks:
+
+````
+```mermaid
+flowchart LR
+  A --> B
+```
+````
+
+Rendering happens in the browser on first load and when navigating to another document. If Mermaid is disabled in config or CDN loading fails, the source block is shown as-is and a warning message appears.
+
+Configuration options (`blog.config.ts`):
+
+```ts
+markdown: {
+  mermaid: {
+    enabled: true, // false to keep only source blocks
+    cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js", // CDN URL (http/https or /, ./, ../)
+    theme: "default", // passed to mermaid.initialize({ theme })
+  },
+},
+```
+
+Validation and runtime guardrails:
+
+- Invalid `markdown.mermaid.cdnUrl` values (for example `javascript:`) automatically fall back to the default CDN URL at build time.
+- Invalid `markdown.mermaid.theme` values automatically fall back to `default` at build time.
+- Runtime loader removes stale Mermaid script tags after failures, avoids duplicate injection, and retries cleanly on the next render.
 
 ## bunx (Optional)
 

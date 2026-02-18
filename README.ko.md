@@ -78,6 +78,13 @@ const config = {
     pathBase: "/blog",
     defaultOgImage: "/assets/og.png",
   },
+  markdown: {
+    mermaid: {
+      enabled: true,
+      cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
+      theme: "default",
+    },
+  },
 };
 
 export default config;
@@ -172,6 +179,37 @@ draft: true
 title: Work In Progress
 ---
 ```
+
+## Mermaid 다이어그램 지원
+
+코드 블록의 언어를 `mermaid`로 작성하면 브라우저에서 Mermaid 다이어그램으로 렌더링합니다.
+
+````md
+```mermaid
+flowchart LR
+  A --> B
+```
+````
+
+문서 전환 시에도 해당 블록을 다시 렌더링합니다. 설정에서 Mermaid를 비활성화하면 소스 코드 블록 그대로 표시됩니다.
+
+`blog.config.ts`에서 설정:
+
+```ts
+markdown: {
+  mermaid: {
+    enabled: true, // false면 코드 블록만 표시
+    cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js", // http/https 또는 /, ./, ../ 경로
+    theme: "default", // mermaid.initialize({ theme }) 값
+  },
+},
+```
+
+유효성 검증 및 런타임 가드레일:
+
+- `markdown.mermaid.cdnUrl`에 잘못된 값(예: `javascript:`)이 들어오면 빌드 시 기본 CDN URL로 자동 폴백합니다.
+- `markdown.mermaid.theme`이 유효한 식별자 형식이 아니면 빌드 시 `default`로 자동 폴백합니다.
+- 런타임 로더는 실패 후 남은 Mermaid 스크립트를 정리하고, 중복 삽입을 피하며, 다음 렌더에서 재시도합니다.
 
 ## bunx 실행 (선택)
 

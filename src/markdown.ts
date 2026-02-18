@@ -16,6 +16,7 @@ export interface MarkdownRenderer {
 }
 
 const FENCE_LANG_RE = /^```([\w-+#.]+)/gm;
+const MERMAID_LANG = "mermaid";
 type RenderRule = NonNullable<MarkdownIt["renderer"]["rules"]["fence"]>;
 type RenderRuleArgs = Parameters<RenderRule>;
 type RuleTokens = RenderRuleArgs[0];
@@ -26,6 +27,15 @@ type LinkOpenRule = NonNullable<MarkdownIt["renderer"]["rules"]["link_open"]>;
 
 function escapeMarkdownLabel(input: string): string {
   return input.replace(/[\[\]]/g, "");
+}
+
+function escapeHtmlText(input: string): string {
+  return String(input)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function parseWikiInner(inner: string): { target: string; label?: string } {
@@ -107,6 +117,9 @@ async function loadFenceLanguages<L extends string, T extends string>(
       break;
     }
     if (match[1]) {
+      if (match[1].toLowerCase() === MERMAID_LANG) {
+        continue;
+      }
       langs.add(match[1].toLowerCase());
     }
   }
@@ -151,6 +164,25 @@ function createMarkdownIt<L extends string, T extends string>(
     const parts = info.split(/\s+/);
     const lang = parts[0]?.toLowerCase() || "text";
     const fileName = parts.slice(1).join(" ") || null;
+
+    if (lang === MERMAID_LANG) {
+      const source = escapeHtmlText(token.content);
+      const filename = fileName ? escapeHtmlAttr(fileName) : MERMAID_LANG;
+      return `<div class="code-block mermaid-block">
+        <div class="code-header">
+          <div class="code-dots">
+            <span class="dot dot-red"></span>
+            <span class="dot dot-yellow"></span>
+            <span class="dot dot-green"></span>
+          </div>
+          <span class="code-filename">${filename}</span>
+          <button class="code-copy" title="Copy code" data-code="${escapeHtmlAttr(token.content)}">
+            <span class="material-symbols-outlined">content_copy</span>
+          </button>
+        </div>
+        <pre class="mermaid">${source}</pre>
+      </div>`;
+    }
 
     let codeHtml: string;
     try {

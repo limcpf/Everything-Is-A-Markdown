@@ -1098,6 +1098,35 @@ body.mobile-toggle-left .mobile-menu-toggle {
   tab-size: 2;
 }
 
+.viewer-content .code-block pre.mermaid {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  background: transparent !important;
+  color: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.viewer-content .code-block pre.mermaid svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.viewer-content .mermaid-render-error {
+  margin: 0;
+  padding: 10px 16px;
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  border-radius: 0 0 8px 8px;
+  border-top: none;
+  color: var(--latte-red);
+  background: rgba(244, 63, 94, 0.08);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 .viewer-content pre {
   position: relative;
   margin: 1.5rem 0;

@@ -25,7 +25,52 @@ const DEFAULTS = {
   imagePolicy: "omit-local" as const,
   gfm: true,
   shikiTheme: "github-dark",
+  mermaid: {
+    enabled: true,
+    cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
+    theme: "default",
+  },
 };
+
+const MERMAID_URL_MAX_LENGTH = 1024;
+const MERMAID_THEME_PATTERN = /^[a-zA-Z][a-zA-Z0-9._-]*$/;
+const MERMAID_CDN_URL_PATTERN = /^(https?:\/\/|\/|\.{1,2}\/)[^\s"'><]+$/;
+
+function normalizeMermaidEnabled(value: unknown): boolean {
+  return typeof value === "boolean" ? value : DEFAULTS.mermaid.enabled;
+}
+
+function normalizeMermaidCdnUrl(value: unknown): string {
+  if (typeof value !== "string") {
+    return DEFAULTS.mermaid.cdnUrl;
+  }
+
+  const normalized = value.trim();
+  if (!normalized) {
+    return DEFAULTS.mermaid.cdnUrl;
+  }
+
+  if (normalized.length > MERMAID_URL_MAX_LENGTH || !MERMAID_CDN_URL_PATTERN.test(normalized)) {
+    console.warn(`[config] invalid mermaid.cdnUrl: ${JSON.stringify(value)}. fallback to default ${JSON.stringify(DEFAULTS.mermaid.cdnUrl)}.`);
+    return DEFAULTS.mermaid.cdnUrl;
+  }
+
+  return normalized;
+}
+
+function normalizeMermaidTheme(value: unknown): string {
+  if (typeof value !== "string") {
+    return DEFAULTS.mermaid.theme;
+  }
+
+  const normalized = value.trim();
+  if (!MERMAID_THEME_PATTERN.test(normalized)) {
+    console.warn(`[config] invalid mermaid.theme: ${JSON.stringify(value)}. fallback to default ${JSON.stringify(DEFAULTS.mermaid.theme)}.`);
+    return DEFAULTS.mermaid.theme;
+  }
+
+  return normalized;
+}
 
 export function parseCliArgs(argv: string[]): CliArgs {
   const [first] = argv;
@@ -250,6 +295,11 @@ export function resolveBuildOptions(
     imagePolicy: userConfig.markdown?.images ?? DEFAULTS.imagePolicy,
     gfm: userConfig.markdown?.gfm ?? DEFAULTS.gfm,
     shikiTheme: userConfig.markdown?.highlight?.theme ?? DEFAULTS.shikiTheme,
+    mermaid: {
+      enabled: normalizeMermaidEnabled(userConfig.markdown?.mermaid?.enabled),
+      cdnUrl: normalizeMermaidCdnUrl(userConfig.markdown?.mermaid?.cdnUrl),
+      theme: normalizeMermaidTheme(userConfig.markdown?.mermaid?.theme),
+    },
     seo,
   };
 }

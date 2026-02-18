@@ -868,6 +868,7 @@ function buildManifest(docs: DocRecord[], tree: TreeNode[], options: BuildOption
     siteTitle: resolveSiteTitle(options),
     pathBase: options.seo?.pathBase ?? "",
     defaultBranch: DEFAULT_BRANCH,
+    mermaid: options.mermaid,
     branches,
     ui: {
       newWithinDays: options.newWithinDays,

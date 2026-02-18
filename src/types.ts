@@ -56,6 +56,11 @@ export interface UserConfig {
       engine?: "shiki";
       theme?: string;
     };
+    mermaid?: {
+      enabled?: boolean;
+      cdnUrl?: string;
+      theme?: string;
+    };
   };
   seo?: UserSeoConfig;
 }
@@ -73,6 +78,11 @@ export interface BuildOptions {
   imagePolicy: ImagePolicy;
   gfm: boolean;
   shikiTheme: string;
+  mermaid: {
+    enabled: boolean;
+    cdnUrl: string;
+    theme: string;
+  };
   seo: BuildSeoOptions | null;
 }
 
@@ -130,6 +140,11 @@ export interface Manifest {
   pathBase: string;
   defaultBranch: string;
   branches: string[];
+  mermaid: {
+    enabled: boolean;
+    cdnUrl: string;
+    theme: string;
+  };
   ui: {
     newWithinDays: number;
     recentLimit: number;
