@@ -979,7 +979,7 @@ async function writeOutputIfChanged(
 
   const outputPath = path.join(context.outDir, relOutputPath);
   const unchanged = context.previousHashes[relOutputPath] === outputHash;
-  if (unchanged) {
+  if (unchanged && (await Bun.file(outputPath).exists())) {
     return;
   }
 
