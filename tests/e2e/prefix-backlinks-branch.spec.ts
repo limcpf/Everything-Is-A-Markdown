@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { waitForAppReady } from "./utils/app-ready";
 import { escapeRegExp, getInitialManifest, getNextRouteInDefaultBranch } from "./utils/manifest";
 
 test.describe("prefix 라우팅/백링크/자동 브랜치 전환", () => {
@@ -8,6 +9,7 @@ test.describe("prefix 라우팅/백링크/자동 브랜치 전환", () => {
     });
 
     await page.goto("/BC-VO-00/");
+    await waitForAppReady(page);
     const manifest = await getInitialManifest(page);
     const nextRoute = getNextRouteInDefaultBranch(manifest, "/BC-VO-00/");
 
@@ -16,6 +18,7 @@ test.describe("prefix 라우팅/백링크/자동 브랜치 전환", () => {
     }
 
     await expect(page.locator("#viewer-title")).toHaveText("About");
+    await expect(page.locator("#sidebar-branch-pills .branch-pill").first()).toBeVisible();
     await expect(page.locator(`.branch-pill.is-active[data-branch="${manifest.defaultBranch}"]`)).toBeVisible();
 
     const nextToSetupGuide = page.locator(`#viewer-nav .nav-link[data-route="${nextRoute}"]`);
@@ -31,6 +34,7 @@ test.describe("prefix 라우팅/백링크/자동 브랜치 전환", () => {
     });
 
     await page.goto("/BC-VO-01/");
+    await waitForAppReady(page);
     const manifest = await getInitialManifest(page);
     const nextRoute = getNextRouteInDefaultBranch(manifest, "/BC-VO-00/");
 
@@ -47,6 +51,7 @@ test.describe("prefix 라우팅/백링크/자동 브랜치 전환", () => {
 
     await expect(page).toHaveURL(/\/BC-VO-00\/$/);
     await expect(page.locator("#viewer-title")).toHaveText("About");
+    await expect(page.locator("#sidebar-branch-pills .branch-pill").first()).toBeVisible();
     await expect(page.locator(`.branch-pill.is-active[data-branch="${manifest.defaultBranch}"]`)).toBeVisible();
     await expect(page.locator(`#viewer-nav .nav-link[data-route="${nextRoute}"]`)).toBeVisible();
   });

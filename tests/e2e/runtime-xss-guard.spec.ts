@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { waitForAppReady } from "./utils/app-ready";
 
 test.describe("런타임 렌더링 XSS 가드", () => {
   test("내비게이션/트리에서 악성 title이 HTML로 해석되지 않는다", async ({ page }) => {
@@ -7,6 +8,8 @@ test.describe("런타임 렌더링 XSS 가드", () => {
     });
 
     await page.goto("/BC-VO-02/");
+    await waitForAppReady(page);
+    await expect(page.locator("#tree-root")).toBeVisible();
 
     const navNextTitle = page.locator("#viewer-nav .nav-link-next .nav-link-title");
     await expect(navNextTitle).toContainText("Unsafe");
