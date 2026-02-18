@@ -226,15 +226,23 @@ async function renderMermaidBlocks(config) {
       }
       return;
     }
-    if (typeof mermaid.run === "function") {
-      await mermaid.run({ nodes: blocks });
-      return;
+
+    for (const block of blocks) {
+      try {
+        if (typeof mermaid.run === "function") {
+          await mermaid.run({ nodes: [block] });
+          continue;
+        }
+        if (typeof mermaid.init === "function") {
+          await mermaid.init({ startOnLoad: false }, [block]);
+          continue;
+        }
+        throw new Error("Mermaid 렌더러 API가 존재하지 않습니다.");
+      } catch (error) {
+        const message = `Mermaid 렌더링 실패: ${error instanceof Error ? error.message : String(error)}`;
+        showMermaidError(block, message);
+      }
     }
-    if (typeof mermaid.init === "function") {
-      await mermaid.init({ startOnLoad: false }, blocks);
-      return;
-    }
-    throw new Error("Mermaid 렌더러 API가 존재하지 않습니다.");
   } catch (error) {
     const message = `Mermaid 렌더링 실패: ${error instanceof Error ? error.message : String(error)}`;
     for (const block of blocks) {

@@ -136,6 +136,50 @@ function writeMockMermaidScript(vaultDir: string): void {
   );
 }
 
+function writePartialFailureMermaidPost(vaultDir: string): void {
+  writeText(
+    path.join(vaultDir, "posts", "mermaid-runtime.md"),
+    `---
+publish: true
+prefix: MER-RT-01
+title: Mermaid Runtime Test
+---
+
+# Mermaid Runtime Test
+
+\`\`\`mermaid
+flowchart LR
+  BROKEN --> NODE
+\`\`\`
+
+\`\`\`mermaid
+flowchart LR
+  A --> B
+\`\`\`
+`,
+  );
+}
+
+function writePartialFailureMermaidScript(vaultDir: string): void {
+  writeText(
+    path.join(vaultDir, "assets", "mermaid-partial-fail-mock.js"),
+    `window.mermaid = {
+  initialize: function () {},
+  run: async function ({ nodes }) {
+    for (const node of nodes) {
+      const source = node.textContent || "";
+      if (source.includes("BROKEN")) {
+        throw new Error("Parse error on line 2");
+      }
+      node.setAttribute("data-mermaid-rendered", "true");
+      node.innerHTML = '<svg data-mermaid-mock="ok" role="img"></svg>';
+    }
+  },
+};
+`,
+  );
+}
+
 function writeBlogConfig(workDir: string, options: MermaidFixtureOptions): void {
   writeText(
     path.join(workDir, "blog.config.mjs"),
@@ -245,6 +289,37 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
         await page.goto(`${server.baseUrl}${TEST_ROUTE}`);
         await expect(page.locator("pre.mermaid")).toContainText("flowchart LR");
         await expect(page.locator(".mermaid-render-error")).toContainText("Mermaid 렌더링 실패");
+      } finally {
+        await server.close();
+      }
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("한 블록의 Mermaid 오류가 다른 블록 렌더링을 막지 않는다", async ({ page }) => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-mermaid-partial-failure-"));
+    const { vaultDir, outDir } = createFixture(workDir, {
+      enabled: true,
+      cdnUrl: "/assets/mermaid-partial-fail-mock.js",
+      theme: "default",
+      mockScript: false,
+    });
+
+    writePartialFailureMermaidPost(vaultDir);
+    writePartialFailureMermaidScript(vaultDir);
+
+    try {
+      const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(build.status, build.output).toBe(0);
+
+      const server = await startStaticServer(outDir);
+      try {
+        await page.goto(`${server.baseUrl}${TEST_ROUTE}`);
+        await expect(page.locator("pre.mermaid svg[data-mermaid-mock='ok']")).toHaveCount(1);
+        await expect(page.locator(".mermaid-render-error")).toHaveCount(1);
+        await expect(page.locator(".mermaid-render-error")).toContainText("Parse error on line 2");
+        await expect(page.locator("pre.mermaid").first()).toContainText("BROKEN --> NODE");
       } finally {
         await server.close();
       }
