@@ -20,6 +20,7 @@ interface MermaidFixtureOptions {
 
 const DEFAULT_MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
 const DEFAULT_MERMAID_THEME = "default";
+const CONTENT_VISUAL_MAX_WIDTH = 720;
 const TEST_ROUTE = "/MER-RT-01/";
 
 function runCli(cwd: string, args: string[]): CliResult {
@@ -117,10 +118,26 @@ flowchart LR
   A --> B
 \`\`\`
 
+<img src="/assets/large-diagram.svg" alt="Large Runtime Diagram" />
+
 \`\`\`ts sample.ts
 const greeting = "hello";
 console.log(greeting);
 \`\`\`
+`,
+  );
+}
+
+function writeLargeImageAsset(vaultDir: string): void {
+  writeText(
+    path.join(vaultDir, "assets", "large-diagram.svg"),
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="900" viewBox="0 0 1800 900">
+  <rect width="1800" height="900" fill="#e6e9ef" />
+  <rect x="120" y="120" width="1560" height="660" rx="48" fill="#cba6f7" />
+  <text x="900" y="450" text-anchor="middle" dominant-baseline="middle" font-size="108" font-family="Arial, sans-serif" fill="#1e1e2e">
+    Runtime Visual Width Fixture
+  </text>
+</svg>
 `,
   );
 }
@@ -208,6 +225,7 @@ function createFixture(workDir: string, options: MermaidFixtureOptions): { vault
 
   fs.mkdirSync(path.join(vaultDir, "assets"), { recursive: true });
   writeMermaidPost(vaultDir);
+  writeLargeImageAsset(vaultDir);
   if (options.mockScript) {
     writeMockMermaidScript(vaultDir);
   }
@@ -269,6 +287,28 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
         }
         expect(layout.blockScrollWidth).toBeLessThanOrEqual(layout.blockClientWidth + 1);
         expect(layout.svgWidth).toBeLessThanOrEqual(layout.blockWidth + 1);
+        expect(layout.svgWidth).toBeLessThanOrEqual(Math.min(layout.blockWidth, CONTENT_VISUAL_MAX_WIDTH) + 1);
+
+        const contentImage = page.locator("#viewer-content img").first();
+        await expect(contentImage).toBeVisible();
+        const imageLayout = await contentImage.evaluate((img) => {
+          if (!(img instanceof HTMLImageElement)) {
+            return null;
+          }
+          const content = document.getElementById("viewer-content");
+          const imageRect = img.getBoundingClientRect();
+          const contentRect = content instanceof HTMLElement ? content.getBoundingClientRect() : null;
+          return {
+            imageWidth: imageRect.width,
+            contentWidth: contentRect ? contentRect.width : null,
+          };
+        });
+        expect(imageLayout).not.toBeNull();
+        if (!imageLayout || imageLayout.contentWidth === null) {
+          throw new Error("본문 이미지 레이아웃 정보를 읽지 못했습니다.");
+        }
+        expect(imageLayout.imageWidth).toBeLessThanOrEqual(Math.min(imageLayout.contentWidth, CONTENT_VISUAL_MAX_WIDTH) + 1);
+
         await expect(page.locator(".mermaid-render-error")).toHaveCount(0);
       } finally {
         await server.close();
@@ -326,6 +366,27 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
         expect(mobileLayout.preJustifyContent).toBe("center");
         expect(mobileLayout.blockScrollWidth).toBeLessThanOrEqual(mobileLayout.blockClientWidth + 1);
         expect(mobileLayout.svgWidth).toBeLessThanOrEqual(mobileLayout.blockWidth + 1);
+        expect(mobileLayout.svgWidth).toBeLessThanOrEqual(Math.min(mobileLayout.blockWidth, CONTENT_VISUAL_MAX_WIDTH) + 1);
+
+        const contentImage = page.locator("#viewer-content img").first();
+        await expect(contentImage).toBeVisible();
+        const mobileImageLayout = await contentImage.evaluate((img) => {
+          if (!(img instanceof HTMLImageElement)) {
+            return null;
+          }
+          const content = document.getElementById("viewer-content");
+          const imageRect = img.getBoundingClientRect();
+          const contentRect = content instanceof HTMLElement ? content.getBoundingClientRect() : null;
+          return {
+            imageWidth: imageRect.width,
+            contentWidth: contentRect ? contentRect.width : null,
+          };
+        });
+        expect(mobileImageLayout).not.toBeNull();
+        if (!mobileImageLayout || mobileImageLayout.contentWidth === null) {
+          throw new Error("모바일 본문 이미지 레이아웃 정보를 읽지 못했습니다.");
+        }
+        expect(mobileImageLayout.imageWidth).toBeLessThanOrEqual(mobileImageLayout.contentWidth + 1);
       } finally {
         await server.close();
       }
