@@ -1,42 +1,42 @@
 {
-  "name": "@limcpf/everything-is-a-markdown",
-  "version": "0.6.2",
-  "license": "MIT",
-  "private": false,
-  "type": "module",
-  "bin": {
-    "eiam": "src/cli.ts"
-  },
-  "files": [
-    "src",
-    "README.md",
-    "bun.lock",
-    "tsconfig.json"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "scripts": {
-    "blog": "bun run src/cli.ts",
-    "build": "bun run src/cli.ts build",
-    "dev": "bun run src/cli.ts dev",
-    "clean": "bun run src/cli.ts clean",
-    "lint:md:publish": "bun run scripts/lint-published-markdown.ts",
-    "test:e2e": "playwright test",
-    "test:e2e:focus-trap": "playwright test tests/e2e/mobile-sidebar-focus-trap.spec.ts"
-  },
-  "dependencies": {
-    "chokidar": "^4.0.3",
-    "gray-matter": "^4.0.3",
-    "markdown-it": "^14.1.0",
-    "picomatch": "^4.0.2",
-    "shiki": "^3.2.1"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.58.2",
-    "@types/markdown-it": "^14.1.2",
-    "@types/picomatch": "^4.0.2",
-    "bun-types": "^1.3.8",
-    "markdownlint": "^0.40.0"
-  }
+	"name": "@limcpf/everything-is-a-markdown",
+	"version": "0.6.3",
+	"license": "MIT",
+	"private": false,
+	"type": "module",
+	"bin": {
+		"eiam": "src/cli.ts"
+	},
+	"files": [
+		"src",
+		"README.md",
+		"bun.lock",
+		"tsconfig.json"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"blog": "bun run src/cli.ts",
+		"build": "bun run src/cli.ts build",
+		"dev": "bun run src/cli.ts dev",
+		"clean": "bun run src/cli.ts clean",
+		"lint:md:publish": "bun run scripts/lint-published-markdown.ts",
+		"test:e2e": "playwright test",
+		"test:e2e:focus-trap": "playwright test tests/e2e/mobile-sidebar-focus-trap.spec.ts"
+	},
+	"dependencies": {
+		"chokidar": "^4.0.3",
+		"gray-matter": "^4.0.3",
+		"markdown-it": "^14.1.0",
+		"picomatch": "^4.0.2",
+		"shiki": "^3.2.1"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.58.2",
+		"@types/markdown-it": "^14.1.2",
+		"@types/picomatch": "^4.0.2",
+		"bun-types": "^1.3.8",
+		"markdownlint": "^0.40.0"
+	}
 }
