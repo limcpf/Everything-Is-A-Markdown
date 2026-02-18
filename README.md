@@ -42,6 +42,28 @@ Common options:
 - `--recent-limit <n>`: Recent folder item limit (integer `>= 1`, default `5`)
 - `--port <n>`: Dev server port (default `3000`)
 
+## Markdown Lint (publish only)
+
+You can run Markdown lint only for `publish: true` documents and save results as a JSON report.
+Internally, this command uses the `markdownlint` Node API.
+
+```bash
+bun run lint:md:publish -- --out-dir ./reports
+```
+
+Add strict mode (`--strict`) to return exit code `1` when violations exist.
+
+```bash
+bun run lint:md:publish -- --out-dir ./reports --strict
+```
+
+Options:
+
+- `--out-dir <path>`: Report output directory (required)
+- `--strict`: Return exit code `1` when violations exist
+- `--vault <path>`: Override Markdown root directory (optional)
+- `--exclude <glob>`: Add exclude pattern (repeatable)
+
 ## Config File (`blog.config.ts`)
 
 Use a config file for SEO/UI/static assets.

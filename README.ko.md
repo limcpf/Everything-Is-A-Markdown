@@ -42,6 +42,28 @@ bun run blog [build|dev|clean] [options]
 - `--recent-limit <n>`: Recent 폴더 문서 수 제한 (정수 `>= 1`, 기본 `5`)
 - `--port <n>`: 개발 서버 포트 (기본 `3000`)
 
+## Markdown Lint (publish 전용)
+
+`publish: true` 문서만 대상으로 Markdown lint를 실행하고, 결과를 JSON 파일로 저장할 수 있습니다.
+내부적으로 `markdownlint` Node API를 사용합니다.
+
+```bash
+bun run lint:md:publish -- --out-dir ./reports
+```
+
+엄격 모드(`--strict`)를 추가하면 위반이 있을 때 종료 코드 `1`을 반환합니다.
+
+```bash
+bun run lint:md:publish -- --out-dir ./reports --strict
+```
+
+옵션:
+
+- `--out-dir <path>`: 리포트 출력 디렉터리 (필수)
+- `--strict`: 위반이 있으면 종료 코드 `1`
+- `--vault <path>`: Markdown 루트 디렉터리 재지정 (선택)
+- `--exclude <glob>`: 제외 패턴 추가 (반복 가능)
+
 ## 설정 파일 (`blog.config.ts`)
 
 SEO/UI/정적 파일 설정은 config 파일에서 관리할 수 있습니다.
