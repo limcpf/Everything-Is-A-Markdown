@@ -103,28 +103,6 @@ function showMermaidError(preview, message) {
   preview.parentElement.appendChild(createMermaidLoadError(message));
 }
 
-function parseSvgSize(value) {
-  const normalized = typeof value === "string" ? value.trim() : "";
-  if (!normalized) {
-    return null;
-  }
-  if (normalized.endsWith("%")) {
-    return null;
-  }
-
-  const match = normalized.match(/^(\d+(?:\.\d+)?)/);
-  if (!match) {
-    return null;
-  }
-
-  const parsed = Number(match[1]);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return null;
-  }
-
-  return parsed;
-}
-
 function normalizeRenderedMermaidSvg(block) {
   if (!(block instanceof HTMLElement)) {
     return;
@@ -135,12 +113,11 @@ function normalizeRenderedMermaidSvg(block) {
     return;
   }
 
-  const intrinsicWidth = parseSvgSize(svg.getAttribute("width"));
   svg.style.display = "block";
-  svg.style.width = "100%";
+  svg.style.width = "auto";
   svg.style.height = "auto";
   svg.style.margin = "0 auto";
-  svg.style.maxWidth = intrinsicWidth ? `${intrinsicWidth}px` : "100%";
+  svg.style.maxWidth = "min(100%, var(--content-visual-max-width, 720px))";
 }
 
 function parseMermaidNodes() {

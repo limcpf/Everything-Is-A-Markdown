@@ -66,6 +66,7 @@
   --mobile-toggle-fg: #ffffff;
   --content-heading-accent-soft: rgba(136, 57, 239, 0.32);
   --content-heading-subtle: var(--latte-subtext1);
+  --content-visual-max-width: 720px;
   --desktop-sidebar-default: 420px;
   --desktop-sidebar-min: 320px;
   --desktop-viewer-min: 680px;
@@ -1135,8 +1136,8 @@ body.mobile-toggle-left .mobile-menu-toggle {
 
 .viewer-content .mermaid-block pre.mermaid[data-mermaid-rendered="true"] svg {
   display: block;
-  width: 100%;
-  max-width: 100%;
+  width: auto;
+  max-width: min(100%, var(--content-visual-max-width));
   height: auto;
   margin: 0 auto;
 }
@@ -1200,8 +1201,10 @@ body.mobile-toggle-left .mobile-menu-toggle {
 /* Images */
 .viewer-content img {
   display: block;
-  max-width: 100%;
+  width: auto;
+  max-width: min(100%, var(--content-visual-max-width));
   height: auto;
+  margin: 0 auto;
   border-radius: 8px;
   border: 1px solid var(--latte-surface0);
 }
