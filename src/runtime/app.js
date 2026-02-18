@@ -13,6 +13,7 @@ const DESKTOP_SPLITTER_STEP = 24;
 const DEFAULT_BRANCH = "dev";
 const DEFAULT_SITE_TITLE = "File-System Blog";
 const BRANCH_KEY = "fsblog.branch";
+const APP_READY_STATE_ATTR = "data-app-ready";
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
@@ -1078,7 +1079,16 @@ function renderBacklinks(doc, pathBase) {
   return html;
 }
 
+function setAppReadyState(state) {
+  if (!(document.documentElement instanceof HTMLElement)) {
+    return;
+  }
+  document.documentElement.setAttribute(APP_READY_STATE_ATTR, state);
+}
+
 async function start() {
+  setAppReadyState("booting");
+
   const treeRoot = document.getElementById("tree-root");
   const appRoot = document.querySelector(".app-root");
   const splitter = document.getElementById("app-splitter");
@@ -1899,6 +1909,7 @@ async function start() {
   const initialRoute = currentRoute === "/" ? pickHomeRoute(view) : currentRoute;
   handleLayoutChange();
   await state.navigate(initialRoute, currentRoute === "/" && initialRoute !== "/");
+  setAppReadyState("ready");
 
   window.addEventListener("popstate", async () => {
     await state.navigate(resolveRouteFromLocation(view.routeMap, pathBase), false);
@@ -1906,6 +1917,8 @@ async function start() {
 }
 
 start().catch((error) => {
+  setAppReadyState("error");
+
   const contentEl = document.getElementById("viewer-content");
   if (contentEl) {
     const message = error instanceof Error ? error.message : String(error);
