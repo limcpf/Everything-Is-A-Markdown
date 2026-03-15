@@ -22,6 +22,10 @@ const MERMAID_SELECTOR = "pre.mermaid";
 const MERMAID_ERROR_CLASS = "mermaid-render-error";
 const MERMAID_THEME_VALIDATION_RE = /^[a-zA-Z][a-zA-Z0-9._-]*$/;
 const MERMAID_URL_VALIDATION_RE = /^(https?:\/\/|\/|\.{1,2}\/)[^\s"'<>]+$/;
+const MERMAID_WIDE_RATIO = 2.4;
+const MERMAID_TALL_RATIO = 0.85;
+const MERMAID_BLOCK_WIDE_CLASS = "is-wide";
+const MERMAID_BLOCK_TALL_CLASS = "is-tall";
 const mermaidRuntime = {
   initialized: false,
   loadingPromise: null,
@@ -109,9 +113,14 @@ function normalizeRenderedMermaidSvg(block) {
     return;
   }
 
+  const container = block.parentElement instanceof HTMLElement ? block.parentElement : null;
   const svg = block.querySelector("svg");
   if (!(svg instanceof SVGElement)) {
     return;
+  }
+
+  if (container) {
+    container.classList.remove(MERMAID_BLOCK_WIDE_CLASS, MERMAID_BLOCK_TALL_CLASS);
   }
 
   svg.style.display = "block";
@@ -119,6 +128,32 @@ function normalizeRenderedMermaidSvg(block) {
   svg.style.height = "auto";
   svg.style.margin = "0 auto";
   svg.style.maxWidth = "min(100%, var(--content-visual-max-width, 720px))";
+  svg.style.removeProperty("max-height");
+
+  const viewBox = svg.viewBox?.baseVal;
+  const intrinsicWidth =
+    viewBox && Number.isFinite(viewBox.width) && viewBox.width > 0
+      ? viewBox.width
+      : Number.parseFloat(svg.getAttribute("width") ?? "");
+  const intrinsicHeight =
+    viewBox && Number.isFinite(viewBox.height) && viewBox.height > 0
+      ? viewBox.height
+      : Number.parseFloat(svg.getAttribute("height") ?? "");
+
+  if (!(intrinsicWidth > 0) || !(intrinsicHeight > 0)) {
+    return;
+  }
+
+  const aspectRatio = intrinsicWidth / intrinsicHeight;
+  if (container && aspectRatio >= MERMAID_WIDE_RATIO) {
+    container.classList.add(MERMAID_BLOCK_WIDE_CLASS);
+    svg.style.maxWidth = "min(100%, var(--mermaid-wide-max-width, 640px))";
+  }
+
+  if (container && aspectRatio <= MERMAID_TALL_RATIO) {
+    container.classList.add(MERMAID_BLOCK_TALL_CLASS);
+    svg.style.maxHeight = "min(var(--mermaid-tall-max-height, 560px), 68vh)";
+  }
 }
 
 function parseMermaidNodes() {
@@ -134,6 +169,7 @@ function resetMermaidNodes(nodes) {
   for (const node of nodes) {
     node.removeAttribute("data-mermaid-rendered");
     if (node.parentElement instanceof HTMLElement) {
+      node.parentElement.classList.remove(MERMAID_BLOCK_WIDE_CLASS, MERMAID_BLOCK_TALL_CLASS);
       removeMermaidErrorMessage(node.parentElement);
     }
   }

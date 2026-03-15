@@ -67,6 +67,8 @@
   --content-heading-accent-soft: rgba(136, 57, 239, 0.32);
   --content-heading-subtle: var(--latte-subtext1);
   --content-visual-max-width: 720px;
+  --mermaid-wide-max-width: 640px;
+  --mermaid-tall-max-height: 560px;
   --desktop-sidebar-default: 420px;
   --desktop-sidebar-min: 320px;
   --desktop-viewer-min: 680px;
@@ -1102,6 +1104,9 @@ body.mobile-toggle-left .mobile-menu-toggle {
 .viewer-content .mermaid-block {
   margin: 1.5rem 0;
   padding: 16px 18px;
+  max-width: min(100%, var(--content-visual-max-width));
+  margin-left: auto;
+  margin-right: auto;
   border-radius: 12px;
   border: 1px solid var(--latte-surface0);
   background: linear-gradient(180deg, var(--latte-base), var(--latte-mantle));
@@ -1140,6 +1145,14 @@ body.mobile-toggle-left .mobile-menu-toggle {
   max-width: min(100%, var(--content-visual-max-width));
   height: auto;
   margin: 0 auto;
+}
+
+.viewer-content .mermaid-block.is-wide pre.mermaid[data-mermaid-rendered="true"] svg {
+  max-width: min(100%, var(--mermaid-wide-max-width));
+}
+
+.viewer-content .mermaid-block.is-tall pre.mermaid[data-mermaid-rendered="true"] svg {
+  max-height: min(var(--mermaid-tall-max-height), 68vh);
 }
 
 .viewer-content .mermaid-block .mermaid-render-error {

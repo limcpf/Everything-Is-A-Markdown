@@ -16,11 +16,17 @@ interface MermaidFixtureOptions {
   cdnUrl: string;
   theme: string;
   mockScript: boolean;
+  mockDimensions?: {
+    width: number;
+    height: number;
+  };
 }
 
 const DEFAULT_MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
 const DEFAULT_MERMAID_THEME = "default";
 const CONTENT_VISUAL_MAX_WIDTH = 720;
+const MERMAID_WIDE_MAX_WIDTH = 640;
+const MERMAID_TALL_MAX_HEIGHT = 560;
 const TEST_ROUTE = "/MER-RT-01/";
 
 function runCli(cwd: string, args: string[]): CliResult {
@@ -143,6 +149,13 @@ function writeLargeImageAsset(vaultDir: string): void {
 }
 
 function writeMockMermaidScript(vaultDir: string): void {
+  writeDimensionedMockMermaidScript(vaultDir, { width: 1600, height: 420 });
+}
+
+function writeDimensionedMockMermaidScript(
+  vaultDir: string,
+  dimensions: { width: number; height: number },
+): void {
   writeText(
     path.join(vaultDir, "assets", "mermaid-mock.js"),
     `window.mermaid = {
@@ -150,7 +163,7 @@ function writeMockMermaidScript(vaultDir: string): void {
   run: async function ({ nodes }) {
     for (const node of nodes) {
       node.setAttribute("data-mermaid-rendered", "true");
-      node.innerHTML = '<svg data-mermaid-mock="ok" role="img" width="1600" height="420" viewBox="0 0 1600 420"></svg>';
+      node.innerHTML = '<svg data-mermaid-mock="ok" role="img" width="${dimensions.width}" height="${dimensions.height}" viewBox="0 0 ${dimensions.width} ${dimensions.height}"></svg>';
     }
   },
 };
@@ -227,7 +240,11 @@ function createFixture(workDir: string, options: MermaidFixtureOptions): { vault
   writeMermaidPost(vaultDir);
   writeLargeImageAsset(vaultDir);
   if (options.mockScript) {
-    writeMockMermaidScript(vaultDir);
+    if (options.mockDimensions) {
+      writeDimensionedMockMermaidScript(vaultDir, options.mockDimensions);
+    } else {
+      writeMockMermaidScript(vaultDir);
+    }
   }
   writeBlogConfig(workDir, options);
 
@@ -387,6 +404,99 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
           throw new Error("모바일 본문 이미지 레이아웃 정보를 읽지 못했습니다.");
         }
         expect(mobileImageLayout.imageWidth).toBeLessThanOrEqual(mobileImageLayout.contentWidth + 1);
+      } finally {
+        await server.close();
+      }
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("가로로 매우 긴 Mermaid 다이어그램은 더 보수적인 최대 폭으로 축소된다", async ({ page }) => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-mermaid-wide-"));
+    const { vaultDir, outDir } = createFixture(workDir, {
+      enabled: true,
+      cdnUrl: "/assets/mermaid-mock.js",
+      theme: "forest",
+      mockScript: true,
+      mockDimensions: { width: 2400, height: 260 },
+    });
+
+    try {
+      const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(build.status, build.output).toBe(0);
+
+      const server = await startStaticServer(outDir);
+      try {
+        await page.goto(`${server.baseUrl}${TEST_ROUTE}`);
+        const mermaidBlock = page.locator(".mermaid-block");
+        await expect(mermaidBlock.locator("pre.mermaid svg[data-mermaid-mock='ok']")).toBeVisible();
+        await expect(mermaidBlock).toHaveClass(/is-wide/);
+
+        const layout = await mermaidBlock.evaluate((block) => {
+          const svg = block.querySelector("pre.mermaid svg");
+          if (!(svg instanceof SVGElement)) {
+            return null;
+          }
+          const blockRect = block.getBoundingClientRect();
+          const svgRect = svg.getBoundingClientRect();
+          return {
+            blockWidth: blockRect.width,
+            svgWidth: svgRect.width,
+          };
+        });
+        expect(layout).not.toBeNull();
+        if (!layout) {
+          throw new Error("가로형 Mermaid 레이아웃 정보를 읽지 못했습니다.");
+        }
+
+        expect(layout.svgWidth).toBeLessThanOrEqual(layout.blockWidth + 1);
+        expect(layout.svgWidth).toBeLessThanOrEqual(MERMAID_WIDE_MAX_WIDTH + 1);
+      } finally {
+        await server.close();
+      }
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("세로로 매우 긴 Mermaid 다이어그램은 최대 높이를 제한한다", async ({ page }) => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-mermaid-tall-"));
+    const { vaultDir, outDir } = createFixture(workDir, {
+      enabled: true,
+      cdnUrl: "/assets/mermaid-mock.js",
+      theme: "forest",
+      mockScript: true,
+      mockDimensions: { width: 720, height: 2200 },
+    });
+
+    try {
+      const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(build.status, build.output).toBe(0);
+
+      const server = await startStaticServer(outDir);
+      try {
+        await page.goto(`${server.baseUrl}${TEST_ROUTE}`);
+        const mermaidBlock = page.locator(".mermaid-block");
+        await expect(mermaidBlock.locator("pre.mermaid svg[data-mermaid-mock='ok']")).toBeVisible();
+        await expect(mermaidBlock).toHaveClass(/is-tall/);
+
+        const layout = await mermaidBlock.evaluate((block) => {
+          const svg = block.querySelector("pre.mermaid svg");
+          if (!(svg instanceof SVGElement)) {
+            return null;
+          }
+          const svgRect = svg.getBoundingClientRect();
+          return {
+            svgHeight: svgRect.height,
+          };
+        });
+        expect(layout).not.toBeNull();
+        if (!layout) {
+          throw new Error("세로형 Mermaid 레이아웃 정보를 읽지 못했습니다.");
+        }
+
+        expect(layout.svgHeight).toBeLessThanOrEqual(MERMAID_TALL_MAX_HEIGHT + 1);
       } finally {
         await server.close();
       }
