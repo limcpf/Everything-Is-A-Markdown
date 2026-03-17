@@ -508,6 +508,37 @@ function isDocVisibleInBranch(doc, branch, defaultBranch) {
   return docBranch === branch;
 }
 
+function parseDateToEpochMs(value) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getRecentSortEpochMs(doc) {
+  return parseDateToEpochMs(doc.updatedDate) ?? parseDateToEpochMs(doc.date);
+}
+
+function compareDocsByRecentDateThenRoute(left, right) {
+  const leftEpoch = getRecentSortEpochMs(left);
+  const rightEpoch = getRecentSortEpochMs(right);
+
+  if (leftEpoch != null && rightEpoch != null) {
+    const byDate = rightEpoch - leftEpoch;
+    if (byDate !== 0) {
+      return byDate;
+    }
+  } else if (leftEpoch != null && rightEpoch == null) {
+    return -1;
+  } else if (leftEpoch == null && rightEpoch != null) {
+    return 1;
+  }
+
+  return left.route.localeCompare(right.route, "ko-KR");
+}
+
 function cloneFilteredTree(nodes, visibleDocIds) {
   const filteredNodes = [];
 
@@ -559,7 +590,7 @@ function pickHomeRoute(view) {
   if (view.routeMap["/index/"]) {
     return "/index/";
   }
-  return view.docs[0]?.route || "/";
+  return [...view.docs].sort(compareDocsByRecentDateThenRoute)[0]?.route || "/";
 }
 
 function loadExpandedSet() {

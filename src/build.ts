@@ -737,7 +737,11 @@ function pickHomeDoc(docs: DocRecord[]): DocRecord | null {
   const inDefaultBranch = docs.filter((doc) => doc.branch == null || doc.branch === DEFAULT_BRANCH);
   const candidates = inDefaultBranch.length > 0 ? inDefaultBranch : docs;
   const byRoute = candidates.find((doc) => doc.route === "/index/");
-  return byRoute ?? candidates[0] ?? null;
+  if (byRoute) {
+    return byRoute;
+  }
+
+  return [...candidates].sort(compareByRecentDateThenPath)[0] ?? null;
 }
 
 function buildPinnedMenuFolder(docs: DocRecord[], options: BuildOptions): FolderNode | null {
