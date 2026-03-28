@@ -21,7 +21,7 @@ import {
   toDocId,
 } from "./utils";
 
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 const CACHE_DIR_NAME = ".cache";
 const CACHE_FILE_NAME = "build-index.json";
 const DEFAULT_BRANCH = "dev";
@@ -125,6 +125,7 @@ function normalizeCachedSourceEntry(value: unknown): CachedSourceEntry | null {
   const draft = value.draft === true;
   const title = typeof value.title === "string" && value.title.trim().length > 0 ? value.title.trim() : undefined;
   const prefix = typeof value.prefix === "string" && value.prefix.trim().length > 0 ? value.prefix.trim() : undefined;
+  const categoryPath = normalizeCategoryPath(value.categoryPath);
   const date = typeof value.date === "string" && value.date.trim().length > 0 ? value.date.trim() : undefined;
   const updatedDate =
     typeof value.updatedDate === "string" && value.updatedDate.trim().length > 0 ? value.updatedDate.trim() : undefined;
@@ -147,6 +148,7 @@ function normalizeCachedSourceEntry(value: unknown): CachedSourceEntry | null {
     draft,
     title,
     prefix,
+    categoryPath,
     date,
     updatedDate,
     description,
@@ -276,6 +278,24 @@ function normalizeFrontmatterDate(value: unknown): string | null {
   return null;
 }
 
+function normalizeCategoryPath(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "")
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .join("/");
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 function extractFrontmatterScalar(raw: string, key: string): string | null {
   const frontmatterMatch = raw.match(/^---\s*\r?\n([\s\S]*?)\r?\n---/);
   if (!frontmatterMatch) {
@@ -351,6 +371,15 @@ function pickDocPrefix(frontmatter: Record<string, unknown>, raw: string): strin
   }
 
   return undefined;
+}
+
+function pickDocCategoryPath(frontmatter: Record<string, unknown>, raw: string): string | undefined {
+  const literal = normalizeCategoryPath(extractFrontmatterScalar(raw, "category_path"));
+  if (literal) {
+    return literal;
+  }
+
+  return normalizeCategoryPath(frontmatter.category_path);
 }
 
 function appendRouteSuffix(route: string, suffix: string): string {
@@ -470,6 +499,7 @@ function toCachedSourceEntry(raw: string, parsed: matter.GrayMatterFile<string>)
     draft: parsed.data.draft === true,
     title: typeof parsed.data.title === "string" && parsed.data.title.trim().length > 0 ? parsed.data.title.trim() : undefined,
     prefix: pickDocPrefix(parsed.data as Record<string, unknown>, raw),
+    categoryPath: pickDocCategoryPath(parsed.data as Record<string, unknown>, raw),
     date: pickDocDate(parsed.data as Record<string, unknown>, raw),
     updatedDate: pickDocUpdatedDate(parsed.data as Record<string, unknown>, raw),
     description: typeof parsed.data.description === "string" ? parsed.data.description.trim() || undefined : undefined,
@@ -500,6 +530,7 @@ function toDocRecord(
     fileName,
     title: entry.title ?? makeTitleFromFileName(fileName),
     prefix: entry.prefix,
+    categoryPath: entry.categoryPath ?? "",
     date: entry.date,
     updatedDate: entry.updatedDate,
     description: entry.description,
@@ -564,6 +595,12 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
       console.warn(`[publish] Skipped published doc without prefix: ${relPath}`);
       continue;
     }
+
+    if (!completeEntry.categoryPath) {
+      console.warn(`[publish] Skipped published doc without category_path: ${relPath}`);
+      continue;
+    }
+
     docs.push(toDocRecord(sourcePath, relPath, completeEntry, newThreshold));
   }
 
@@ -755,6 +792,10 @@ function compareByRecentDateThenPath(left: DocRecord, right: DocRecord): number 
   return left.relNoExt.localeCompare(right.relNoExt, "ko-KR");
 }
 
+function matchesPathPrefix(value: string, prefix: string): boolean {
+  return value === prefix || value.startsWith(`${prefix}/`);
+}
+
 function pickHomeDoc(docs: DocRecord[]): DocRecord | null {
   const inDefaultBranch = docs.filter((doc) => doc.branch == null || doc.branch === DEFAULT_BRANCH);
   const candidates = inDefaultBranch.length > 0 ? inDefaultBranch : docs;
@@ -771,17 +812,27 @@ function buildPinnedMenuFolder(docs: DocRecord[], options: BuildOptions): Folder
     return null;
   }
 
+  const categoryPath = options.pinnedMenu.categoryPath;
   const sourceDir = options.pinnedMenu.sourceDir;
-  const sourcePrefix = `${sourceDir}/`;
   const children = docs
-    .filter((doc) => doc.relNoExt.startsWith(sourcePrefix))
+    .filter((doc) => {
+      if (categoryPath) {
+        return matchesPathPrefix(doc.categoryPath, categoryPath);
+      }
+      if (sourceDir) {
+        return matchesPathPrefix(doc.relNoExt, sourceDir);
+      }
+      return false;
+    })
     .sort((left, right) => left.relNoExt.localeCompare(right.relNoExt, "ko-KR"))
     .map((doc) => fileNodeFromDoc(doc));
+
+  const pathKey = categoryPath ? `category/${categoryPath}` : `source/${sourceDir ?? "unknown"}`;
 
   return {
     type: "folder",
     name: options.pinnedMenu.label,
-    path: `__virtual__/pinned/${sourceDir}`,
+    path: `__virtual__/pinned/${pathKey}`,
     virtual: true,
     children,
   };
@@ -799,8 +850,7 @@ function buildTree(docs: DocRecord[], options: BuildOptions): TreeNode[] {
   folderIndex.set("", root);
 
   for (const doc of docs) {
-    const segments = doc.relNoExt.split("/");
-    const folders = segments.slice(0, -1);
+    const folders = doc.categoryPath.split("/");
 
     let currentPath = "";
     let parent = root;
@@ -861,6 +911,7 @@ function buildManifest(docs: DocRecord[], tree: TreeNode[], options: BuildOption
     route: doc.route,
     title: doc.title,
     prefix: doc.prefix,
+    categoryPath: doc.categoryPath,
     date: doc.date,
     updatedDate: doc.updatedDate,
     tags: doc.tags,

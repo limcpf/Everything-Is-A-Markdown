@@ -1,6 +1,7 @@
 ---
 publish: true
 prefix: BC-XSS-01
+category_path: security/testing
 branch: dev
 title: "<img src=x onerror='window.__xss_title=1'>Unsafe"
 description: Regression fixture for runtime XSS escaping.

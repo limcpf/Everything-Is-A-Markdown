@@ -3,11 +3,13 @@
 언어: [English](README.md) | **한국어**
 
 Everything-Is-A-Markdown은 로컬 Markdown 볼트를 정적 웹사이트로 빌드해, 폴더/파일 탐색 구조를 유지한 채 공개할 수 있게 해주는 CLI 도구입니다.
+공개 URL은 `prefix` 기준으로 생성되고, 사이드바 폴더 구조는 실제 파일 경로가 아니라 `category_path` 기준으로 만들어집니다.
 
 ## 이 앱은 무엇을 하나요
 
 - Markdown 볼트에서 정적 문서/블로그 사이트를 생성
 - `publish: true` 문서만 선택적으로 공개
+- 공개 문서는 `prefix`와 `category_path`를 필수로 사용
 - 비공개 노트와 공개 콘텐츠 분리
 
 ## Obsidian 사용자에게 특히 잘 맞습니다
@@ -73,6 +75,10 @@ const config = {
   vaultDir: "./vault",
   outDir: "./dist",
   staticPaths: ["assets", "public/favicon.ico"],
+  pinnedMenu: {
+    label: "NOTICE",
+    categoryPath: "announcements",
+  },
   seo: {
     siteUrl: "https://example.com",
     pathBase: "/blog",
@@ -96,6 +102,12 @@ export default config;
 - 폴더와 파일 모두 지정 가능
 - 지정한 경로의 파일들을 `dist`에 같은 상대 경로로 복사
 - 예: 볼트 `assets/og.png` -> `dist/assets/og.png`
+
+`pinnedMenu`:
+
+- `categoryPath`: 문서 frontmatter `category_path` prefix 기준으로 가상 폴더를 구성
+- `sourceDir`: 기존 파일 경로 prefix 기준
+- 둘 다 있으면 `categoryPath`가 우선
 
 `seo.pathBase`:
 
@@ -123,7 +135,9 @@ bun run build -- --vault ./test-vault --out ./dist
   이 값이 `true`인 문서만 빌드 결과에 포함됩니다.
 - `prefix: "A-01"`  
   문서의 공개 식별자이자 라우트(`/A-01/`) 기준입니다.  
-  `publish: true`인데 `prefix`가 없으면 빌드 경고를 출력하고 문서를 제외합니다.
+- `category_path: "engineering/blog/frontend"`  
+  사이드바 폴더 구조 기준입니다.
+  `publish: true`인데 `prefix`나 `category_path`가 없으면 빌드 경고를 출력하고 문서를 제외합니다.
 
 선택:
 
@@ -150,6 +164,7 @@ bun run build -- --vault ./test-vault --out ./dist
 ---
 publish: true
 prefix: "DEV-01"
+category_path: "guides/setup"
 branch: dev
 title: Setup Guide
 date: "2024-09-15"

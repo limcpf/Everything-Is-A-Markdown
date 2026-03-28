@@ -1,6 +1,7 @@
 ---
 publish: true
 prefix: BC-VO-00
+category_path: pages
 title: About
 description: About this blog
 ---

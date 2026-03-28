@@ -151,19 +151,38 @@ function normalizePinnedMenu(raw: unknown, errorPrefix = "[config]"): PinnedMenu
 
   const menu = raw as Record<string, unknown>;
   const sourceDirRaw = menu.sourceDir;
+  const categoryPathRaw = menu.categoryPath;
   const labelRaw = menu.label;
+  const normalizeMenuPath = (value: unknown, fieldName: "sourceDir" | "categoryPath"): string | undefined => {
+    if (value == null) {
+      return undefined;
+    }
+    if (typeof value !== "string" || value.trim().length === 0) {
+      throw new Error(`${errorPrefix} "pinnedMenu.${fieldName}" must be a non-empty string`);
+    }
 
-  if (typeof sourceDirRaw !== "string" || sourceDirRaw.trim().length === 0) {
-    throw new Error(`${errorPrefix} "pinnedMenu.sourceDir" must be a non-empty string`);
-  }
+    const normalized = value
+      .trim()
+      .replace(/\\/g, "/")
+      .replace(/^\/+/, "")
+      .replace(/\/+$/, "")
+      .split("/")
+      .map((segment) => segment.trim())
+      .filter(Boolean)
+      .join("/");
 
-  const normalizedSourceDir = sourceDirRaw
-    .trim()
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
-  if (!normalizedSourceDir) {
-    throw new Error(`${errorPrefix} "pinnedMenu.sourceDir" must not be root`);
+    if (!normalized) {
+      throw new Error(`${errorPrefix} "pinnedMenu.${fieldName}" must not be root`);
+    }
+
+    return normalized;
+  };
+
+  const normalizedSourceDir = normalizeMenuPath(sourceDirRaw, "sourceDir");
+  const normalizedCategoryPath = normalizeMenuPath(categoryPathRaw, "categoryPath");
+
+  if (!normalizedSourceDir && !normalizedCategoryPath) {
+    throw new Error(`${errorPrefix} "pinnedMenu" must include "sourceDir" or "categoryPath"`);
   }
 
   const label =
@@ -174,6 +193,7 @@ function normalizePinnedMenu(raw: unknown, errorPrefix = "[config]"): PinnedMenu
   return {
     label,
     sourceDir: normalizedSourceDir,
+    categoryPath: normalizedCategoryPath,
   };
 }
 

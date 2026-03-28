@@ -121,6 +121,7 @@ function writeMermaidPost(vaultDir: string): void {
     `---
 publish: true
 prefix: MER-RT-01
+category_path: runtime/mermaid
 title: Mermaid Runtime Test
 ---
 
@@ -157,6 +158,7 @@ function writeFollowupPost(vaultDir: string): void {
     `---
 publish: true
 prefix: MER-RT-02
+category_path: runtime/mermaid
 title: Mermaid Runtime Followup Test
 ---
 
@@ -224,6 +226,7 @@ function writePartialFailureMermaidPost(vaultDir: string): void {
     `---
 publish: true
 prefix: MER-RT-01
+category_path: runtime/mermaid
 title: Mermaid Runtime Test
 ---
 

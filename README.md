@@ -13,7 +13,8 @@ The generated site keeps a two-panel experience:
 
 - Builds a static site from a local Markdown vault
 - Publishes only notes with `publish: true`
-- Requires a `prefix` field for every published note and uses it as the public route
+- Requires `prefix` and `category_path` for every published note
+- Uses `prefix` as the public route and `category_path` as the sidebar folder path
 - Supports Obsidian-style wikilinks such as `[[note]]` and `[[note|label]]`
 - Renders code blocks with Shiki
 - Renders Mermaid blocks in the browser with runtime fallback handling
@@ -25,7 +26,7 @@ The generated site keeps a two-panel experience:
 
 ## Important Behavior
 
-This project currently uses `prefix`-based public routes, not vault-relative path routes.
+This project currently uses `prefix`-based public routes, not vault-relative path routes. Sidebar folders are built from `category_path`, not from the actual file location.
 
 Example:
 
@@ -125,8 +126,9 @@ Only documents with `publish: true` are considered for output.
 
 - `publish: true`
 - `prefix: "BC-VO-02"`
+- `category_path: "engineering/blog/frontend"`
 
-If `publish: true` is set but `prefix` is missing, the note is skipped and a build warning is emitted.
+If `publish: true` is set but `prefix` or `category_path` is missing, the note is skipped and a build warning is emitted.
 
 ### Supported fields
 
@@ -144,6 +146,7 @@ Example:
 ---
 publish: true
 prefix: BC-VO-02
+category_path: engineering/blog/frontend
 branch: dev
 title: Setup Guide
 date: "2024-09-15"
@@ -156,6 +159,8 @@ tags: ["tutorial", "setup"]
 ## Routing Model
 
 Public routes are derived from `prefix`, not from the file path.
+
+Sidebar folders are derived from `category_path`, not from the file path.
 
 Normalization rules:
 
@@ -225,7 +230,7 @@ export default {
   staticPaths: ["assets", "public/favicon.ico"],
   pinnedMenu: {
     label: "NOTICE",
-    sourceDir: "announcements",
+    categoryPath: "announcements",
   },
   ui: {
     newWithinDays: 7,
@@ -269,6 +274,8 @@ export default {
 - `exclude`: extra exclude globs.
 - `staticPaths`: vault-relative files or directories copied into output.
 - `pinnedMenu`: optional virtual folder shown above `Recent`.
+- `pinnedMenu.sourceDir`: optional legacy file-path prefix matcher.
+- `pinnedMenu.categoryPath`: optional category-path prefix matcher for the sidebar virtual folder.
 - `ui.newWithinDays`: threshold for NEW badge.
 - `ui.recentLimit`: number of items in `Recent`.
 - `markdown.wikilinks`: enable or disable wikilink resolution.
@@ -287,14 +294,19 @@ export default {
 
 ### `pinnedMenu`
 
-`pinnedMenu` creates a virtual folder at the top of the sidebar by collecting published docs whose vault-relative path starts with the configured `sourceDir`.
+`pinnedMenu` creates a virtual folder at the top of the sidebar by collecting published docs that match either:
+
+- `categoryPath`: the document `category_path` equals or starts with the configured prefix
+- `sourceDir`: the vault-relative file path starts with the configured prefix
+
+If both are present, `categoryPath` wins.
 
 Example:
 
 ```ts
 pinnedMenu: {
   label: "NOTICE",
-  sourceDir: "announcements",
+  categoryPath: "announcements",
 }
 ```
 
@@ -310,7 +322,7 @@ JSON shape:
 {
   "pinnedMenu": {
     "label": "NOTICE",
-    "sourceDir": "announcements"
+    "categoryPath": "announcements"
   }
 }
 ```

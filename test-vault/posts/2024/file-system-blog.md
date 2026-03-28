@@ -1,6 +1,7 @@
 ---
 publish: true
 prefix: BC-VO-01
+category_path: engineering/blog
 branch: main
 title: Building a File-System Blog
 date: "2024-10-24"

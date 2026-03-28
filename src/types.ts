@@ -32,7 +32,8 @@ export interface BuildSeoOptions {
 
 export interface PinnedMenuOption {
   label: string;
-  sourceDir: string;
+  sourceDir?: string;
+  categoryPath?: string;
 }
 
 export interface UserConfig {
@@ -42,7 +43,8 @@ export interface UserConfig {
   staticPaths?: string[];
   pinnedMenu?: {
     label?: string;
-    sourceDir: string;
+    sourceDir?: string;
+    categoryPath?: string;
   };
   ui?: {
     newWithinDays?: number;
@@ -96,6 +98,7 @@ export interface DocRecord {
   fileName: string;
   title: string;
   prefix?: string;
+  categoryPath: string;
   date?: string;
   updatedDate?: string;
   description?: string;
@@ -156,6 +159,7 @@ export interface Manifest {
     route: string;
     title: string;
     prefix?: string;
+    categoryPath: string;
     contentUrl: string;
     date?: string;
     updatedDate?: string;
@@ -185,6 +189,7 @@ export interface BuildCache {
       draft: boolean;
       title?: string;
       prefix?: string;
+      categoryPath?: string;
       date?: string;
       updatedDate?: string;
       description?: string;

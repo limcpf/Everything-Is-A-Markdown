@@ -1,6 +1,7 @@
 ---
 publish: true
 prefix: BC-VO-02
+category_path: guides/setup
 branch: dev
 title: Setup Guide
 date: "2024-09-15"

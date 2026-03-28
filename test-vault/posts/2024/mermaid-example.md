@@ -1,6 +1,7 @@
 ---
 publish: true
 prefix: BC-VO-99
+category_path: engineering/visuals
 title: Mermaid Example
 
 description: Mermaid 블록 렌더 동작 확인용 문서입니다.
