@@ -25,6 +25,8 @@ interface MermaidFixtureOptions {
 const DEFAULT_MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
 const DEFAULT_MERMAID_THEME = "default";
 const CONTENT_VISUAL_MAX_WIDTH = 720;
+const CONTENT_IMAGE_SQUARE_MAX_WIDTH = 640;
+const CONTENT_IMAGE_PORTRAIT_MAX_WIDTH = 560;
 const MERMAID_WIDE_MAX_WIDTH = 640;
 const MERMAID_TALL_MAX_HEIGHT = 560;
 const TEST_ROUTE = "/MER-RT-01/";
@@ -51,6 +53,11 @@ function toContentType(filePath: string): string {
   if (filePath.endsWith(".json")) return "application/json; charset=utf-8";
   if (filePath.endsWith(".js")) return "text/javascript; charset=utf-8";
   if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
+  if (filePath.endsWith(".svg")) return "image/svg+xml";
+  if (filePath.endsWith(".png")) return "image/png";
+  if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) return "image/jpeg";
+  if (filePath.endsWith(".webp")) return "image/webp";
+  if (filePath.endsWith(".gif")) return "image/gif";
   return "application/octet-stream";
 }
 
@@ -124,12 +131,38 @@ flowchart LR
   A --> B
 \`\`\`
 
-<img src="/assets/large-diagram.svg" alt="Large Runtime Diagram" />
+![Large Runtime Diagram](/assets/large-diagram.svg)
+
+![Tall Runtime Diagram](/assets/tall-diagram.svg)
+
+<figure class="image-frame ratio-4x3 fit-cover">
+  <img src="/assets/large-diagram.svg" alt="Framed Cover Diagram" />
+</figure>
+
+<figure class="image-frame ratio-4x5 fit-contain">
+  <img src="/assets/tall-diagram.svg" alt="Framed Contain Diagram" />
+</figure>
 
 \`\`\`ts sample.ts
 const greeting = "hello";
 console.log(greeting);
 \`\`\`
+`,
+  );
+}
+
+function writeFollowupPost(vaultDir: string): void {
+  writeText(
+    path.join(vaultDir, "posts", "mermaid-runtime-followup.md"),
+    `---
+publish: true
+prefix: MER-RT-02
+title: Mermaid Runtime Followup Test
+---
+
+# Mermaid Runtime Followup Test
+
+![Followup Tall Diagram](/assets/tall-diagram.svg)
 `,
   );
 }
@@ -142,6 +175,20 @@ function writeLargeImageAsset(vaultDir: string): void {
   <rect x="120" y="120" width="1560" height="660" rx="48" fill="#cba6f7" />
   <text x="900" y="450" text-anchor="middle" dominant-baseline="middle" font-size="108" font-family="Arial, sans-serif" fill="#1e1e2e">
     Runtime Visual Width Fixture
+  </text>
+</svg>
+`,
+  );
+}
+
+function writeTallImageAsset(vaultDir: string): void {
+  writeText(
+    path.join(vaultDir, "assets", "tall-diagram.svg"),
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1800" viewBox="0 0 1200 1800">
+  <rect width="1200" height="1800" fill="#eff1f5" />
+  <rect x="120" y="120" width="960" height="1560" rx="48" fill="#89b4fa" />
+  <text x="600" y="900" text-anchor="middle" dominant-baseline="middle" font-size="108" font-family="Arial, sans-serif" fill="#1e1e2e" transform="rotate(-90 600 900)">
+    Portrait Runtime Fixture
   </text>
 </svg>
 `,
@@ -221,6 +268,7 @@ function writeBlogConfig(workDir: string, options: MermaidFixtureOptions): void 
     `export default {
   staticPaths: ["assets"],
   markdown: {
+    images: "keep",
     mermaid: {
       enabled: ${options.enabled},
       cdnUrl: ${JSON.stringify(options.cdnUrl)},
@@ -238,7 +286,9 @@ function createFixture(workDir: string, options: MermaidFixtureOptions): { vault
 
   fs.mkdirSync(path.join(vaultDir, "assets"), { recursive: true });
   writeMermaidPost(vaultDir);
+  writeFollowupPost(vaultDir);
   writeLargeImageAsset(vaultDir);
+  writeTallImageAsset(vaultDir);
   if (options.mockScript) {
     if (options.mockDimensions) {
       writeDimensionedMockMermaidScript(vaultDir, options.mockDimensions);
@@ -273,6 +323,8 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
         await page.goto(`${server.baseUrl}${TEST_ROUTE}`);
         await expect(page.locator("#viewer-title")).toHaveText("Mermaid Runtime Test");
         const mermaidBlock = page.locator(".mermaid-block");
+        const landscapeImage = page.locator('#viewer-content img[alt="Large Runtime Diagram"]');
+        const portraitImage = page.locator('#viewer-content img[alt="Tall Runtime Diagram"]');
         await expect(mermaidBlock).toHaveCount(1);
         await expect(mermaidBlock.locator(".code-header")).toHaveCount(0);
         await expect(mermaidBlock.locator(".code-copy")).toHaveCount(0);
@@ -306,25 +358,32 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
         expect(layout.svgWidth).toBeLessThanOrEqual(layout.blockWidth + 1);
         expect(layout.svgWidth).toBeLessThanOrEqual(Math.min(layout.blockWidth, CONTENT_VISUAL_MAX_WIDTH) + 1);
 
-        const contentImage = page.locator("#viewer-content img").first();
-        await expect(contentImage).toBeVisible();
-        const imageLayout = await contentImage.evaluate((img) => {
-          if (!(img instanceof HTMLImageElement)) {
+        await expect(landscapeImage).toHaveClass(/is-landscape/);
+        await expect(portraitImage).toHaveClass(/is-portrait/);
+        await expect(page.locator("#viewer-content figure.content-image").first()).toHaveClass(/is-landscape/);
+        const imageLayout = await page.locator("#viewer-content").evaluate(() => {
+          const content = document.getElementById("viewer-content");
+          const landscape = document.querySelector('#viewer-content img[alt="Large Runtime Diagram"]');
+          const portrait = document.querySelector('#viewer-content img[alt="Tall Runtime Diagram"]');
+          if (!(landscape instanceof HTMLImageElement) || !(portrait instanceof HTMLImageElement)) {
             return null;
           }
-          const content = document.getElementById("viewer-content");
-          const imageRect = img.getBoundingClientRect();
           const contentRect = content instanceof HTMLElement ? content.getBoundingClientRect() : null;
+          const landscapeRect = landscape.getBoundingClientRect();
+          const portraitRect = portrait.getBoundingClientRect();
           return {
-            imageWidth: imageRect.width,
             contentWidth: contentRect ? contentRect.width : null,
+            landscapeWidth: landscapeRect.width,
+            portraitWidth: portraitRect.width,
           };
         });
         expect(imageLayout).not.toBeNull();
         if (!imageLayout || imageLayout.contentWidth === null) {
           throw new Error("본문 이미지 레이아웃 정보를 읽지 못했습니다.");
         }
-        expect(imageLayout.imageWidth).toBeLessThanOrEqual(Math.min(imageLayout.contentWidth, CONTENT_VISUAL_MAX_WIDTH) + 1);
+        expect(imageLayout.landscapeWidth).toBeLessThanOrEqual(Math.min(imageLayout.contentWidth, CONTENT_VISUAL_MAX_WIDTH) + 1);
+        expect(imageLayout.portraitWidth).toBeLessThanOrEqual(Math.min(imageLayout.contentWidth, CONTENT_IMAGE_PORTRAIT_MAX_WIDTH) + 1);
+        expect(imageLayout.portraitWidth).toBeLessThan(imageLayout.landscapeWidth);
 
         await expect(page.locator(".mermaid-render-error")).toHaveCount(0);
       } finally {
@@ -353,6 +412,7 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
         await page.setViewportSize({ width: 390, height: 844 });
         await page.goto(`${server.baseUrl}${TEST_ROUTE}`);
         const mermaidBlock = page.locator(".mermaid-block");
+        const portraitImage = page.locator('#viewer-content img[alt="Tall Runtime Diagram"]');
         await expect(mermaidBlock.locator("pre.mermaid svg[data-mermaid-mock='ok']")).toBeVisible();
 
         const mobileLayout = await mermaidBlock.evaluate((block) => {
@@ -385,14 +445,15 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
         expect(mobileLayout.svgWidth).toBeLessThanOrEqual(mobileLayout.blockWidth + 1);
         expect(mobileLayout.svgWidth).toBeLessThanOrEqual(Math.min(mobileLayout.blockWidth, CONTENT_VISUAL_MAX_WIDTH) + 1);
 
-        const contentImage = page.locator("#viewer-content img").first();
-        await expect(contentImage).toBeVisible();
-        const mobileImageLayout = await contentImage.evaluate((img) => {
-          if (!(img instanceof HTMLImageElement)) {
+        await expect(portraitImage).toBeVisible();
+        await expect(portraitImage).toHaveClass(/is-portrait/);
+        const mobileImageLayout = await page.locator("#viewer-content").evaluate(() => {
+          const content = document.getElementById("viewer-content");
+          const portrait = document.querySelector('#viewer-content img[alt="Tall Runtime Diagram"]');
+          if (!(portrait instanceof HTMLImageElement)) {
             return null;
           }
-          const content = document.getElementById("viewer-content");
-          const imageRect = img.getBoundingClientRect();
+          const imageRect = portrait.getBoundingClientRect();
           const contentRect = content instanceof HTMLElement ? content.getBoundingClientRect() : null;
           return {
             imageWidth: imageRect.width,
@@ -404,6 +465,76 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
           throw new Error("모바일 본문 이미지 레이아웃 정보를 읽지 못했습니다.");
         }
         expect(mobileImageLayout.imageWidth).toBeLessThanOrEqual(mobileImageLayout.contentWidth + 1);
+      } finally {
+        await server.close();
+      }
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("본문 이미지 프레임 유틸리티와 클라이언트 내비게이션 후처리가 유지된다", async ({ page }) => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-content-image-layout-"));
+    const { vaultDir, outDir } = createFixture(workDir, {
+      enabled: true,
+      cdnUrl: "/assets/mermaid-mock.js",
+      theme: "forest",
+      mockScript: true,
+    });
+
+    try {
+      const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(build.status, build.output).toBe(0);
+
+      const server = await startStaticServer(outDir);
+      try {
+        await page.goto(`${server.baseUrl}${TEST_ROUTE}`);
+
+        const coverFrame = page.locator("#viewer-content figure.image-frame.fit-cover");
+        const containFrame = page.locator("#viewer-content figure.image-frame.fit-contain");
+        await expect(coverFrame).toHaveClass(/ratio-4x3/);
+        await expect(containFrame).toHaveClass(/ratio-4x5/);
+        await expect(containFrame).toHaveClass(/is-portrait/);
+
+        const frameLayout = await page.locator("#viewer-content").evaluate(() => {
+          const cover = document.querySelector('#viewer-content figure.image-frame.fit-cover');
+          const contain = document.querySelector('#viewer-content figure.image-frame.fit-contain');
+          const coverImage = cover?.querySelector('img[alt="Framed Cover Diagram"]');
+          const containImage = contain?.querySelector('img[alt="Framed Contain Diagram"]');
+          if (
+            !(cover instanceof HTMLElement) ||
+            !(contain instanceof HTMLElement) ||
+            !(coverImage instanceof HTMLImageElement) ||
+            !(containImage instanceof HTMLImageElement)
+          ) {
+            return null;
+          }
+
+          const coverStyle = window.getComputedStyle(coverImage);
+          const containStyle = window.getComputedStyle(containImage);
+          return {
+            coverRatio: cover.clientWidth / cover.clientHeight,
+            containRatio: contain.clientWidth / contain.clientHeight,
+            coverObjectFit: coverStyle.objectFit,
+            containObjectFit: containStyle.objectFit,
+          };
+        });
+        expect(frameLayout).not.toBeNull();
+        if (!frameLayout) {
+          throw new Error("프레임 이미지 레이아웃 정보를 읽지 못했습니다.");
+        }
+        expect(frameLayout.coverRatio).toBeGreaterThan(1.28);
+        expect(frameLayout.coverRatio).toBeLessThan(1.38);
+        expect(frameLayout.containRatio).toBeGreaterThan(0.76);
+        expect(frameLayout.containRatio).toBeLessThan(0.84);
+        expect(frameLayout.coverObjectFit).toBe("cover");
+        expect(frameLayout.containObjectFit).toBe("contain");
+
+        const nextLink = page.locator("#viewer-nav .nav-link-next");
+        await expect(nextLink).toBeVisible();
+        await nextLink.click();
+        await expect(page.locator("#viewer-title")).toHaveText("Mermaid Runtime Followup Test");
+        await expect(page.locator('#viewer-content img[alt="Followup Tall Diagram"]')).toHaveClass(/is-portrait/);
       } finally {
         await server.close();
       }

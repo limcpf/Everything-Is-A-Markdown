@@ -180,6 +180,25 @@ title: Work In Progress
 ---
 ```
 
+## 위키링크 지원
+
+위키링크는 아래 순서로 해석됩니다.
+
+1. 볼트 기준 상대 경로(확장자 `.md` 제외)
+2. `prefix`
+3. `title` 정확히 일치
+4. 파일 stem(유일할 때만)
+
+예시:
+
+- `[[posts/2024/setup-guide]]`
+- `[[BC-VO-02]]`
+- `[[Building a File-System Blog]]`
+- `[[setup-guide]]`
+- `[[Building a File-System Blog|먼저 읽기]]`
+
+대상을 찾지 못하거나 같은 `title`을 가진 게시 문서가 여러 개면 링크로 바꾸지 않고 빌드 warning을 출력합니다.
+
 ## Mermaid 다이어그램 지원
 
 코드 블록의 언어를 `mermaid`로 작성하면 브라우저에서 Mermaid 다이어그램으로 렌더링합니다.
@@ -196,6 +215,34 @@ Mermaid fence는 일반 코드 블록 UI와 분리된 전용 컨테이너(`.merm
 렌더된 SVG는 데스크톱/모바일 모두에서 중앙 정렬되며 `min(100%, 720px)` 기준으로 자동 축소됩니다.
 본문 이미지도 동일한 폭 정책을 적용해 글 읽기 흐름을 유지합니다.
 설정에서 Mermaid를 비활성화하거나 CDN 로드가 실패하면, 같은 컨테이너 안에서 소스 코드 텍스트를 유지하고 하단에 경고 메시지를 표시합니다.
+
+## 본문 이미지 레이아웃
+
+본문 이미지는 이제 방향에 따라 표시 폭을 다르게 조정합니다.
+
+- 가로 이미지는 기본 읽기 폭을 유지합니다.
+- 세로 이미지는 더 좁은 최대 폭을 적용해 본문을 과하게 압도하지 않게 합니다.
+- 정사각형에 가까운 이미지는 중간 폭을 사용합니다.
+
+`markdown.images: "keep"`로 로컬 Markdown 이미지를 허용하면, 이미지만 있는 문단은 자동으로 `figure.content-image` 래퍼로 승격됩니다.
+고정 비율이나 자르기 방식을 직접 지정하고 싶을 때는 raw HTML figure 유틸리티를 사용할 수 있습니다.
+
+예시:
+
+```html
+<figure class="image-frame ratio-4x3 fit-cover">
+  <img src="/assets/hero.jpg" alt="Cover-framed image" />
+</figure>
+
+<figure class="image-frame ratio-4x5 fit-contain">
+  <img src="/assets/poster.jpg" alt="Contain-framed image" />
+</figure>
+```
+
+지원 유틸리티:
+
+- 비율: `ratio-16x9`, `ratio-4x3`, `ratio-3x2`, `ratio-4x5`
+- 맞춤 방식: `fit-cover`, `fit-contain`
 
 `blog.config.ts`에서 설정:
 

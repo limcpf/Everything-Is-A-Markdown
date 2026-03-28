@@ -9,6 +9,11 @@ interface CliResult {
   output: string;
 }
 
+function writeText(filePath: string, content: string): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, content, "utf8");
+}
+
 function extractRuntimeAssetPath(html: string, extension: "js" | "css"): string {
   const pattern = new RegExp(`assets\\/app\\.[a-f0-9]+\\.${extension}`);
   const match = html.match(pattern);
@@ -28,6 +33,19 @@ function runCli(cwd: string, args: string[]): CliResult {
     status: result.status,
     output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
   };
+}
+
+function readDocContentHtml(outDir: string, route: string): string {
+  const manifestPath = path.join(outDir, "manifest.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as {
+    docs: Array<{ route: string; contentUrl: string }>;
+  };
+  const doc = manifest.docs.find((entry) => entry.route === route);
+  if (!doc) {
+    throw new Error(`route ${route} 문서를 manifest에서 찾지 못했습니다.`);
+  }
+
+  return fs.readFileSync(path.join(outDir, doc.contentUrl.replace(/^\/+/, "")), "utf8");
 }
 
 test.describe("빌드 회귀 가드", () => {
@@ -123,6 +141,87 @@ test.describe("빌드 회귀 가드", () => {
       ]);
       expect(invalidNewWithinDays.status).not.toBe(0);
       expect(invalidNewWithinDays.output).toContain("--new-within-days");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("frontmatter title로도 위키링크를 해석하고 duplicate title은 경고 후 미해결 처리한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-title-wikilink-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+
+    try {
+      writeText(
+        path.join(vaultDir, "notes", "index.md"),
+        `---
+publish: true
+prefix: DOC-01
+title: Index
+---
+
+- [[Linked By Title]]
+- [[Linked By Title|Alias Title Link]]
+- [[linked-by-title]]
+- [[DOC-02]]
+`,
+      );
+      writeText(
+        path.join(vaultDir, "notes", "alpha.md"),
+        `---
+publish: true
+prefix: DOC-02
+title: Linked By Title
+---
+
+Target document.
+`,
+      );
+      writeText(
+        path.join(vaultDir, "notes", "duplicates.md"),
+        `---
+publish: true
+prefix: DOC-05
+title: Duplicate Link Source
+---
+
+- [[Duplicate Title]]
+`,
+      );
+      writeText(
+        path.join(vaultDir, "notes", "duplicate-one.md"),
+        `---
+publish: true
+prefix: DOC-03
+title: Duplicate Title
+---
+`,
+      );
+      writeText(
+        path.join(vaultDir, "notes", "duplicate-two.md"),
+        `---
+publish: true
+prefix: DOC-04
+title: Duplicate Title
+---
+`,
+      );
+
+      const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(build.status, build.output).toBe(0);
+
+      const indexContent = readDocContentHtml(outDir, "/DOC-01/");
+      expect(indexContent).toContain('<a href="/DOC-02/">Linked By Title</a>');
+      expect(indexContent).toContain('<a href="/DOC-02/">Alias Title Link</a>');
+      expect(indexContent).toContain('<a href="/DOC-02/">Linked By Title</a>');
+      expect(indexContent).toContain("<li>linked-by-title</li>");
+      expect(build.output).toContain("Unresolved wikilink: linked-by-title");
+
+      const duplicateContent = readDocContentHtml(outDir, "/DOC-05/");
+      expect(duplicateContent).toContain("<li>Duplicate Title</li>");
+      expect(duplicateContent).not.toContain('href="/DOC-03/"');
+      expect(duplicateContent).not.toContain('href="/DOC-04/"');
+      expect(build.output).toContain('[wikilink] Duplicate title target "Duplicate Title" in notes/duplicates.md. Candidates: notes/duplicate-one.md, notes/duplicate-two.md');
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

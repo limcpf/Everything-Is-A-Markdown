@@ -24,6 +24,8 @@ type RuleOptions = RenderRuleArgs[2];
 type RuleEnv = RenderRuleArgs[3];
 type RuleSelf = RenderRuleArgs[4];
 type LinkOpenRule = NonNullable<MarkdownIt["renderer"]["rules"]["link_open"]>;
+type ImageRule = NonNullable<MarkdownIt["renderer"]["rules"]["image"]>;
+type ParagraphRule = NonNullable<MarkdownIt["renderer"]["rules"]["paragraph_open"]>;
 
 function escapeMarkdownLabel(input: string): string {
   return input.replace(/[\[\]]/g, "");
@@ -141,6 +143,22 @@ function escapeHtmlAttr(input: string): string {
   return input.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+function isStandaloneImageParagraph(tokens: RuleTokens, idx: number): boolean {
+  const open = tokens[idx];
+  const inline = tokens[idx + 1];
+  const close = tokens[idx + 2];
+
+  if (open?.type !== "paragraph_open" || inline?.type !== "inline" || close?.type !== "paragraph_close") {
+    return false;
+  }
+
+  const children = (inline.children ?? []).filter((child) => {
+    return !(child.type === "text" && !child.content.trim());
+  });
+
+  return children.length === 1 && children[0]?.type === "image";
+}
+
 function createMarkdownIt<L extends string, T extends string>(
   highlighter: HighlighterGeneric<L, T>,
   theme: string,
@@ -200,6 +218,57 @@ function createMarkdownIt<L extends string, T extends string>(
     return `<div class="code-block">${header}${codeHtml}</div>`;
   };
   md.renderer.rules.fence = fenceRule;
+
+  const defaultImage = md.renderer.rules.image as ImageRule | undefined;
+  const imageRule: ImageRule = (
+    tokens: RuleTokens,
+    idx: number,
+    options: RuleOptions,
+    env: RuleEnv,
+    self: RuleSelf,
+  ) => {
+    tokens[idx].attrJoin("class", "content-media");
+    if (defaultImage) {
+      return defaultImage(tokens, idx, options, env, self);
+    }
+    return self.renderToken(tokens, idx, options);
+  };
+  md.renderer.rules.image = imageRule;
+
+  const defaultParagraphOpen = md.renderer.rules.paragraph_open as ParagraphRule | undefined;
+  const defaultParagraphClose = md.renderer.rules.paragraph_close as ParagraphRule | undefined;
+  const paragraphOpenRule: ParagraphRule = (
+    tokens: RuleTokens,
+    idx: number,
+    options: RuleOptions,
+    env: RuleEnv,
+    self: RuleSelf,
+  ) => {
+    if (isStandaloneImageParagraph(tokens, idx)) {
+      return `<figure class="content-image">`;
+    }
+    if (defaultParagraphOpen) {
+      return defaultParagraphOpen(tokens, idx, options, env, self);
+    }
+    return self.renderToken(tokens, idx, options);
+  };
+  const paragraphCloseRule: ParagraphRule = (
+    tokens: RuleTokens,
+    idx: number,
+    options: RuleOptions,
+    env: RuleEnv,
+    self: RuleSelf,
+  ) => {
+    if (isStandaloneImageParagraph(tokens, idx - 2)) {
+      return `</figure>`;
+    }
+    if (defaultParagraphClose) {
+      return defaultParagraphClose(tokens, idx, options, env, self);
+    }
+    return self.renderToken(tokens, idx, options);
+  };
+  md.renderer.rules.paragraph_open = paragraphOpenRule;
+  md.renderer.rules.paragraph_close = paragraphCloseRule;
 
   const defaultLinkOpen = md.renderer.rules.link_open as LinkOpenRule | undefined;
   const linkOpenRule: LinkOpenRule = (

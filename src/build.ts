@@ -44,6 +44,7 @@ interface RuntimeAssets {
 interface WikiLookup {
   byPath: Map<string, DocRecord>;
   byPrefix: Map<string, DocRecord[]>;
+  byTitle: Map<string, DocRecord[]>;
   byStem: Map<string, DocRecord[]>;
 }
 
@@ -573,6 +574,7 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
 function createWikiLookup(docs: DocRecord[]): WikiLookup {
   const byPath = new Map<string, DocRecord>();
   const byPrefix = new Map<string, DocRecord[]>();
+  const byTitle = new Map<string, DocRecord[]>();
   const byStem = new Map<string, DocRecord[]>();
 
   for (const doc of docs) {
@@ -583,13 +585,19 @@ function createWikiLookup(docs: DocRecord[]): WikiLookup {
       prefixBucket.push(doc);
       byPrefix.set(prefixKey, prefixBucket);
     }
+    const titleKey = normalizeWikiTarget(doc.title);
+    if (titleKey) {
+      const titleBucket = byTitle.get(titleKey) ?? [];
+      titleBucket.push(doc);
+      byTitle.set(titleKey, titleBucket);
+    }
     const stem = path.basename(doc.relNoExt).toLowerCase();
     const bucket = byStem.get(stem) ?? [];
     bucket.push(doc);
     byStem.set(stem, bucket);
   }
 
-  return { byPath, byPrefix, byStem };
+  return { byPath, byPrefix, byTitle, byStem };
 }
 
 function resolveWikiTargetDoc(
@@ -616,6 +624,20 @@ function resolveWikiTargetDoc(
   if (warnOnDuplicate && prefixMatches.length > 1) {
     console.warn(
       `[wikilink] Duplicate prefix target "${input}" in ${currentDoc.relPath}. Candidates: ${prefixMatches
+        .map((item) => item.relPath)
+        .join(", ")}`,
+    );
+    return null;
+  }
+
+  const titleMatches = lookup.byTitle.get(normalized) ?? [];
+  if (titleMatches.length === 1) {
+    return titleMatches[0];
+  }
+
+  if (warnOnDuplicate && titleMatches.length > 1) {
+    console.warn(
+      `[wikilink] Duplicate title target "${input}" in ${currentDoc.relPath}. Candidates: ${titleMatches
         .map((item) => item.relPath)
         .join(", ")}`,
     );

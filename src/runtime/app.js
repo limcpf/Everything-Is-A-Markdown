@@ -26,6 +26,12 @@ const MERMAID_WIDE_RATIO = 2.4;
 const MERMAID_TALL_RATIO = 0.85;
 const MERMAID_BLOCK_WIDE_CLASS = "is-wide";
 const MERMAID_BLOCK_TALL_CLASS = "is-tall";
+const CONTENT_IMAGE_LANDSCAPE_CLASS = "is-landscape";
+const CONTENT_IMAGE_PORTRAIT_CLASS = "is-portrait";
+const CONTENT_IMAGE_SQUARE_CLASS = "is-square";
+const CONTENT_IMAGE_LANDSCAPE_THRESHOLD = 1.1;
+const CONTENT_IMAGE_PORTRAIT_THRESHOLD = 0.9;
+const contentImageDimensionCache = new Map();
 const mermaidRuntime = {
   initialized: false,
   loadingPromise: null,
@@ -153,6 +159,170 @@ function normalizeRenderedMermaidSvg(block) {
   if (container && aspectRatio <= MERMAID_TALL_RATIO) {
     container.classList.add(MERMAID_BLOCK_TALL_CLASS);
     svg.style.maxHeight = "min(var(--mermaid-tall-max-height, 560px), 68vh)";
+  }
+}
+
+function clearContentImageClasses(target) {
+  if (!(target instanceof Element)) {
+    return;
+  }
+
+  target.classList.remove(
+    CONTENT_IMAGE_LANDSCAPE_CLASS,
+    CONTENT_IMAGE_PORTRAIT_CLASS,
+    CONTENT_IMAGE_SQUARE_CLASS,
+  );
+}
+
+function syncContentImageClasses(image, className) {
+  if (!(image instanceof HTMLImageElement)) {
+    return;
+  }
+
+  clearContentImageClasses(image);
+  image.classList.add(className);
+
+  const figure = image.closest("figure");
+  if (
+    figure instanceof HTMLElement &&
+    (figure.classList.contains("content-image") || figure.classList.contains("image-frame"))
+  ) {
+    clearContentImageClasses(figure);
+    figure.classList.add(className);
+  }
+}
+
+function readIntrinsicImageDimensions(imageLike) {
+  if (!(imageLike instanceof HTMLImageElement)) {
+    return null;
+  }
+
+  const width =
+    imageLike.naturalWidth > 0
+      ? imageLike.naturalWidth
+      : Number.parseFloat(imageLike.getAttribute("width") ?? "");
+  const height =
+    imageLike.naturalHeight > 0
+      ? imageLike.naturalHeight
+      : Number.parseFloat(imageLike.getAttribute("height") ?? "");
+
+  if (!(width > 0) || !(height > 0)) {
+    return null;
+  }
+
+  return { width, height };
+}
+
+function classifyContentImageByDimensions(image, dimensions) {
+  if (!(image instanceof HTMLImageElement) || !dimensions) {
+    return;
+  }
+
+  const aspectRatio = dimensions.width / dimensions.height;
+  if (aspectRatio >= CONTENT_IMAGE_LANDSCAPE_THRESHOLD) {
+    syncContentImageClasses(image, CONTENT_IMAGE_LANDSCAPE_CLASS);
+    return;
+  }
+
+  if (aspectRatio <= CONTENT_IMAGE_PORTRAIT_THRESHOLD) {
+    syncContentImageClasses(image, CONTENT_IMAGE_PORTRAIT_CLASS);
+    return;
+  }
+
+  syncContentImageClasses(image, CONTENT_IMAGE_SQUARE_CLASS);
+}
+
+function resolveContentImageDimensions(image) {
+  const immediate = readIntrinsicImageDimensions(image);
+  if (immediate) {
+    return Promise.resolve(immediate);
+  }
+
+  const source = image.currentSrc || image.getAttribute("src") || "";
+  if (!source) {
+    return Promise.resolve(null);
+  }
+
+  const cached = contentImageDimensionCache.get(source);
+  if (cached) {
+    return cached;
+  }
+
+  const pending = new Promise((resolve) => {
+    const probe = new Image();
+    const finalize = () => {
+      resolve(readIntrinsicImageDimensions(probe));
+    };
+
+    probe.addEventListener("load", finalize, { once: true });
+    probe.addEventListener("error", () => resolve(null), { once: true });
+    probe.src = source;
+
+    if (probe.complete) {
+      if (typeof probe.decode === "function") {
+        probe.decode().then(finalize).catch(finalize);
+      } else {
+        finalize();
+      }
+    }
+  });
+
+  contentImageDimensionCache.set(source, pending);
+  return pending;
+}
+
+function prepareContentImage(image) {
+  if (!(image instanceof HTMLImageElement) || image.closest(".mermaid-block")) {
+    return;
+  }
+
+  const figure = image.closest("figure");
+  if (
+    figure instanceof HTMLElement &&
+    (figure.classList.contains("content-image") || figure.classList.contains("image-frame"))
+  ) {
+    clearContentImageClasses(figure);
+  }
+  clearContentImageClasses(image);
+
+  const handleLoad = () => {
+    resolveContentImageDimensions(image)
+      .then((dimensions) => {
+        if (!dimensions) {
+          handleError();
+          return;
+        }
+        classifyContentImageByDimensions(image, dimensions);
+      })
+      .catch(() => {
+        handleError();
+      });
+  };
+  const handleError = () => {
+    clearContentImageClasses(image);
+    if (
+      figure instanceof HTMLElement &&
+      (figure.classList.contains("content-image") || figure.classList.contains("image-frame"))
+    ) {
+      clearContentImageClasses(figure);
+    }
+  };
+
+  image.addEventListener("load", handleLoad, { once: true });
+  image.addEventListener("error", handleError, { once: true });
+
+  if (image.complete) {
+    handleLoad();
+  }
+}
+
+function enhanceContentImages(root) {
+  if (!(root instanceof HTMLElement)) {
+    return;
+  }
+
+  for (const image of root.querySelectorAll("img")) {
+    prepareContentImage(image);
   }
 }
 
@@ -1769,6 +1939,7 @@ async function start() {
         metaEl.innerHTML = renderMeta(doc);
         updateBacklinks(doc);
         navEl.innerHTML = renderNav(view.docs, view.docIndexById, id, pathBase);
+        enhanceContentImages(contentEl);
         await renderMermaidBlocks(mermaidConfig);
         document.title = composeDocumentTitle(doc.title, siteTitle);
         if (viewerEl instanceof HTMLElement) {
@@ -1795,6 +1966,7 @@ async function start() {
 
       updateBacklinks(doc);
       navEl.innerHTML = renderNav(view.docs, view.docIndexById, id, pathBase);
+      enhanceContentImages(contentEl);
       await renderMermaidBlocks(mermaidConfig);
 
       document.title = composeDocumentTitle(doc.title, siteTitle);

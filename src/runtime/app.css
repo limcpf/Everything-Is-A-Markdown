@@ -67,6 +67,11 @@
   --content-heading-accent-soft: rgba(136, 57, 239, 0.32);
   --content-heading-subtle: var(--latte-subtext1);
   --content-visual-max-width: 720px;
+  --content-image-landscape-max-width: 720px;
+  --content-image-square-max-width: 640px;
+  --content-image-portrait-max-width: 560px;
+  --content-image-radius: 8px;
+  --content-image-frame-bg: linear-gradient(180deg, var(--latte-base), var(--latte-mantle));
   --mermaid-wide-max-width: 640px;
   --mermaid-tall-max-height: 560px;
   --desktop-sidebar-default: 420px;
@@ -1212,14 +1217,91 @@ body.mobile-toggle-left .mobile-menu-toggle {
 }
 
 /* Images */
+.viewer-content .content-image,
+.viewer-content .image-frame {
+  margin: 1.5rem auto;
+}
+
+.viewer-content .content-image {
+  width: fit-content;
+  max-width: min(100%, var(--content-image-landscape-max-width));
+}
+
+.viewer-content .content-image.is-square {
+  max-width: min(100%, var(--content-image-square-max-width));
+}
+
+.viewer-content .content-image.is-portrait {
+  max-width: min(100%, var(--content-image-portrait-max-width));
+}
+
 .viewer-content img {
   display: block;
   width: auto;
-  max-width: min(100%, var(--content-visual-max-width));
+  max-width: min(100%, var(--content-image-landscape-max-width));
   height: auto;
   margin: 0 auto;
-  border-radius: 8px;
+  border-radius: var(--content-image-radius);
   border: 1px solid var(--latte-surface0);
+  background: var(--content-image-frame-bg);
+}
+
+.viewer-content img.is-square {
+  max-width: min(100%, var(--content-image-square-max-width));
+}
+
+.viewer-content img.is-portrait {
+  max-width: min(100%, var(--content-image-portrait-max-width));
+}
+
+.viewer-content .image-frame {
+  width: min(100%, var(--content-image-landscape-max-width));
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--latte-surface0);
+  background: var(--content-image-frame-bg);
+}
+
+.viewer-content .image-frame.is-square {
+  width: min(100%, var(--content-image-square-max-width));
+}
+
+.viewer-content .image-frame.is-portrait {
+  width: min(100%, var(--content-image-portrait-max-width));
+}
+
+.viewer-content .image-frame > img {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.viewer-content .image-frame.fit-cover > img {
+  object-fit: cover;
+}
+
+.viewer-content .image-frame.fit-contain > img {
+  object-fit: contain;
+}
+
+.viewer-content .image-frame.ratio-16x9 {
+  aspect-ratio: 16 / 9;
+}
+
+.viewer-content .image-frame.ratio-4x3 {
+  aspect-ratio: 4 / 3;
+}
+
+.viewer-content .image-frame.ratio-3x2 {
+  aspect-ratio: 3 / 2;
+}
+
+.viewer-content .image-frame.ratio-4x5 {
+  aspect-ratio: 4 / 5;
 }
 
 /* Horizontal rule */

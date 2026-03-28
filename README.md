@@ -332,16 +332,19 @@ Resolution order:
 
 1. Vault-relative path without `.md`
 2. `prefix`
-3. File stem if unique
+3. `title` (exact match)
+4. File stem if unique
 
 Supported forms:
 
 - `[[posts/2024/setup-guide]]`
 - `[[BC-VO-02]]`
+- `[[Building a File-System Blog]]`
 - `[[setup-guide]]`
+- `[[Building a File-System Blog|Read this first]]`
 - `[[setup-guide|Read this first]]`
 
-If a target cannot be resolved, the Markdown is emitted as plain text and the build prints a warning.
+If a target cannot be resolved, or a `title` matches multiple published docs, the Markdown is emitted as plain text and the build prints a warning.
 
 ### Images
 
@@ -388,6 +391,34 @@ Behavior:
 - centered and width-constrained in the viewer
 - if rendering fails, source remains visible and an error message is shown
 - invalid Mermaid CDN URLs or invalid theme values are normalized back to safe defaults
+
+## Body Image Layout
+
+Body images now use orientation-aware sizing inside the viewer:
+
+- Landscape images keep the standard reading width.
+- Portrait images are automatically constrained to a narrower max width so they do not dominate the article.
+- Near-square images get an intermediate width.
+
+When local Markdown images are enabled with `markdown.images: "keep"`, standalone image paragraphs are promoted into a dedicated `figure.content-image` wrapper automatically.
+Raw HTML remains available for manual framing when you want a fixed ratio or a specific crop mode.
+
+Example frame utilities:
+
+```html
+<figure class="image-frame ratio-4x3 fit-cover">
+  <img src="/assets/hero.jpg" alt="Cover-framed image" />
+</figure>
+
+<figure class="image-frame ratio-4x5 fit-contain">
+  <img src="/assets/poster.jpg" alt="Contain-framed image" />
+</figure>
+```
+
+Supported frame utilities:
+
+- Ratios: `ratio-16x9`, `ratio-4x3`, `ratio-3x2`, `ratio-4x5`
+- Fit modes: `fit-cover`, `fit-contain`
 
 ## UI and Runtime Behavior
 
