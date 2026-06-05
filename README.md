@@ -438,17 +438,21 @@ The generated site includes a client-side runtime that powers navigation without
 
 Main behaviors:
 
-- folder tree with expand/collapse state in `localStorage`
+- searchable sidebar tree rendered by the vanilla `@pierre/trees` runtime
 - `Recent` virtual folder
 - optional pinned virtual folder
+- prefix/title file labels with NEW badges when `ui.newWithinDays` matches
 - branch pills in the sidebar
-- active document syncing with browser history
+- active document selection synced between the tree, browser history, and document viewer
+- model-level tree search with clear and previous/next match controls
 - direct-link loading from route HTML
 - previous/next document navigation
 - backlink list for notes referenced by other notes
 - mobile sidebar with accessibility handling and focus trap behavior
 - theme mode persistence: `light`, `dark`, `system`
 - sidebar width persistence on desktop
+
+The sidebar uses EIAM canonical tree paths for display and keeps public routes sourced from document `prefix` routes. Rename, drag/drop, git status, and multi-select workflows are intentionally not enabled.
 
 Branch behavior:
 
@@ -551,6 +555,7 @@ E2E coverage in `tests/e2e/` includes:
 - build regression around incremental outputs
 - subpath routing with `seo.pathBase`
 - prefix routing, backlinks, and branch switching
+- searchable Trees sidebar behavior
 - Mermaid runtime behavior
 - mobile sidebar accessibility and focus trap behavior
 - runtime XSS/path-base guardrails
@@ -563,6 +568,7 @@ E2E coverage in `tests/e2e/` includes:
 - Local images may be omitted depending on config.
 - Wikilinks resolve only to published docs.
 - Mermaid rendering depends on runtime script loading in the browser.
+- Sidebar rename, drag/drop, git status indicators, and bulk actions are intentionally out of scope.
 - SEO files are not generated unless `seo.siteUrl` is configured.
 
 ## License
