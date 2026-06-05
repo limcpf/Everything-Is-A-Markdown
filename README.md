@@ -441,7 +441,7 @@ Main behaviors:
 - searchable sidebar tree rendered by the vanilla `@pierre/trees` runtime
 - `Recent` virtual folder
 - optional pinned virtual folder
-- prefix/title file labels with NEW badges when `ui.newWithinDays` matches
+- prefix/title file labels without visible `.md` extensions, plus NEW badges when `ui.newWithinDays` matches
 - branch pills in the sidebar
 - active document selection synced between the tree, browser history, and document viewer
 - model-level tree search with clear and previous/next match controls
@@ -452,7 +452,7 @@ Main behaviors:
 - theme mode persistence: `light`, `dark`, `system`
 - sidebar width persistence on desktop
 
-The sidebar uses EIAM canonical tree paths for display and keeps public routes sourced from document `prefix` routes. Rename, drag/drop, git status, and multi-select workflows are intentionally not enabled.
+The sidebar uses EIAM canonical tree paths for display and keeps public routes sourced from document `prefix` routes. Visible file labels omit `.md`, but route and docId lookup behavior remains unchanged. Rename, drag/drop, git status, and multi-select workflows are intentionally not enabled.
 
 Branch behavior:
 
@@ -556,6 +556,7 @@ E2E coverage in `tests/e2e/` includes:
 - subpath routing with `seo.pathBase`
 - prefix routing, backlinks, and branch switching
 - searchable Trees sidebar behavior
+- responsive sidebar layout bounds with long Korean/English labels
 - Mermaid runtime behavior
 - mobile sidebar accessibility and focus trap behavior
 - runtime XSS/path-base guardrails
