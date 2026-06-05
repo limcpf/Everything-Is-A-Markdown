@@ -44,6 +44,17 @@ const TREE_UNSAFE_CSS = `
   font-weight: 800;
   line-height: 1;
 }
+
+[data-type='item'][data-item-type='file'] [data-item-section='content'] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+[data-type='item'][data-item-type='file'] [data-item-section='decoration'] {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  min-width: max-content;
+}
 `;
 const MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
 const MERMAID_DEFAULT_THEME = "default";
