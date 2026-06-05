@@ -1163,9 +1163,31 @@ function buildAppShellAssetsForOutput(outputPath: string, runtimeAssets: Runtime
   };
 }
 
+async function bundleRuntimeJs(entrypoint: string): Promise<string> {
+  const result = await Bun.build({
+    entrypoints: [entrypoint],
+    target: "browser",
+    format: "esm",
+    splitting: false,
+    sourcemap: "none",
+  });
+
+  if (!result.success) {
+    const details = result.logs.map((log) => String(log)).filter(Boolean).join("\n");
+    throw new Error(`Failed to bundle runtime app.js${details ? `:\n${details}` : ""}`);
+  }
+
+  const output = result.outputs.find((artifact) => artifact.path.endsWith(".js")) ?? result.outputs[0];
+  if (!output) {
+    throw new Error("Failed to bundle runtime app.js: no JavaScript output was produced");
+  }
+
+  return output.text();
+}
+
 async function writeRuntimeAssets(context: OutputWriteContext): Promise<RuntimeAssets> {
   const runtimeDir = path.join(import.meta.dir, "runtime");
-  const runtimeJs = await Bun.file(path.join(runtimeDir, "app.js")).text();
+  const runtimeJs = await bundleRuntimeJs(path.join(runtimeDir, "app.js"));
   const runtimeCss = await Bun.file(path.join(runtimeDir, "app.css")).text();
 
   const jsRelPath = `assets/app.${makeHash(runtimeJs).slice(0, 12)}.js`;
