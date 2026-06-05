@@ -115,7 +115,16 @@ test.describe("pathBase 정식 지원", () => {
       "utf8",
     );
 
-    const build = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
+    const build = runCli(workDir, [
+      cliPath,
+      "build",
+      "--vault",
+      vaultPath,
+      "--out",
+      outDir,
+      "--new-within-days",
+      "9999",
+    ]);
     expect(build.status, build.output).toBe(0);
 
     const server = await startStaticServer(outDir, pathBase);
@@ -123,8 +132,14 @@ test.describe("pathBase 정식 지원", () => {
       await page.goto(`${server.baseUrl}/blog/BC-VO-00/`);
       await expect(page.locator("#viewer-title")).toHaveText("About");
 
-      const setupRow = page.locator('.tree-file-row[data-route="/BC-VO-02/"]').first();
-      await expect(setupRow).toHaveAttribute("href", "/blog/BC-VO-02/");
+      const setupRow = page
+        .locator('#tree-root [data-type="item"][data-item-type="file"][data-item-path="Recent/BC-VO-02 Setup Guide.md"]')
+        .first();
+      await expect(setupRow).toBeVisible();
+      await expect(setupRow).toContainText("NEW");
+      await setupRow.click({ button: "right" });
+      await expect(page.locator("#tree-root .tree-context-link").first()).toHaveAttribute("href", "/blog/BC-VO-02/");
+      await page.keyboard.press("Escape");
       await setupRow.click();
 
       await expect(page).toHaveURL(/\/blog\/BC-VO-02\/$/);

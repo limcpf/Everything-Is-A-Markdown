@@ -10,12 +10,22 @@ test.describe("런타임 렌더링 XSS 가드", () => {
     await page.goto("/BC-VO-02/");
     await waitForAppReady(page);
     await expect(page.locator("#tree-root")).toBeVisible();
+    await expect(
+      page
+        .locator(
+          '#tree-root [data-type="item"][data-item-type="file"][data-item-selected][data-item-path="Recent/BC-VO-02 Setup Guide.md"]',
+        )
+        .first(),
+    ).toBeVisible();
 
     const navNextTitle = page.locator("#viewer-nav .nav-link-next .nav-link-title");
     await expect(navNextTitle).toContainText("Unsafe");
     await expect(navNextTitle.locator("img")).toHaveCount(0);
 
-    const treeXssRow = page.locator('.tree-file-row[data-route="/BC-XSS-01/"]').first();
+    const treeXssRow = page
+      .locator('#tree-root [data-type="item"][data-item-type="file"]')
+      .filter({ hasText: "Unsafe" })
+      .first();
     await expect(treeXssRow).toBeVisible();
     await expect(treeXssRow.locator("img")).toHaveCount(0);
 
