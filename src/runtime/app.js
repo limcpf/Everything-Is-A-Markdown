@@ -28,6 +28,11 @@ const TREE_UNSAFE_CSS = `
   font-weight: var(--trees-font-weight-semibold);
 }
 
+/* EIAM owns the visible search controls while Trees keeps search projection enabled. */
+[data-file-tree-search-container] {
+  display: none;
+}
+
 [data-item-section='decoration'] > span {
   flex: 0 0 auto;
   width: auto;
@@ -1759,6 +1764,8 @@ async function start() {
         preparedInput,
         renderRowDecoration: renderTreeRowDecoration,
         sort: compareTreesByBranchOrder,
+        search: true,
+        searchBlurBehavior: "retain",
         stickyFolders: true,
         unsafeCSS: TREE_UNSAFE_CSS,
       });
