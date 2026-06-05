@@ -3,19 +3,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
 import matter from "gray-matter";
+import { lint as lintMarkdown } from "markdownlint/promise";
 import { loadUserConfig, resolveBuildOptions, type CliArgs } from "../src/config";
 import { buildExcluder, relativePosix } from "../src/utils";
 
 const require = createRequire(import.meta.url);
-const markdownlint = require("markdownlint") as {
-  promises: {
-    markdownlint(options: {
-      strings: Record<string, string>;
-      config: Record<string, unknown>;
-      frontMatter?: RegExp;
-    }): Promise<Record<string, Array<Record<string, unknown>>>>;
-  };
-};
 const lintConfigModule = require("../.markdownlint.cjs") as { config: Record<string, unknown> };
 
 const REPORT_FILE_NAME = "mdlint-report.json";
@@ -310,11 +302,11 @@ async function main(): Promise<void> {
 
   const lintResults =
     scanResult.docs.length > 0
-      ? await markdownlint.promises.markdownlint({
+      ? ((await lintMarkdown({
           strings: lintStrings,
           config: lintConfigModule.config,
           frontMatter: FRONTMATTER_RE,
-        })
+        })) as Record<string, Array<Record<string, unknown>>>)
       : {};
 
   const markdownlintIssues = mapMarkdownlintIssues(lintResults);

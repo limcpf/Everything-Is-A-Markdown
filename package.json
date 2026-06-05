@@ -26,6 +26,7 @@
 		"test:e2e:focus-trap": "playwright test tests/e2e/mobile-sidebar-focus-trap.spec.ts"
 	},
 	"dependencies": {
+		"@pierre/trees": "1.0.0-beta.4",
 		"chokidar": "^4.0.3",
 		"gray-matter": "^4.0.3",
 		"markdown-it": "^14.1.0",

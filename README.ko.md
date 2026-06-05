@@ -277,6 +277,23 @@ markdown: {
 - `markdown.mermaid.theme`이 유효한 식별자 형식이 아니면 빌드 시 `default`로 자동 폴백합니다.
 - 런타임 로더는 실패 후 남은 Mermaid 스크립트를 정리하고, 중복 삽입을 피하며, 다음 렌더에서 재시도합니다.
 
+## UI와 런타임 동작
+
+빌드된 사이트는 별도 앱 프레임워크 없이 클라이언트 런타임으로 문서 탐색을 처리합니다.
+
+주요 동작:
+
+- 사이드바 파일 트리는 vanilla `@pierre/trees` 런타임으로 렌더링됩니다.
+- `Recent` 가상 폴더와 선택적 pinned 가상 폴더를 유지합니다.
+- 파일 행은 `prefix`와 제목 기준으로 표시되고, `ui.newWithinDays` 기준에 맞으면 NEW 배지를 보여줍니다.
+- 브랜치 pill로 문서 목록을 전환합니다.
+- 활성 문서 선택 상태는 트리, 브라우저 히스토리, 문서 뷰어 사이에서 동기화됩니다.
+- 트리 검색 입력은 Trees 검색 모델에 연결되며, clear와 이전/다음 결과 이동을 지원합니다.
+- 직접 URL 진입, 이전/다음 문서 링크, 백링크, 모바일 사이드바 포커스 트랩을 지원합니다.
+- 테마 모드(`light`, `dark`, `system`)와 데스크톱 사이드바 폭을 저장합니다.
+
+사이드바는 표시용 EIAM canonical tree path를 사용하지만, 공개 라우트와 문서 식별자는 계속 `prefix` 기반 route/docId를 기준으로 합니다. rename, drag/drop, git status 표시, multi-select bulk action은 의도적으로 활성화하지 않습니다.
+
 ## bunx 실행 (선택)
 
 ```bash

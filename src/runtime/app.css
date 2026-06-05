@@ -434,140 +434,158 @@ a:hover {
   box-shadow: 0 1px 0 var(--elevated-inset-shadow) inset, 0 2px 6px rgba(136, 57, 239, 0.22);
 }
 
-/* Tree */
-.tree-root {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px 12px 24px;
+/* Tree search */
+.sidebar-search {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--latte-surface0);
+  background: color-mix(in srgb, var(--latte-mantle) 92%, var(--latte-base));
 }
 
-.tree-folder {
-  margin-bottom: 2px;
-  --tree-depth: 0;
+.sidebar-search-box {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 6px 0 11px;
+  border: 1px solid var(--latte-surface1);
+  border-radius: 8px;
+  background: var(--elevated-surface);
+  box-shadow: 0 1px 0 var(--elevated-inset-shadow) inset;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
-.tree-children {
-  --tree-indent-step: clamp(6px, calc(12px - (var(--tree-depth, 0) * 1px)), 12px);
-  margin-left: var(--tree-indent-step);
-  padding-left: calc(var(--tree-indent-step) + 1px);
-  border-left: 1px solid var(--latte-surface0);
+.sidebar-search-box:focus-within {
+  border-color: color-mix(in srgb, var(--latte-blue) 56%, var(--latte-surface1));
+  background: var(--elevated-surface-hover);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--latte-blue) 18%, transparent);
 }
 
-.tree-row {
+.sidebar-search-icon {
+  color: var(--latte-overlay0);
+  font-size: 19px;
+}
+
+.tree-search-input {
+  min-width: 0;
   width: 100%;
   border: 0;
+  outline: 0;
   background: transparent;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: flex-start;
-  text-align: left;
-  min-height: 38px;
-  padding: 6px 12px;
-  text-decoration: none;
-  color: var(--latte-subtext1);
-  cursor: pointer;
-  font-size: 0.9rem;
-  border-radius: 6px;
-  transition: all 0.15s ease;
+  color: var(--latte-text);
+  font: inherit;
+  font-size: 0.88rem;
 }
 
-.tree-row:hover {
-  background: rgba(204, 208, 218, 0.5);
+.tree-search-input::placeholder {
+  color: var(--latte-overlay0);
+}
+
+.tree-search-input::-webkit-search-decoration,
+.tree-search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.tree-search-clear,
+.tree-search-step {
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--latte-overlay0);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.tree-search-clear[hidden] {
+  display: none;
+}
+
+.tree-search-clear:hover,
+.tree-search-step:hover:not(:disabled) {
+  border-color: var(--latte-surface1);
+  background: var(--elevated-surface-hover);
   color: var(--latte-text);
 }
 
-.tree-row:focus-visible {
+.tree-search-clear:focus-visible,
+.tree-search-step:focus-visible {
   outline: 2px solid var(--latte-blue);
   outline-offset: 1px;
 }
 
-.tree-folder-row {
-  font-weight: 500;
+.tree-search-step:disabled {
+  cursor: default;
+  opacity: 0.42;
 }
 
-.tree-folder-row .material-symbols-outlined {
-  color: var(--latte-blue);
+.tree-search-clear .material-symbols-outlined,
+.tree-search-step .material-symbols-outlined {
+  font-size: 18px;
 }
 
-.tree-folder.virtual > .tree-folder-row .material-symbols-outlined {
-  color: var(--latte-teal);
+.sidebar-search-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+  margin-top: 7px;
 }
 
-.tree-file-row .material-symbols-outlined {
+.tree-search-count {
+  min-width: 0;
   color: var(--latte-overlay0);
+  font-size: 0.75rem;
+  font-weight: 650;
 }
 
-.tree-prefix {
-  flex: 0 0 auto;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--latte-subtext1);
+.tree-search-nav {
+  display: inline-flex;
+  gap: 4px;
 }
 
-.tree-label {
+/* Tree */
+.tree-root {
   flex: 1;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding: 12px 12px 24px;
 }
 
-.tree-label-tooltip {
-  position: fixed;
-  z-index: 140;
-  pointer-events: none;
-  max-width: min(440px, calc(100vw - 24px));
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: var(--tooltip-bg);
-  color: var(--tooltip-text);
-  font-size: 0.75rem;
-  line-height: 1.4;
-  box-shadow: 0 10px 24px rgba(76, 79, 105, 0.24);
-}
-
-.tree-label-tooltip[hidden] {
-  display: none;
-}
-
-/* Active file state */
-.tree-file-row.is-active {
-  background: var(--active-surface-bg);
-  color: var(--latte-text);
-  font-weight: 500;
-  border: 1px solid var(--latte-surface0);
-  border-left: 4px solid var(--latte-mauve);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  padding-left: 8px;
-}
-
-.tree-file-row.is-active .material-symbols-outlined {
-  color: var(--latte-mauve);
-}
-
-/* NEW badge */
-.badge-new {
-  margin-left: auto;
-  font-size: 0.6rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  padding: 2px 6px;
-  border-radius: 999px;
-  color: var(--badge-new-fg);
-  background: var(--badge-new-bg);
-}
-
-/* Active badge */
-.badge-active {
-  margin-left: auto;
-  font-size: 0.6rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  padding: 2px 6px;
-  border-radius: 999px;
-  color: var(--latte-mauve);
-  background: rgba(136, 57, 239, 0.1);
+.tree-root file-tree-container {
+  --trees-bg-override: transparent;
+  --trees-bg-muted-override: color-mix(in srgb, var(--latte-surface0) 44%, transparent);
+  --trees-fg-override: var(--latte-subtext1);
+  --trees-fg-muted-override: var(--latte-overlay0);
+  --trees-accent-override: var(--latte-mauve);
+  --trees-border-color-override: var(--latte-surface0);
+  --trees-focus-ring-color-override: var(--latte-blue);
+  --trees-focus-ring-width-override: 2px;
+  --trees-focus-ring-offset-override: 1px;
+  --trees-selected-bg-override: var(--active-surface-bg);
+  --trees-selected-fg-override: var(--latte-text);
+  --trees-selected-focused-border-color-override: color-mix(in srgb, var(--latte-mauve) 36%, transparent);
+  --trees-font-family-override: inherit;
+  --trees-font-size-override: 0.9rem;
+  --trees-font-weight-regular-override: 450;
+  --trees-font-weight-semibold-override: 700;
+  --trees-border-radius-override: 6px;
+  --trees-gap-override: 2px;
+  --trees-item-margin-x-override: 0px;
+  --trees-item-padding-x-override: 12px;
+  --trees-item-row-gap-override: 8px;
+  --trees-level-gap-override: 10px;
+  --trees-padding-inline-override: 0px;
+  --trees-file-icon-color-default: var(--latte-overlay0);
+  --trees-new-badge-bg: var(--badge-new-bg);
+  --trees-new-badge-fg: var(--badge-new-fg);
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 /* Sidebar footer */

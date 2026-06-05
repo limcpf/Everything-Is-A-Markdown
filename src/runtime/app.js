@@ -1,10 +1,11 @@
-const EXPANDED_KEY = "fsblog.expanded";
+import { FileTree, prepareFileTreeInput } from "@pierre/trees";
+import { buildTreesAdapterInput } from "./tree-adapter.js";
+
 const COMPACT_LAYOUT_QUERY = "(max-width: 1024px)";
 const MENU_TOGGLE_POSITION_KEY = "fsblog.menuTogglePosition";
 const THEME_MODE_KEY = "fsblog.themeMode";
 const DARK_MODE_QUERY = "(prefers-color-scheme: dark)";
 const SIDEBAR_WIDTH_KEY = "fsblog.desktopSidebarWidth";
-const TYPEAHEAD_RESET_MS = 700;
 const DESKTOP_SIDEBAR_DEFAULT = 420;
 const DESKTOP_SIDEBAR_MIN = 320;
 const DESKTOP_VIEWER_MIN = 680;
@@ -16,6 +17,34 @@ const BRANCH_KEY = "fsblog.branch";
 const APP_READY_STATE_ATTR = "data-app-ready";
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const TREE_UNSAFE_CSS = `
+[data-type='item'][data-item-selected] {
+  border-left: 4px solid var(--trees-accent-override, currentColor);
+  box-shadow: inset 0 0 0 1px var(--trees-selected-focused-border-color-override, transparent);
+  padding-left: calc(var(--trees-item-padding-x) - 4px);
+}
+
+[data-type='item'][data-item-selected] [data-item-section='content'] {
+  font-weight: var(--trees-font-weight-semibold);
+}
+
+/* EIAM owns the visible search controls while Trees keeps search projection enabled. */
+[data-file-tree-search-container] {
+  display: none;
+}
+
+[data-item-section='decoration'] > span {
+  flex: 0 0 auto;
+  width: auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--trees-new-badge-bg, #d20f39);
+  color: var(--trees-new-badge-fg, #ffffff);
+  font-size: 0.625rem;
+  font-weight: 800;
+  line-height: 1;
+}
+`;
 const MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
 const MERMAID_DEFAULT_THEME = "default";
 const MERMAID_SELECTOR = "pre.mermaid";
@@ -738,6 +767,7 @@ function buildBranchView(manifest, branch, defaultBranch) {
   const docs = manifest.docs.filter((doc) => isDocVisibleInBranch(doc, branch, defaultBranch));
   const visibleDocIds = new Set(docs.map((doc) => doc.id));
   const tree = cloneFilteredTree(manifest.tree, visibleDocIds);
+  const trees = buildTreesAdapterInput(tree, docs);
   const routeMap = {};
   const docIndexById = new Map();
   for (const doc of docs) {
@@ -751,6 +781,7 @@ function buildBranchView(manifest, branch, defaultBranch) {
     docs,
     visibleDocIds,
     tree,
+    trees,
     routeMap,
     docIndexById,
   };
@@ -761,26 +792,6 @@ function pickHomeRoute(view) {
     return "/index/";
   }
   return [...view.docs].sort(compareDocsByRecentDateThenRoute)[0]?.route || "/";
-}
-
-function loadExpandedSet() {
-  try {
-    const raw = localStorage.getItem(EXPANDED_KEY);
-    if (!raw) {
-      return new Set();
-    }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return new Set();
-    }
-    return new Set(parsed.filter((x) => typeof x === "string"));
-  } catch {
-    return new Set();
-  }
-}
-
-function persistExpandedSet(expanded) {
-  localStorage.setItem(EXPANDED_KEY, JSON.stringify(Array.from(expanded)));
 }
 
 function loadMenuTogglePosition() {
@@ -859,7 +870,24 @@ function getFocusableElements(container) {
     return [];
   }
 
-  return Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR)).filter((el) => {
+  const candidates = [];
+  const collect = (root) => {
+    for (const el of root.querySelectorAll("*")) {
+      if (!(el instanceof HTMLElement)) {
+        continue;
+      }
+      if (el.matches(FOCUSABLE_SELECTOR)) {
+        candidates.push(el);
+      }
+      if (el.shadowRoot) {
+        collect(el.shadowRoot);
+      }
+    }
+  };
+
+  collect(container);
+
+  return candidates.filter((el) => {
     if (!(el instanceof HTMLElement)) {
       return false;
     }
@@ -883,354 +911,6 @@ function getFocusableElements(container) {
 
     return el.getClientRects().length > 0;
   });
-}
-
-function getTreeLabelText(row) {
-  const label = row.querySelector(".tree-label");
-  if (!(label instanceof HTMLElement)) {
-    return "";
-  }
-  return label.textContent?.trim() || "";
-}
-
-function getVisibleTreeRows(treeRoot) {
-  const rows = [];
-  for (const row of treeRoot.querySelectorAll(".tree-row")) {
-    if (!(row instanceof HTMLElement)) {
-      continue;
-    }
-    if (row.closest("[hidden]")) {
-      continue;
-    }
-    rows.push(row);
-  }
-  return rows;
-}
-
-function initializeTreeTypeahead(treeRoot) {
-  if (!(treeRoot instanceof HTMLElement)) {
-    return;
-  }
-
-  let query = "";
-  let resetTimer = 0;
-
-  const scheduleReset = () => {
-    if (resetTimer) {
-      clearTimeout(resetTimer);
-    }
-    resetTimer = window.setTimeout(() => {
-      query = "";
-    }, TYPEAHEAD_RESET_MS);
-  };
-
-  const findMatch = (rows, needle, startIndex) => {
-    if (!needle) {
-      return null;
-    }
-
-    for (let offset = 1; offset <= rows.length; offset += 1) {
-      const idx = (startIndex + offset + rows.length) % rows.length;
-      const row = rows[idx];
-      const text = getTreeLabelText(row).toLocaleLowerCase("ko-KR");
-      if (text.startsWith(needle)) {
-        return row;
-      }
-    }
-
-    return null;
-  };
-
-  treeRoot.addEventListener("keydown", (event) => {
-    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) {
-      return;
-    }
-
-    const target = event.target;
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-      return;
-    }
-
-    if (event.key === "Backspace" && query.length > 0) {
-      query = query.slice(0, -1);
-      scheduleReset();
-      event.preventDefault();
-    } else if (event.key.length === 1 && /\S/.test(event.key)) {
-      query += event.key.toLocaleLowerCase("ko-KR");
-      scheduleReset();
-    } else {
-      return;
-    }
-
-    const rows = getVisibleTreeRows(treeRoot);
-    if (rows.length === 0 || query.length === 0) {
-      return;
-    }
-
-    const activeElement = document.activeElement;
-    const startIndex = rows.findIndex((row) => row === activeElement);
-    const matchedRow = findMatch(rows, query, startIndex);
-    if (!(matchedRow instanceof HTMLElement)) {
-      return;
-    }
-
-    matchedRow.focus();
-    matchedRow.scrollIntoView({ block: "nearest" });
-    event.preventDefault();
-  });
-}
-
-function initializeTreeLabelTooltip(treeRoot, tooltipEl) {
-  if (!(treeRoot instanceof HTMLElement) || !(tooltipEl instanceof HTMLElement)) {
-    return { hide: () => {}, dispose: () => {} };
-  }
-
-  let activeRow = null;
-  const cleanups = [];
-
-  const hide = () => {
-    tooltipEl.hidden = true;
-    tooltipEl.textContent = "";
-    if (activeRow instanceof HTMLElement) {
-      activeRow.removeAttribute("aria-describedby");
-    }
-    activeRow = null;
-  };
-
-  const show = (row) => {
-    if (!(row instanceof HTMLElement)) {
-      hide();
-      return;
-    }
-
-    if (activeRow === row && !tooltipEl.hidden) {
-      return;
-    }
-
-    const labelEl = row.querySelector(".tree-label");
-    if (!(labelEl instanceof HTMLElement)) {
-      hide();
-      return;
-    }
-
-    if (labelEl.scrollWidth <= labelEl.clientWidth + 1) {
-      hide();
-      return;
-    }
-
-    const labelText = labelEl.textContent?.trim();
-    if (!labelText) {
-      hide();
-      return;
-    }
-
-    tooltipEl.textContent = labelText;
-    tooltipEl.hidden = false;
-
-    const labelRect = labelEl.getBoundingClientRect();
-    const tooltipRect = tooltipEl.getBoundingClientRect();
-    const safePadding = 8;
-    const gap = 8;
-
-    let top = labelRect.top - tooltipRect.height - gap;
-    if (top < safePadding) {
-      top = labelRect.bottom + gap;
-    }
-
-    let left = labelRect.left;
-    const rightOverflow = left + tooltipRect.width - (window.innerWidth - safePadding);
-    if (rightOverflow > 0) {
-      left -= rightOverflow;
-    }
-    if (left < safePadding) {
-      left = safePadding;
-    }
-
-    tooltipEl.style.top = `${Math.round(top)}px`;
-    tooltipEl.style.left = `${Math.round(left)}px`;
-
-    if (activeRow instanceof HTMLElement && activeRow !== row) {
-      activeRow.removeAttribute("aria-describedby");
-    }
-    activeRow = row;
-    row.setAttribute("aria-describedby", tooltipEl.id);
-  };
-
-  const getTreeRow = (target) => {
-    if (!(target instanceof Element)) {
-      return null;
-    }
-    const row = target.closest(".tree-row");
-    if (!(row instanceof HTMLElement) || !treeRoot.contains(row)) {
-      return null;
-    }
-    return row;
-  };
-
-  const onMouseOver = (event) => {
-    const row = getTreeRow(event.target);
-    if (!row) {
-      return;
-    }
-    show(row);
-  };
-
-  const onMouseOut = (event) => {
-    const fromRow = getTreeRow(event.target);
-    if (!fromRow) {
-      return;
-    }
-    const toRow = getTreeRow(event.relatedTarget);
-    if (toRow === fromRow) {
-      return;
-    }
-    hide();
-  };
-
-  const onFocusIn = (event) => {
-    const row = getTreeRow(event.target);
-    if (!row) {
-      return;
-    }
-    show(row);
-  };
-
-  const onFocusOut = (event) => {
-    const toRow = getTreeRow(event.relatedTarget);
-    if (toRow) {
-      return;
-    }
-    hide();
-  };
-
-  treeRoot.addEventListener("mouseover", onMouseOver);
-  treeRoot.addEventListener("mouseout", onMouseOut);
-  treeRoot.addEventListener("focusin", onFocusIn);
-  treeRoot.addEventListener("focusout", onFocusOut);
-
-  cleanups.push(() => treeRoot.removeEventListener("mouseover", onMouseOver));
-  cleanups.push(() => treeRoot.removeEventListener("mouseout", onMouseOut));
-  cleanups.push(() => treeRoot.removeEventListener("focusin", onFocusIn));
-  cleanups.push(() => treeRoot.removeEventListener("focusout", onFocusOut));
-
-  treeRoot.addEventListener("scroll", hide);
-  window.addEventListener("resize", hide);
-  document.addEventListener("scroll", hide, true);
-
-  cleanups.push(() => treeRoot.removeEventListener("scroll", hide));
-  cleanups.push(() => window.removeEventListener("resize", hide));
-  cleanups.push(() => document.removeEventListener("scroll", hide, true));
-
-  return {
-    hide,
-    dispose() {
-      hide();
-      for (const cleanup of cleanups) {
-        cleanup();
-      }
-    },
-  };
-}
-
-function createFolderNode(node, expandedSet, fileRowsById, pathBase, depth = 0) {
-  const wrapper = document.createElement("div");
-  wrapper.className = node.virtual ? "tree-folder virtual" : "tree-folder";
-  wrapper.style.setProperty("--tree-depth", String(depth));
-
-  const row = document.createElement("button");
-  row.type = "button";
-  row.className = "tree-folder-row tree-row";
-  row.dataset.rowType = "folder";
-  row.dataset.folderPath = node.path;
-  row.dataset.virtual = String(Boolean(node.virtual));
-
-  const isExpanded = node.virtual ? true : expandedSet.has(node.path);
-  const iconName = isExpanded ? "folder_open" : "folder";
-
-  row.innerHTML = `<span class="material-symbols-outlined">${iconName}</span><span class="tree-label">${escapeHtmlAttr(node.name)}</span>`;
-  row.setAttribute("aria-expanded", String(isExpanded));
-
-  const children = document.createElement("div");
-  children.className = "tree-children";
-  if (!isExpanded) {
-    children.hidden = true;
-  }
-
-  for (const child of node.children) {
-    if (child.type === "folder") {
-      children.appendChild(createFolderNode(child, expandedSet, fileRowsById, pathBase, depth + 1));
-    } else {
-      children.appendChild(createFileNode(child, fileRowsById, pathBase, depth + 1));
-    }
-  }
-
-  wrapper.appendChild(row);
-  wrapper.appendChild(children);
-  return wrapper;
-}
-
-function createFileNode(node, fileRowsById, pathBase, depth = 0) {
-  const row = document.createElement("a");
-  row.href = toPathWithBase(node.route, pathBase);
-  row.className = "tree-row tree-file-row";
-  row.dataset.rowType = "file";
-  row.dataset.route = node.route;
-  row.dataset.fileId = node.id;
-  row.style.setProperty("--tree-depth", String(depth));
-
-  const prefix = typeof node.prefix === "string" ? node.prefix.trim() : "";
-  const prefixHtml = prefix ? `<span class="tree-prefix">${escapeHtmlAttr(prefix)}</span>` : "";
-  const label = escapeHtmlAttr(node.title || node.name);
-  const newBadge = node.isNew ? `<span class="badge-new">NEW</span>` : "";
-  row.innerHTML = `<span class="material-symbols-outlined">article</span>${prefixHtml}<span class="tree-label">${label}</span>${newBadge}`;
-  fileRowsById.set(node.id, row);
-
-  return row;
-}
-
-function setFileRowActive(row, active) {
-  if (!(row instanceof HTMLElement)) {
-    return;
-  }
-
-  const badge = row.querySelector(".badge-active");
-  if (badge) {
-    badge.remove();
-  }
-
-  if (active) {
-    row.classList.add("is-active");
-    row.setAttribute("aria-current", "page");
-    const activeBadge = document.createElement("span");
-    activeBadge.className = "badge-active";
-    activeBadge.textContent = "active";
-    row.appendChild(activeBadge);
-    return;
-  }
-
-  row.classList.remove("is-active");
-  row.removeAttribute("aria-current");
-}
-
-function markActive(fileRowsById, activeState, id) {
-  if (activeState.currentId === id) {
-    return;
-  }
-
-  if (activeState.current instanceof HTMLElement) {
-    setFileRowActive(activeState.current, false);
-  }
-
-  const next = id ? fileRowsById.get(id) : null;
-  if (next instanceof HTMLElement) {
-    setFileRowActive(next, true);
-    activeState.current = next;
-    activeState.currentId = id;
-    return;
-  }
-
-  activeState.current = null;
-  activeState.currentId = "";
 }
 
 function renderBreadcrumb(route) {
@@ -1327,13 +1007,17 @@ async function start() {
   setAppReadyState("booting");
 
   const treeRoot = document.getElementById("tree-root");
+  const treeSearchInput = document.getElementById("tree-search-input");
+  const treeSearchClear = document.getElementById("tree-search-clear");
+  const treeSearchPrev = document.getElementById("tree-search-prev");
+  const treeSearchNext = document.getElementById("tree-search-next");
+  const treeSearchCount = document.getElementById("tree-search-count");
   const appRoot = document.querySelector(".app-root");
   const splitter = document.getElementById("app-splitter");
   const sidebar = document.getElementById("sidebar-panel");
   const sidebarToggle = document.getElementById("sidebar-toggle");
   const sidebarClose = document.getElementById("sidebar-close");
   const sidebarOverlay = document.getElementById("sidebar-overlay");
-  const treeLabelTooltip = document.getElementById("tree-label-tooltip");
   const sidebarBranchPills = document.getElementById("sidebar-branch-pills");
   const sidebarBranchInfo = document.getElementById("sidebar-branch-info");
   const settingsToggle = document.getElementById("settings-toggle");
@@ -1352,17 +1036,14 @@ async function start() {
   const initialViewData = loadInitialViewData();
   let hasHydratedInitialView = false;
 
-  let hideTreeTooltip = () => {};
-  let disposeTreeTooltip = () => {};
   let desktopSidebarWidth = clampDesktopSidebarWidth(loadDesktopSidebarWidth());
   let activeResizePointerId = null;
   let resizeStartX = 0;
   let resizeStartWidth = desktopSidebarWidth;
-  let treeFileRowsById = new Map();
-  const activeFileState = {
-    current: null,
-    currentId: "",
-  };
+  let fileTree = null;
+  let isSyncingTreeSelection = false;
+  let treePathOrder = new Map();
+  let treeSearchValue = "";
 
   const announceA11yStatus = (message) => {
     if (!(a11yStatusEl instanceof HTMLElement)) {
@@ -1542,7 +1223,6 @@ async function start() {
     if (sidebarOverlay) {
       sidebarOverlay.hidden = true;
     }
-    hideTreeTooltip();
     closeSettings();
     document.body.classList.remove("menu-open");
     syncSidebarA11y(false);
@@ -1811,7 +1491,6 @@ async function start() {
   let view = getBranchView(activeBranch);
 
   const docsById = new Map(manifest.docs.map((doc) => [doc.id, doc]));
-  const expanded = loadExpandedSet();
 
   const updateBranchInfo = () => {
     if (sidebarBranchInfo instanceof HTMLElement) {
@@ -1832,28 +1511,276 @@ async function start() {
     }
   };
 
+  const updateTreeSearchControls = () => {
+    const normalizedSearchValue = fileTree ? fileTree.getSearchValue() : treeSearchValue.trim();
+    const hasSearch = normalizedSearchValue.length > 0;
+    const matchCount = hasSearch && fileTree ? fileTree.getSearchMatchingPaths().length : 0;
+    const canStep = hasSearch && matchCount > 0;
+
+    if (treeSearchClear instanceof HTMLButtonElement) {
+      treeSearchClear.hidden = !hasSearch;
+      treeSearchClear.disabled = !hasSearch;
+    }
+
+    for (const button of [treeSearchPrev, treeSearchNext]) {
+      if (button instanceof HTMLButtonElement) {
+        button.disabled = !canStep;
+      }
+    }
+
+    if (treeSearchCount instanceof HTMLElement) {
+      treeSearchCount.textContent = hasSearch ? `${matchCount}개 일치` : "";
+    }
+  };
+
+  const applyTreeSearch = (value) => {
+    treeSearchValue = value;
+
+    if (treeSearchInput instanceof HTMLInputElement && treeSearchInput.value !== value) {
+      treeSearchInput.value = value;
+    }
+
+    if (fileTree) {
+      const query = value.trim();
+      if (query) {
+        if (fileTree.isSearchOpen()) {
+          fileTree.setSearch(query);
+        } else {
+          fileTree.openSearch(query);
+        }
+      } else {
+        fileTree.closeSearch();
+      }
+    }
+
+    updateTreeSearchControls();
+  };
+
+  const moveTreeSearchFocus = (direction) => {
+    if (!fileTree || !fileTree.isSearchOpen() || fileTree.getSearchMatchingPaths().length === 0) {
+      return;
+    }
+
+    if (direction < 0) {
+      fileTree.focusPreviousSearchMatch();
+    } else {
+      fileTree.focusNextSearchMatch();
+    }
+
+    updateTreeSearchControls();
+  };
+
+  if (treeSearchInput instanceof HTMLInputElement) {
+    treeSearchInput.addEventListener("input", () => {
+      applyTreeSearch(treeSearchInput.value);
+    });
+    treeSearchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        moveTreeSearchFocus(event.shiftKey ? -1 : 1);
+        return;
+      }
+
+      if (event.key === "Escape" && treeSearchInput.value.trim()) {
+        event.preventDefault();
+        event.stopPropagation();
+        applyTreeSearch("");
+      }
+    });
+  }
+
+  treeSearchClear?.addEventListener("click", () => {
+    applyTreeSearch("");
+    if (treeSearchInput instanceof HTMLInputElement) {
+      treeSearchInput.focus();
+    }
+  });
+
+  treeSearchPrev?.addEventListener("click", () => {
+    moveTreeSearchFocus(-1);
+  });
+
+  treeSearchNext?.addEventListener("click", () => {
+    moveTreeSearchFocus(1);
+  });
+
+  const syncActiveTreeSelection = (docId, { scroll = true } = {}) => {
+    if (!fileTree || !docId) {
+      return;
+    }
+
+    const treePath = view.trees.docIdToPrimaryTreePath.get(docId);
+    if (!treePath) {
+      return;
+    }
+
+    const selectedPaths = fileTree.getSelectedPaths();
+    if (selectedPaths.length === 1 && selectedPaths[0] === treePath) {
+      return;
+    }
+
+    const item = fileTree.getItem(treePath);
+    if (!item) {
+      return;
+    }
+
+    isSyncingTreeSelection = true;
+    try {
+      item.select();
+    } finally {
+      isSyncingTreeSelection = false;
+    }
+
+    if (scroll) {
+      fileTree.scrollToPath(treePath, { focus: false, offset: "nearest" });
+    }
+  };
+
+  const clearTreeSelection = () => {
+    if (!fileTree) {
+      return;
+    }
+
+    const selectedPaths = fileTree.getSelectedPaths();
+    if (selectedPaths.length === 0) {
+      return;
+    }
+
+    isSyncingTreeSelection = true;
+    try {
+      for (const selectedPath of selectedPaths) {
+        fileTree.getItem(selectedPath)?.deselect();
+      }
+    } finally {
+      isSyncingTreeSelection = false;
+    }
+  };
+
+  const compareTreesByBranchOrder = (left, right) => {
+    const leftIndex = treePathOrder.get(left.path) ?? Number.MAX_SAFE_INTEGER;
+    const rightIndex = treePathOrder.get(right.path) ?? Number.MAX_SAFE_INTEGER;
+    if (leftIndex !== rightIndex) {
+      return leftIndex - rightIndex;
+    }
+    return left.path.localeCompare(right.path, "ko-KR");
+  };
+
+  const prepareTreesInput = () => {
+    treePathOrder = new Map(view.trees.paths.map((treePath, index) => [treePath, index]));
+    return prepareFileTreeInput(view.trees.paths, { sort: compareTreesByBranchOrder });
+  };
+
+  const renderTreeRowDecoration = ({ item }) => {
+    const metadata = view.trees.metadataByTreePath.get(item.path);
+    if (metadata?.kind !== "file" || metadata.isNew !== true) {
+      return null;
+    }
+
+    return {
+      text: "NEW",
+      title: "New document",
+    };
+  };
+
+  const renderTreeContextMenu = (item, context) => {
+    const route = view.trees.treePathToRoute.get(item.path);
+    if (!route) {
+      return null;
+    }
+
+    const menu = document.createElement("div");
+    menu.className = "tree-context-menu";
+    Object.assign(menu.style, {
+      background: "var(--trees-bg-override, canvas)",
+      border: "1px solid var(--trees-border-color-override, color-mix(in srgb, currentColor 18%, transparent))",
+      borderRadius: "6px",
+      boxShadow: "0 10px 24px rgba(0, 0, 0, 0.18)",
+      minWidth: "120px",
+      padding: "4px",
+    });
+
+    const link = document.createElement("a");
+    link.className = "tree-context-link";
+    link.href = toPathWithBase(route, pathBase);
+    link.textContent = "Open";
+    Object.assign(link.style, {
+      borderRadius: "4px",
+      color: "inherit",
+      display: "block",
+      padding: "6px 8px",
+      textDecoration: "none",
+    });
+    link.addEventListener("click", (event) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+      event.preventDefault();
+      context.close();
+      void state.navigate(route, true);
+    });
+
+    menu.appendChild(link);
+    return menu;
+  };
+
   const renderTree = (state) => {
     if (!(treeRoot instanceof HTMLElement)) {
       return;
     }
 
-    hideTreeTooltip();
-    disposeTreeTooltip();
-    treeRoot.innerHTML = "";
-    treeFileRowsById = new Map();
+    const preparedInput = prepareTreesInput();
+    const selectedTreePath = state.currentDocId
+      ? view.trees.docIdToPrimaryTreePath.get(state.currentDocId)
+      : null;
 
-    for (const node of view.tree) {
-      if (node.type === "folder") {
-        treeRoot.appendChild(createFolderNode(node, state.expanded, treeFileRowsById, pathBase));
-      } else {
-        treeRoot.appendChild(createFileNode(node, treeFileRowsById, pathBase));
+    if (!fileTree) {
+      fileTree = new FileTree({
+        composition: {
+          contextMenu: {
+            enabled: true,
+            render: renderTreeContextMenu,
+            triggerMode: "right-click",
+          },
+        },
+        fileTreeSearchMode: "hide-non-matches",
+        flattenEmptyDirectories: false,
+        initialExpansion: 1,
+        initialSelectedPaths: selectedTreePath ? [selectedTreePath] : [],
+        itemHeight: 38,
+        onSelectionChange(selectedPaths) {
+          if (isSyncingTreeSelection) {
+            return;
+          }
+
+          const selectedPath = selectedPaths.at(-1);
+          const route = selectedPath ? view.trees.treePathToRoute.get(selectedPath) : null;
+          if (!route) {
+            window.queueMicrotask(() => syncActiveTreeSelection(state.currentDocId, { scroll: false }));
+            return;
+          }
+
+          void state.navigate(route, true);
+        },
+        preparedInput,
+        renderRowDecoration: renderTreeRowDecoration,
+        sort: compareTreesByBranchOrder,
+        search: true,
+        searchBlurBehavior: "retain",
+        stickyFolders: true,
+        unsafeCSS: TREE_UNSAFE_CSS,
+      });
+      fileTree.render({ containerWrapper: treeRoot });
+    } else {
+      isSyncingTreeSelection = true;
+      try {
+        fileTree.resetPaths(preparedInput.paths, { preparedInput });
+      } finally {
+        isSyncingTreeSelection = false;
       }
     }
 
-    const tooltipController = initializeTreeLabelTooltip(treeRoot, treeLabelTooltip);
-    hideTreeTooltip = tooltipController.hide;
-    disposeTreeTooltip = tooltipController.dispose;
-    markActive(treeFileRowsById, activeFileState, state.currentDocId || "");
+    syncActiveTreeSelection(state.currentDocId || "");
+    applyTreeSearch(treeSearchValue);
   };
 
   const updateBacklinks = (doc) => {
@@ -1871,11 +1798,8 @@ async function start() {
   };
 
   const state = {
-    expanded,
     currentDocId: initialViewData?.docId ?? "",
     async navigate(rawRoute, push) {
-      hideTreeTooltip();
-
       if (isCompactLayout()) {
         closeSidebar();
       }
@@ -1900,13 +1824,13 @@ async function start() {
       
       if (!id) {
         state.currentDocId = "";
+        clearTreeSelection();
         breadcrumbEl.innerHTML = renderBreadcrumb(route);
         titleEl.textContent = "문서를 찾을 수 없습니다";
         metaEl.innerHTML = "";
         contentEl.innerHTML = '<p class="placeholder">요청한 경로에 해당하는 문서가 없습니다.</p>';
         updateBacklinks(null);
         navEl.innerHTML = "";
-        markActive(treeFileRowsById, activeFileState, "");
         announceA11yStatus("탐색 실패: 요청한 문서를 찾을 수 없습니다.");
         if (push) {
           history.pushState(null, "", toPathWithBase(route, pathBase));
@@ -1924,7 +1848,7 @@ async function start() {
       }
 
       state.currentDocId = id;
-      markActive(treeFileRowsById, activeFileState, id);
+      syncActiveTreeSelection(id);
 
       const shouldUseInitialView =
         !hasHydratedInitialView &&
@@ -1976,60 +1900,6 @@ async function start() {
       announceA11yStatus(`탐색 완료: ${doc.title} 문서를 열었습니다.`);
     },
   };
-
-  if (treeRoot instanceof HTMLElement) {
-    treeRoot.addEventListener("click", (event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
-        return;
-      }
-
-      const row = target.closest(".tree-row");
-      if (!(row instanceof HTMLElement) || !treeRoot.contains(row)) {
-        return;
-      }
-
-      if (row.dataset.rowType === "folder") {
-        if (row.dataset.virtual === "true") {
-          return;
-        }
-
-        const children = row.nextElementSibling;
-        if (!(children instanceof HTMLElement) || !children.classList.contains("tree-children")) {
-          return;
-        }
-
-        const currentlyExpanded = !children.hidden;
-        children.hidden = currentlyExpanded;
-        row.setAttribute("aria-expanded", String(!currentlyExpanded));
-        const icon = row.querySelector(".material-symbols-outlined");
-        if (icon instanceof HTMLElement) {
-          icon.textContent = currentlyExpanded ? "folder" : "folder_open";
-        }
-
-        const folderPath = row.dataset.folderPath;
-        if (!folderPath) {
-          return;
-        }
-        if (currentlyExpanded) {
-          state.expanded.delete(folderPath);
-        } else {
-          state.expanded.add(folderPath);
-        }
-        persistExpandedSet(state.expanded);
-        return;
-      }
-
-      if (row.dataset.rowType === "file") {
-        event.preventDefault();
-        const route = row.dataset.route;
-        if (!route) {
-          return;
-        }
-        state.navigate(route, true);
-      }
-    });
-  }
 
   if (contentEl instanceof HTMLElement) {
     contentEl.addEventListener("click", async (event) => {
@@ -2115,8 +1985,6 @@ async function start() {
       }
     });
   }
-
-  initializeTreeTypeahead(treeRoot);
 
   const setActiveBranch = async (nextBranch) => {
     const normalized = normalizeBranch(nextBranch);
