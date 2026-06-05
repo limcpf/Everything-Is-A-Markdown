@@ -242,6 +242,8 @@ a:hover {
     var(--splitter-width)
     minmax(var(--desktop-viewer-min), 1fr);
   height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   width: 100vw;
 }
 
@@ -299,6 +301,7 @@ a:hover {
   border-right: 0;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -316,6 +319,7 @@ a:hover {
 
 .sidebar-header {
   position: relative;
+  flex: 0 0 auto;
   padding: 24px 20px;
   border-bottom: 1px solid var(--latte-surface0);
 }
@@ -436,6 +440,7 @@ a:hover {
 
 /* Tree search */
 .sidebar-search {
+  flex: 0 0 auto;
   padding: 14px 16px 10px;
   border-bottom: 1px solid var(--latte-surface0);
   background: color-mix(in srgb, var(--latte-mantle) 92%, var(--latte-base));
@@ -538,6 +543,9 @@ a:hover {
 
 .tree-search-count {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--latte-overlay0);
   font-size: 0.75rem;
   font-weight: 650;
@@ -550,7 +558,8 @@ a:hover {
 
 /* Tree */
 .tree-root {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
   padding: 12px 12px 24px;
 }
@@ -591,12 +600,15 @@ a:hover {
 /* Sidebar footer */
 .sidebar-footer {
   position: relative;
+  flex: 0 0 auto;
   padding: 12px 16px;
   background: var(--latte-crust);
   border-top: 1px solid var(--latte-surface0);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  min-height: 57px;
   font-size: 0.75rem;
   color: var(--latte-subtext1);
 }
@@ -605,6 +617,7 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
 .status-dot {
@@ -628,12 +641,18 @@ a:hover {
 
 .status-encoding {
   font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--latte-subtext1);
 }
 
 .sidebar-footer-actions {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 8px;
 }
 
@@ -1514,6 +1533,9 @@ body.mobile-toggle-left .mobile-menu-toggle {
     top: 0;
     left: 0;
     bottom: 0;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
     width: 70vw;
     min-width: 300px;
     max-width: 560px;
@@ -1540,6 +1562,22 @@ body.mobile-toggle-left .mobile-menu-toggle {
 
   .sidebar-close {
     display: inline-flex;
+  }
+
+  .sidebar-header {
+    padding: 18px 18px 16px;
+  }
+
+  .sidebar-title {
+    padding-right: 42px;
+  }
+
+  .sidebar-search {
+    padding: 12px 14px 9px;
+  }
+
+  .tree-root {
+    padding: 10px 10px 18px;
   }
 
   .viewer-container {
@@ -1577,6 +1615,41 @@ body.mobile-toggle-left .mobile-menu-toggle {
     max-width: none;
   }
 
+  .sidebar-header {
+    padding: 16px 16px 14px;
+  }
+
+  .sidebar-branch {
+    row-gap: 8px;
+    margin-top: 10px;
+  }
+
+  .branch-pills {
+    gap: 6px;
+  }
+
+  .branch-pill {
+    padding: 6px 10px;
+  }
+
+  .sidebar-search {
+    padding: 10px 12px 8px;
+  }
+
+  .sidebar-search-actions {
+    min-height: 28px;
+    margin-top: 5px;
+  }
+
+  .tree-root {
+    padding: 8px 8px 14px;
+  }
+
+  .sidebar-footer {
+    min-height: 52px;
+    padding: 10px 12px;
+  }
+
   .viewer-container {
     padding: 20px 18px 104px;
   }
@@ -1603,5 +1676,58 @@ body.mobile-toggle-left .mobile-menu-toggle {
     display: block;
     overflow-x: auto;
     white-space: nowrap;
+  }
+}
+
+@media (max-width: 1024px) and (max-height: 640px) {
+  .sidebar-header {
+    padding-top: 12px;
+    padding-bottom: 10px;
+  }
+
+  .sidebar-title {
+    font-size: 1rem;
+  }
+
+  .sidebar-branch {
+    row-gap: 6px;
+    margin-top: 8px;
+  }
+
+  .branch-badge {
+    padding: 5px 9px;
+  }
+
+  .branch-pill {
+    padding: 5px 9px;
+  }
+
+  .branch-info {
+    font-size: 0.7rem;
+  }
+
+  .sidebar-search {
+    padding-top: 8px;
+    padding-bottom: 6px;
+  }
+
+  .sidebar-search-box {
+    min-height: 36px;
+  }
+
+  .tree-search-clear,
+  .tree-search-step {
+    width: 28px;
+    height: 28px;
+  }
+
+  .tree-root {
+    padding-bottom: 10px;
+  }
+
+  .sidebar-footer {
+    min-height: 48px;
+    padding-top: 8px;
+    padding-bottom: 8px;
   }
 }
