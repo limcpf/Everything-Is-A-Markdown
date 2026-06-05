@@ -231,6 +231,34 @@ ${headMeta}
             <span id="sidebar-branch-info" class="branch-info">publish: true</span>
           </div>
         </div>
+        <div class="sidebar-search">
+          <div class="sidebar-search-box">
+            <span class="material-symbols-outlined sidebar-search-icon" aria-hidden="true">search</span>
+            <input
+              id="tree-search-input"
+              class="tree-search-input"
+              type="search"
+              autocomplete="off"
+              spellcheck="false"
+              aria-label="문서 검색"
+              placeholder="Search"
+            />
+            <button id="tree-search-clear" class="tree-search-clear" type="button" aria-label="검색 지우기" title="검색 지우기" hidden>
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <div class="sidebar-search-actions" aria-live="polite">
+            <span id="tree-search-count" class="tree-search-count"></span>
+            <div class="tree-search-nav">
+              <button id="tree-search-prev" class="tree-search-step" type="button" aria-label="이전 검색 결과" title="이전 검색 결과" disabled>
+                <span class="material-symbols-outlined">keyboard_arrow_up</span>
+              </button>
+              <button id="tree-search-next" class="tree-search-step" type="button" aria-label="다음 검색 결과" title="다음 검색 결과" disabled>
+                <span class="material-symbols-outlined">keyboard_arrow_down</span>
+              </button>
+            </div>
+          </div>
+        </div>
         <nav id="tree-root" class="tree-root" aria-label="문서 탐색기" tabindex="0"></nav>
         <div class="sidebar-footer">
           <div class="status-online">
