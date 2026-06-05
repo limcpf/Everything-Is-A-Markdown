@@ -1509,6 +1509,26 @@ async function start() {
     }
   };
 
+  const clearTreeSelection = () => {
+    if (!fileTree) {
+      return;
+    }
+
+    const selectedPaths = fileTree.getSelectedPaths();
+    if (selectedPaths.length === 0) {
+      return;
+    }
+
+    isSyncingTreeSelection = true;
+    try {
+      for (const selectedPath of selectedPaths) {
+        fileTree.getItem(selectedPath)?.deselect();
+      }
+    } finally {
+      isSyncingTreeSelection = false;
+    }
+  };
+
   const compareTreesByBranchOrder = (left, right) => {
     const leftIndex = treePathOrder.get(left.path) ?? Number.MAX_SAFE_INTEGER;
     const rightIndex = treePathOrder.get(right.path) ?? Number.MAX_SAFE_INTEGER;
@@ -1523,6 +1543,59 @@ async function start() {
     return prepareFileTreeInput(view.trees.paths, { sort: compareTreesByBranchOrder });
   };
 
+  const renderTreeRowDecoration = ({ item }) => {
+    const metadata = view.trees.metadataByTreePath.get(item.path);
+    if (metadata?.kind !== "file" || metadata.isNew !== true) {
+      return null;
+    }
+
+    return {
+      text: "NEW",
+      title: "New document",
+    };
+  };
+
+  const renderTreeContextMenu = (item, context) => {
+    const route = view.trees.treePathToRoute.get(item.path);
+    if (!route) {
+      return null;
+    }
+
+    const menu = document.createElement("div");
+    menu.className = "tree-context-menu";
+    Object.assign(menu.style, {
+      background: "var(--trees-bg-override, canvas)",
+      border: "1px solid var(--trees-border-color-override, color-mix(in srgb, currentColor 18%, transparent))",
+      borderRadius: "6px",
+      boxShadow: "0 10px 24px rgba(0, 0, 0, 0.18)",
+      minWidth: "120px",
+      padding: "4px",
+    });
+
+    const link = document.createElement("a");
+    link.className = "tree-context-link";
+    link.href = toPathWithBase(route, pathBase);
+    link.textContent = "Open";
+    Object.assign(link.style, {
+      borderRadius: "4px",
+      color: "inherit",
+      display: "block",
+      padding: "6px 8px",
+      textDecoration: "none",
+    });
+    link.addEventListener("click", (event) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+      event.preventDefault();
+      context.close();
+      void state.navigate(route, true);
+    });
+
+    menu.appendChild(link);
+    return menu;
+  };
+
   const renderTree = (state) => {
     if (!(treeRoot instanceof HTMLElement)) {
       return;
@@ -1535,6 +1608,13 @@ async function start() {
 
     if (!fileTree) {
       fileTree = new FileTree({
+        composition: {
+          contextMenu: {
+            enabled: true,
+            render: renderTreeContextMenu,
+            triggerMode: "right-click",
+          },
+        },
         fileTreeSearchMode: "hide-non-matches",
         flattenEmptyDirectories: false,
         initialExpansion: 1,
@@ -1555,6 +1635,7 @@ async function start() {
           void state.navigate(route, true);
         },
         preparedInput,
+        renderRowDecoration: renderTreeRowDecoration,
         sort: compareTreesByBranchOrder,
         search: true,
         searchBlurBehavior: "retain",
@@ -1614,6 +1695,7 @@ async function start() {
       
       if (!id) {
         state.currentDocId = "";
+        clearTreeSelection();
         breadcrumbEl.innerHTML = renderBreadcrumb(route);
         titleEl.textContent = "문서를 찾을 수 없습니다";
         metaEl.innerHTML = "";
