@@ -285,14 +285,14 @@ markdown: {
 
 - 사이드바 파일 트리는 vanilla `@pierre/trees` 런타임으로 렌더링됩니다.
 - `Recent` 가상 폴더와 선택적 pinned 가상 폴더를 유지합니다.
-- 파일 행은 `prefix`와 제목 기준으로 표시되고, `ui.newWithinDays` 기준에 맞으면 NEW 배지를 보여줍니다.
+- 파일 행은 보이는 `.md` 확장자 없이 `prefix`와 제목 기준으로 표시되고, `ui.newWithinDays` 기준에 맞으면 NEW 배지를 보여줍니다.
 - 브랜치 pill로 문서 목록을 전환합니다.
 - 활성 문서 선택 상태는 트리, 브라우저 히스토리, 문서 뷰어 사이에서 동기화됩니다.
 - 트리 검색 입력은 Trees 검색 모델에 연결되며, clear와 이전/다음 결과 이동을 지원합니다.
 - 직접 URL 진입, 이전/다음 문서 링크, 백링크, 모바일 사이드바 포커스 트랩을 지원합니다.
 - 테마 모드(`light`, `dark`, `system`)와 데스크톱 사이드바 폭을 저장합니다.
 
-사이드바는 표시용 EIAM canonical tree path를 사용하지만, 공개 라우트와 문서 식별자는 계속 `prefix` 기반 route/docId를 기준으로 합니다. rename, drag/drop, git status 표시, multi-select bulk action은 의도적으로 활성화하지 않습니다.
+사이드바는 표시용 EIAM canonical tree path를 사용하지만, 공개 라우트와 문서 식별자는 계속 `prefix` 기반 route/docId를 기준으로 합니다. 보이는 파일 label에서는 `.md`를 생략하지만 route/docId lookup 동작은 바뀌지 않습니다. rename, drag/drop, git status 표시, multi-select bulk action은 의도적으로 활성화하지 않습니다.
 
 ## bunx 실행 (선택)
 
