@@ -1,3 +1,5 @@
+import { buildTreesAdapterInput } from "./tree-adapter.js";
+
 const EXPANDED_KEY = "fsblog.expanded";
 const COMPACT_LAYOUT_QUERY = "(max-width: 1024px)";
 const MENU_TOGGLE_POSITION_KEY = "fsblog.menuTogglePosition";
@@ -738,6 +740,7 @@ function buildBranchView(manifest, branch, defaultBranch) {
   const docs = manifest.docs.filter((doc) => isDocVisibleInBranch(doc, branch, defaultBranch));
   const visibleDocIds = new Set(docs.map((doc) => doc.id));
   const tree = cloneFilteredTree(manifest.tree, visibleDocIds);
+  const trees = buildTreesAdapterInput(tree, docs);
   const routeMap = {};
   const docIndexById = new Map();
   for (const doc of docs) {
@@ -751,6 +754,7 @@ function buildBranchView(manifest, branch, defaultBranch) {
     docs,
     visibleDocIds,
     tree,
+    trees,
     routeMap,
     docIndexById,
   };
