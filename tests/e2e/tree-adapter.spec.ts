@@ -96,22 +96,22 @@ test.describe("Trees sidebar adapter", () => {
 
     expect(adapter.paths).toEqual([
       "PINNED/",
-      "PINNED/BC-VO-02 Setup Guide.md",
+      "PINNED/BC-VO-02 Setup Guide",
       "Recent/",
-      "Recent/BC-VO-02 Setup Guide.md",
-      "Recent/BC-XSS-01 Unsafe <img src=x onerror=alert(1)>.md",
+      "Recent/BC-VO-02 Setup Guide",
+      "Recent/BC-XSS-01 Unsafe <img src=x onerror=alert(1)>",
       "engineering/",
       "engineering/guides/",
-      "engineering/guides/BC-VO-02 Setup Guide.md",
+      "engineering/guides/BC-VO-02 Setup Guide",
     ]);
-    expect(adapter.treePathToDocId.get("Recent/BC-VO-02 Setup Guide.md")).toBe("doc-a");
-    expect(adapter.treePathToRoute.get("engineering/guides/BC-VO-02 Setup Guide.md")).toBe("/BC-VO-02/");
+    expect(adapter.treePathToDocId.get("Recent/BC-VO-02 Setup Guide")).toBe("doc-a");
+    expect(adapter.treePathToRoute.get("engineering/guides/BC-VO-02 Setup Guide")).toBe("/BC-VO-02/");
     expect(adapter.docIdToTreePaths.get("doc-a")).toEqual([
-      "PINNED/BC-VO-02 Setup Guide.md",
-      "Recent/BC-VO-02 Setup Guide.md",
-      "engineering/guides/BC-VO-02 Setup Guide.md",
+      "PINNED/BC-VO-02 Setup Guide",
+      "Recent/BC-VO-02 Setup Guide",
+      "engineering/guides/BC-VO-02 Setup Guide",
     ]);
-    expect(adapter.docIdToPrimaryTreePath.get("doc-a")).toBe("PINNED/BC-VO-02 Setup Guide.md");
+    expect(adapter.docIdToPrimaryTreePath.get("doc-a")).toBe("PINNED/BC-VO-02 Setup Guide");
   });
 
   test("file basenames use prefix plus title and avoid path separator leaks", () => {
@@ -124,7 +124,7 @@ test.describe("Trees sidebar adapter", () => {
         },
         null,
       ),
-    ).toBe("DOC - 01 Setup - Install.md");
+    ).toBe("DOC - 01 Setup - Install");
   });
 
   test("duplicate canonical paths receive stable suffixes without changing route lookup", () => {
@@ -158,8 +158,8 @@ test.describe("Trees sidebar adapter", () => {
 
     const adapter = buildTreesAdapterInput(tree, []);
 
-    expect(adapter.paths).toEqual(["Docs/", "Docs/Same.md", "Docs/Same (2).md"]);
-    expect(adapter.treePathToRoute.get("Docs/Same.md")).toBe("/DOC-A/");
-    expect(adapter.treePathToRoute.get("Docs/Same (2).md")).toBe("/DOC-B/");
+    expect(adapter.paths).toEqual(["Docs/", "Docs/Same", "Docs/Same (2)"]);
+    expect(adapter.treePathToRoute.get("Docs/Same")).toBe("/DOC-A/");
+    expect(adapter.treePathToRoute.get("Docs/Same (2)")).toBe("/DOC-B/");
   });
 });

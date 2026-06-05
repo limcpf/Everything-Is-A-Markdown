@@ -11,7 +11,7 @@ test.describe("Trees sidebar search", () => {
     const searchClear = page.locator("#tree-search-clear");
     const searchNext = page.locator("#tree-search-next");
     const setupRow = page
-      .locator('#tree-root [data-type="item"][data-item-type="file"][data-item-path="Recent/BC-VO-02 Setup Guide.md"]')
+      .locator('#tree-root [data-type="item"][data-item-type="file"][data-item-path="Recent/BC-VO-02 Setup Guide"]')
       .first();
 
     await expect(searchInput).toBeVisible();
