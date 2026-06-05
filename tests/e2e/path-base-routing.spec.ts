@@ -133,7 +133,7 @@ test.describe("pathBase 정식 지원", () => {
       await expect(page.locator("#viewer-title")).toHaveText("About");
 
       const setupRow = page
-        .locator('#tree-root [data-type="item"][data-item-type="file"][data-item-path="Recent/BC-VO-02 Setup Guide.md"]')
+        .locator('#tree-root [data-type="item"][data-item-type="file"][data-item-path="Recent/BC-VO-02 Setup Guide"]')
         .first();
       await expect(setupRow).toBeVisible();
       await expect(setupRow).toContainText("NEW");

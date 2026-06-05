@@ -58,7 +58,7 @@ export function formatTreesFileBasename(node, doc) {
   const rawTitle = typeof node?.title === "string" && node.title.trim() ? node.title : doc?.title;
   const title = normalizeTreeSegment(rawTitle, normalizeTreeSegment(fallbackTitle, "Untitled"));
   const prefix = normalizeTreeSegment(node?.prefix ?? doc?.prefix ?? "", "");
-  return `${prefix ? `${prefix} ` : ""}${title}${FILE_EXTENSION}`;
+  return `${prefix ? `${prefix} ` : ""}${title}`;
 }
 
 export function buildTreesAdapterInput(treeNodes, docs = []) {
