@@ -17,6 +17,34 @@ const BRANCH_KEY = "fsblog.branch";
 const APP_READY_STATE_ATTR = "data-app-ready";
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const TREE_UNSAFE_CSS = `
+[data-type='item'][data-item-selected] {
+  border-left: 4px solid var(--trees-accent-override, currentColor);
+  box-shadow: inset 0 0 0 1px var(--trees-selected-focused-border-color-override, transparent);
+  padding-left: calc(var(--trees-item-padding-x) - 4px);
+}
+
+[data-type='item'][data-item-selected] [data-item-section='content'] {
+  font-weight: var(--trees-font-weight-semibold);
+}
+
+/* EIAM owns the visible search controls while Trees keeps search projection enabled. */
+[data-file-tree-search-container] {
+  display: none;
+}
+
+[data-item-section='decoration'] > span {
+  flex: 0 0 auto;
+  width: auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--trees-new-badge-bg, #d20f39);
+  color: var(--trees-new-badge-fg, #ffffff);
+  font-size: 0.625rem;
+  font-weight: 800;
+  line-height: 1;
+}
+`;
 const MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
 const MERMAID_DEFAULT_THEME = "default";
 const MERMAID_SELECTOR = "pre.mermaid";
@@ -979,6 +1007,11 @@ async function start() {
   setAppReadyState("booting");
 
   const treeRoot = document.getElementById("tree-root");
+  const treeSearchInput = document.getElementById("tree-search-input");
+  const treeSearchClear = document.getElementById("tree-search-clear");
+  const treeSearchPrev = document.getElementById("tree-search-prev");
+  const treeSearchNext = document.getElementById("tree-search-next");
+  const treeSearchCount = document.getElementById("tree-search-count");
   const appRoot = document.querySelector(".app-root");
   const splitter = document.getElementById("app-splitter");
   const sidebar = document.getElementById("sidebar-panel");
@@ -1010,6 +1043,7 @@ async function start() {
   let fileTree = null;
   let isSyncingTreeSelection = false;
   let treePathOrder = new Map();
+  let treeSearchValue = "";
 
   const announceA11yStatus = (message) => {
     if (!(a11yStatusEl instanceof HTMLElement)) {
@@ -1477,6 +1511,99 @@ async function start() {
     }
   };
 
+  const updateTreeSearchControls = () => {
+    const normalizedSearchValue = fileTree ? fileTree.getSearchValue() : treeSearchValue.trim();
+    const hasSearch = normalizedSearchValue.length > 0;
+    const matchCount = hasSearch && fileTree ? fileTree.getSearchMatchingPaths().length : 0;
+    const canStep = hasSearch && matchCount > 0;
+
+    if (treeSearchClear instanceof HTMLButtonElement) {
+      treeSearchClear.hidden = !hasSearch;
+      treeSearchClear.disabled = !hasSearch;
+    }
+
+    for (const button of [treeSearchPrev, treeSearchNext]) {
+      if (button instanceof HTMLButtonElement) {
+        button.disabled = !canStep;
+      }
+    }
+
+    if (treeSearchCount instanceof HTMLElement) {
+      treeSearchCount.textContent = hasSearch ? `${matchCount}개 일치` : "";
+    }
+  };
+
+  const applyTreeSearch = (value) => {
+    treeSearchValue = value;
+
+    if (treeSearchInput instanceof HTMLInputElement && treeSearchInput.value !== value) {
+      treeSearchInput.value = value;
+    }
+
+    if (fileTree) {
+      const query = value.trim();
+      if (query) {
+        if (fileTree.isSearchOpen()) {
+          fileTree.setSearch(query);
+        } else {
+          fileTree.openSearch(query);
+        }
+      } else {
+        fileTree.closeSearch();
+      }
+    }
+
+    updateTreeSearchControls();
+  };
+
+  const moveTreeSearchFocus = (direction) => {
+    if (!fileTree || !fileTree.isSearchOpen() || fileTree.getSearchMatchingPaths().length === 0) {
+      return;
+    }
+
+    if (direction < 0) {
+      fileTree.focusPreviousSearchMatch();
+    } else {
+      fileTree.focusNextSearchMatch();
+    }
+
+    updateTreeSearchControls();
+  };
+
+  if (treeSearchInput instanceof HTMLInputElement) {
+    treeSearchInput.addEventListener("input", () => {
+      applyTreeSearch(treeSearchInput.value);
+    });
+    treeSearchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        moveTreeSearchFocus(event.shiftKey ? -1 : 1);
+        return;
+      }
+
+      if (event.key === "Escape" && treeSearchInput.value.trim()) {
+        event.preventDefault();
+        event.stopPropagation();
+        applyTreeSearch("");
+      }
+    });
+  }
+
+  treeSearchClear?.addEventListener("click", () => {
+    applyTreeSearch("");
+    if (treeSearchInput instanceof HTMLInputElement) {
+      treeSearchInput.focus();
+    }
+  });
+
+  treeSearchPrev?.addEventListener("click", () => {
+    moveTreeSearchFocus(-1);
+  });
+
+  treeSearchNext?.addEventListener("click", () => {
+    moveTreeSearchFocus(1);
+  });
+
   const syncActiveTreeSelection = (docId, { scroll = true } = {}) => {
     if (!fileTree || !docId) {
       return;
@@ -1640,6 +1767,7 @@ async function start() {
         search: true,
         searchBlurBehavior: "retain",
         stickyFolders: true,
+        unsafeCSS: TREE_UNSAFE_CSS,
       });
       fileTree.render({ containerWrapper: treeRoot });
     } else {
@@ -1652,6 +1780,7 @@ async function start() {
     }
 
     syncActiveTreeSelection(state.currentDocId || "");
+    applyTreeSearch(treeSearchValue);
   };
 
   const updateBacklinks = (doc) => {
