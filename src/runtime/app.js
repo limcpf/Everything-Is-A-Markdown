@@ -211,7 +211,7 @@ function normalizeRenderedMermaidSvg(block) {
   svg.style.width = "auto";
   svg.style.height = "auto";
   svg.style.margin = "0 auto";
-  svg.style.maxWidth = "min(100%, var(--content-visual-max-width, 720px))";
+  svg.style.maxWidth = "min(100%, var(--content-visual-max-width, 880px))";
   svg.style.removeProperty("max-height");
 
   const viewBox = svg.viewBox?.baseVal;
@@ -231,7 +231,7 @@ function normalizeRenderedMermaidSvg(block) {
   const aspectRatio = intrinsicWidth / intrinsicHeight;
   if (container && aspectRatio >= MERMAID_WIDE_RATIO) {
     container.classList.add(MERMAID_BLOCK_WIDE_CLASS);
-    svg.style.maxWidth = "min(100%, var(--mermaid-wide-max-width, 640px))";
+    svg.style.maxWidth = "min(100%, var(--mermaid-wide-max-width, 820px))";
   }
 
   if (container && aspectRatio <= MERMAID_TALL_RATIO) {

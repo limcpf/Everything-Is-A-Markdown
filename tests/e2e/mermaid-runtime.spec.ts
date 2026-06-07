@@ -24,10 +24,10 @@ interface MermaidFixtureOptions {
 
 const DEFAULT_MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
 const DEFAULT_MERMAID_THEME = "default";
-const CONTENT_VISUAL_MAX_WIDTH = 720;
-const CONTENT_IMAGE_SQUARE_MAX_WIDTH = 640;
+const CONTENT_VISUAL_MAX_WIDTH = 880;
+const CONTENT_IMAGE_SQUARE_MAX_WIDTH = 720;
 const CONTENT_IMAGE_PORTRAIT_MAX_WIDTH = 560;
-const MERMAID_WIDE_MAX_WIDTH = 640;
+const MERMAID_WIDE_MAX_WIDTH = 820;
 const MERMAID_TALL_MAX_HEIGHT = 560;
 const TEST_ROUTE = "/MER-RT-01/";
 
