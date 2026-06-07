@@ -66,13 +66,15 @@
   --mobile-toggle-fg: #ffffff;
   --content-heading-accent-soft: rgba(136, 57, 239, 0.32);
   --content-heading-subtle: var(--latte-subtext1);
-  --content-visual-max-width: 720px;
-  --content-image-landscape-max-width: 720px;
-  --content-image-square-max-width: 640px;
+  --viewer-container-max-width: 1120px;
+  --viewer-content-max-width: 84ch;
+  --content-visual-max-width: 880px;
+  --content-image-landscape-max-width: 880px;
+  --content-image-square-max-width: 720px;
   --content-image-portrait-max-width: 560px;
   --content-image-radius: 8px;
   --content-image-frame-bg: linear-gradient(180deg, var(--latte-base), var(--latte-mantle));
-  --mermaid-wide-max-width: 640px;
+  --mermaid-wide-max-width: 820px;
   --mermaid-tall-max-height: 560px;
   --desktop-sidebar-default: 420px;
   --desktop-sidebar-min: 320px;
@@ -591,6 +593,9 @@ a:hover {
   --trees-file-icon-color-default: var(--latte-overlay0);
   --trees-new-badge-bg: var(--badge-new-bg);
   --trees-new-badge-fg: var(--badge-new-fg);
+  --trees-prefix-badge-bg: color-mix(in srgb, var(--latte-mauve) 16%, transparent);
+  --trees-prefix-badge-fg: var(--accent-strong);
+  --trees-prefix-badge-border: color-mix(in srgb, var(--latte-mauve) 42%, transparent);
   display: block;
   width: 100%;
   height: 100%;
@@ -816,9 +821,10 @@ body.mobile-toggle-left .mobile-menu-toggle {
 }
 
 .viewer-container {
-  max-width: 800px;
+  width: min(100%, var(--viewer-container-max-width));
+  max-width: none;
   margin: 0 auto;
-  padding: 48px 32px 80px;
+  padding: clamp(44px, 5vw, 72px) clamp(32px, 5vw, 72px) 96px;
 }
 
 /* Breadcrumb */
@@ -927,7 +933,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 .viewer-content {
   line-height: 1.82;
   font-size: 1.02rem;
-  max-width: 72ch;
+  max-width: var(--viewer-content-max-width);
   margin: 0 auto;
   text-wrap: pretty;
   color: var(--latte-subtext1);
@@ -1581,8 +1587,8 @@ body.mobile-toggle-left .mobile-menu-toggle {
   }
 
   .viewer-container {
-    max-width: 760px;
-    padding: 28px 24px 104px;
+    width: min(100%, 860px);
+    padding: 32px 24px 104px;
   }
 
   .viewer-title {
@@ -1651,13 +1657,14 @@ body.mobile-toggle-left .mobile-menu-toggle {
   }
 
   .viewer-container {
-    padding: 20px 18px 104px;
+    width: 100%;
+    padding: 22px clamp(16px, 5vw, 22px) 104px;
   }
 
   .viewer-content {
     font-size: 1.01rem;
     line-height: 1.88;
-    max-width: 65ch;
+    max-width: none;
   }
 
   .viewer-content h1 {

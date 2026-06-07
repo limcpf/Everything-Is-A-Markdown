@@ -46,8 +46,46 @@ const TREE_UNSAFE_CSS = `
 }
 
 [data-type='item'][data-item-type='file'] [data-item-section='content'] {
+  display: flex;
+  align-items: center;
   flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.tree-item-prefix-badge {
+  flex: 0 0 auto;
+  max-width: 6.5rem;
+  overflow: hidden;
+  padding: 2px 6px;
+  border: 1px solid var(--trees-prefix-badge-border, rgba(203, 166, 247, 0.38));
+  border-radius: 999px;
+  background: var(--trees-prefix-badge-bg, rgba(203, 166, 247, 0.14));
+  color: var(--trees-prefix-badge-fg, currentColor);
+  font-size: 0.66rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-item-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 [data-type='item'][data-item-type='file'] [data-item-section='decoration'] {
@@ -924,6 +962,112 @@ function getFocusableElements(container) {
   });
 }
 
+function normalizeTreeLabelText(value, fallback = "") {
+  const normalized = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  return normalized || fallback;
+}
+
+function getTreeLabelRenderRoot(host) {
+  return host?.shadowRoot || host || null;
+}
+
+function decorateTreeLabels(host) {
+  const metadataByTreePath = host?.__eiamMetadataByTreePath;
+  if (!(metadataByTreePath instanceof Map)) {
+    return;
+  }
+
+  const renderRoot = getTreeLabelRenderRoot(host);
+  if (!renderRoot) {
+    return;
+  }
+
+  const rows = renderRoot.querySelectorAll("[data-type='item'][data-item-type='file'][data-item-path]");
+  for (const row of rows) {
+    const treePath = row.getAttribute("data-item-path") || "";
+    const metadata = metadataByTreePath.get(treePath);
+    if (!metadata || metadata.kind !== "file") {
+      continue;
+    }
+
+    const prefix = normalizeTreeLabelText(metadata.prefix);
+    const fallbackName = treePath.split("/").pop() || "";
+    const fallbackTitle = prefix && fallbackName.startsWith(`${prefix} `)
+      ? fallbackName.slice(prefix.length).trimStart()
+      : fallbackName;
+    const title = normalizeTreeLabelText(metadata.title, fallbackTitle);
+    const labelKey = JSON.stringify([prefix, title]);
+    const content = row.querySelector("[data-item-section='content']");
+    if (!(content instanceof HTMLElement) || content.dataset.eiamTreeLabel === labelKey) {
+      continue;
+    }
+
+    content.dataset.eiamTreeLabel = labelKey;
+    content.textContent = "";
+
+    const label = document.createElement("span");
+    label.className = "tree-item-label";
+
+    if (prefix) {
+      const prefixBadge = document.createElement("span");
+      prefixBadge.className = "tree-item-prefix-badge";
+      prefixBadge.textContent = prefix;
+      label.appendChild(prefixBadge);
+    }
+
+    const titleText = document.createElement("span");
+    titleText.className = "tree-item-title";
+    titleText.textContent = title;
+    label.appendChild(titleText);
+
+    content.appendChild(label);
+    row.setAttribute("title", prefix ? `${prefix} ${title}` : title);
+  }
+}
+
+function queueTreeLabelDecoration(host) {
+  if (!(host instanceof HTMLElement)) {
+    return;
+  }
+
+  if (host.__eiamTreeLabelFrame) {
+    window.cancelAnimationFrame(host.__eiamTreeLabelFrame);
+  }
+
+  host.__eiamTreeLabelFrame = window.requestAnimationFrame(() => {
+    host.__eiamTreeLabelFrame = 0;
+    decorateTreeLabels(host);
+  });
+}
+
+function setupTreeLabelDecorations(treeRoot, metadataByTreePath) {
+  const host = treeRoot?.querySelector("file-tree-container");
+  if (!(host instanceof HTMLElement)) {
+    return;
+  }
+
+  host.__eiamMetadataByTreePath = metadataByTreePath;
+
+  const renderRoot = getTreeLabelRenderRoot(host);
+  if (!renderRoot) {
+    return;
+  }
+
+  if (host.__eiamTreeLabelObservedRoot !== renderRoot) {
+    host.__eiamTreeLabelObserver?.disconnect();
+    host.__eiamTreeLabelObservedRoot = renderRoot;
+    host.__eiamTreeLabelObserver = new MutationObserver(() => {
+      queueTreeLabelDecoration(host);
+    });
+    host.__eiamTreeLabelObserver.observe(renderRoot, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  queueTreeLabelDecoration(host);
+}
+
 function renderBreadcrumb(route) {
   const parts = route.split("/").filter(Boolean);
   const allItems = ["~", ...parts];
@@ -1792,6 +1936,7 @@ async function start() {
 
     syncActiveTreeSelection(state.currentDocId || "");
     applyTreeSearch(treeSearchValue);
+    setupTreeLabelDecorations(treeRoot, view.trees.metadataByTreePath);
   };
 
   const updateBacklinks = (doc) => {
