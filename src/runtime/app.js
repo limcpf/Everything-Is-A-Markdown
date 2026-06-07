@@ -1199,6 +1199,7 @@ async function start() {
   let isSyncingTreeSelection = false;
   let treePathOrder = new Map();
   let treeSearchValue = "";
+  let renderedTreeBranch = "";
 
   const announceA11yStatus = (message) => {
     if (!(a11yStatusEl instanceof HTMLElement)) {
@@ -1811,6 +1812,30 @@ async function start() {
     }
   };
 
+  const cleanupTreeLabelDecorations = (host) => {
+    if (!(host instanceof HTMLElement)) {
+      return;
+    }
+
+    if (host.__eiamTreeLabelFrame) {
+      window.cancelAnimationFrame(host.__eiamTreeLabelFrame);
+      host.__eiamTreeLabelFrame = 0;
+    }
+    host.__eiamTreeLabelObserver?.disconnect();
+    delete host.__eiamTreeLabelObserver;
+    delete host.__eiamTreeLabelObservedRoot;
+    delete host.__eiamMetadataByTreePath;
+  };
+
+  const destroyFileTree = () => {
+    const host = treeRoot instanceof HTMLElement ? treeRoot.querySelector("file-tree-container") : null;
+    cleanupTreeLabelDecorations(host);
+    fileTree?.cleanUp?.();
+    fileTree = null;
+    renderedTreeBranch = "";
+    host?.remove();
+  };
+
   const compareTreesByBranchOrder = (left, right) => {
     const leftIndex = treePathOrder.get(left.path) ?? Number.MAX_SAFE_INTEGER;
     const rightIndex = treePathOrder.get(right.path) ?? Number.MAX_SAFE_INTEGER;
@@ -1883,6 +1908,10 @@ async function start() {
       return;
     }
 
+    if (fileTree && renderedTreeBranch !== activeBranch) {
+      destroyFileTree();
+    }
+
     const preparedInput = prepareTreesInput();
     const selectedTreePath = state.currentDocId
       ? view.trees.docIdToPrimaryTreePath.get(state.currentDocId)
@@ -1934,6 +1963,7 @@ async function start() {
       }
     }
 
+    renderedTreeBranch = activeBranch;
     syncActiveTreeSelection(state.currentDocId || "");
     applyTreeSearch(treeSearchValue);
     setupTreeLabelDecorations(treeRoot, view.trees.metadataByTreePath);

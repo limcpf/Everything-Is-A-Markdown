@@ -67,7 +67,6 @@
   --content-heading-accent-soft: rgba(136, 57, 239, 0.32);
   --content-heading-subtle: var(--latte-subtext1);
   --viewer-container-max-width: 1120px;
-  --viewer-content-max-width: 84ch;
   --content-visual-max-width: 880px;
   --content-image-landscape-max-width: 880px;
   --content-image-square-max-width: 720px;
@@ -217,7 +216,7 @@ a:hover {
   font-family: "Material Symbols Outlined", "Material Icons", sans-serif;
   font-style: normal;
   font-weight: 400;
-  letter-spacing: normal;
+  letter-spacing: 0;
   text-transform: none;
   white-space: nowrap;
   word-wrap: normal;
@@ -350,7 +349,7 @@ a:hover {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -413,7 +412,7 @@ a:hover {
   font-size: 0.8rem;
   font-weight: 700;
   line-height: 1.15;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   padding: 7px 14px;
   cursor: pointer;
   white-space: nowrap;
@@ -889,7 +888,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   font-size: 2.5rem;
   font-weight: 700;
   line-height: 1.2;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
   color: var(--latte-text);
 }
 
@@ -917,7 +916,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 .meta-prefix {
   font-size: 0.74rem;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0;
   color: var(--latte-subtext1);
 }
 
@@ -933,8 +932,9 @@ body.mobile-toggle-left .mobile-menu-toggle {
 .viewer-content {
   line-height: 1.82;
   font-size: 1.02rem;
-  max-width: var(--viewer-content-max-width);
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
   text-wrap: pretty;
   color: var(--latte-subtext1);
 }
@@ -950,7 +950,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   color: var(--latte-text);
   font-weight: 650;
   line-height: 1.33;
-  letter-spacing: -0.015em;
+  letter-spacing: 0;
   text-wrap: balance;
   margin-top: 2.2rem;
   margin-bottom: 0.95rem;
@@ -960,7 +960,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 .viewer-content h1 {
   font-size: 2.08rem;
   font-weight: 760;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   margin-top: 2.8rem;
   margin-bottom: 1.1rem;
   padding-bottom: 0.4rem;
@@ -999,7 +999,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   word-break: keep-all;
   overflow-wrap: break-word;
   line-break: auto;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .viewer-content strong {
@@ -1127,7 +1127,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   font-size: 0.95rem;
   font-weight: 500;
   line-height: 1.72;
-  letter-spacing: 0.005em;
+  letter-spacing: 0;
   background: transparent !important;
   color: inherit;
 }
@@ -1408,7 +1408,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 .backlink-prefix {
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0;
   color: var(--latte-overlay0);
   padding: 1px 7px;
   border-radius: 999px;
