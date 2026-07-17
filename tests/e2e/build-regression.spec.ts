@@ -264,6 +264,121 @@ title: HTML Policy
     }
   });
 
+  test("cache에는 unpublished와 draft Markdown 본문을 저장하지 않는다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-private-cache-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+    const cachePath = path.join(workDir, ".cache", "build-index.json");
+    const publicPath = path.join(vaultDir, "public.md");
+    const privatePath = path.join(vaultDir, "private.md");
+    const draftPath = path.join(vaultDir, "draft.md");
+
+    try {
+      writeText(
+        publicPath,
+        `---
+publish: true
+prefix: CACHE-PUBLIC
+category_path: cache/public
+title: Public Cache
+---
+
+PUBLIC_CACHE_BODY
+`,
+      );
+      writeText(
+        privatePath,
+        `---
+publish: false
+title: Private Cache
+---
+
+PRIVATE_CACHE_SECRET
+`,
+      );
+      writeText(
+        draftPath,
+        `---
+publish: true
+draft: true
+title: Draft Cache
+---
+
+DRAFT_CACHE_SECRET
+`,
+      );
+
+      const firstBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(firstBuild.status, firstBuild.output).toBe(0);
+      const firstCache = fs.readFileSync(cachePath, "utf8");
+      expect(firstCache).toContain("PUBLIC_CACHE_BODY");
+      expect(firstCache).not.toContain("PRIVATE_CACHE_SECRET");
+      expect(firstCache).not.toContain("DRAFT_CACHE_SECRET");
+      const firstSources = (JSON.parse(firstCache) as { sources: Record<string, unknown> }).sources;
+      expect(firstSources["public.md"]).toBeDefined();
+      expect(firstSources["private.md"]).toBeUndefined();
+      expect(firstSources["draft.md"]).toBeUndefined();
+
+      const incrementalBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(incrementalBuild.status, incrementalBuild.output).toBe(0);
+      expect(incrementalBuild.output).toContain("total=1 rendered=0 skipped=1");
+
+      writeText(
+        privatePath,
+        `---
+publish: true
+prefix: CACHE-PRIVATE
+category_path: cache/private
+title: Published Private Cache
+---
+
+PRIVATE_CACHE_SECRET
+`,
+      );
+      writeText(
+        publicPath,
+        `---
+publish: false
+prefix: CACHE-PUBLIC
+category_path: cache/public
+title: Private Public Cache
+---
+
+PUBLIC_CACHE_BODY
+`,
+      );
+      writeText(
+        draftPath,
+        `---
+publish: true
+draft: false
+prefix: CACHE-DRAFT
+category_path: cache/draft
+title: Published Draft Cache
+---
+
+DRAFT_CACHE_SECRET
+`,
+      );
+
+      const stateBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(stateBuild.status, stateBuild.output).toBe(0);
+      const manifest = readManifest(outDir) as { docs: Array<{ route: string }> };
+      expect(manifest.docs.map((doc) => doc.route).sort()).toEqual(["/CACHE-DRAFT/", "/CACHE-PRIVATE/"]);
+
+      const nextCache = fs.readFileSync(cachePath, "utf8");
+      expect(nextCache).not.toContain("PUBLIC_CACHE_BODY");
+      expect(nextCache).toContain("PRIVATE_CACHE_SECRET");
+      expect(nextCache).toContain("DRAFT_CACHE_SECRET");
+      const nextSources = (JSON.parse(nextCache) as { sources: Record<string, unknown> }).sources;
+      expect(nextSources["public.md"]).toBeUndefined();
+      expect(nextSources["private.md"]).toBeDefined();
+      expect(nextSources["draft.md"]).toBeDefined();
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
   test("CLI 숫자 옵션은 잘못된 값을 거부한다", async () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-cli-validation-"));
 

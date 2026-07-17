@@ -505,6 +505,8 @@ Example:
 
 The build caches source metadata and output hashes in `.cache/build-index.json`.
 
+Only published, non-draft Markdown source bodies are persisted. Unpublished and draft entries are omitted from the cache, so their content is re-evaluated when needed but never written to persistent build state.
+
 This allows it to:
 
 - skip unchanged rendered content

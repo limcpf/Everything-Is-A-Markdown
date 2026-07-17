@@ -21,7 +21,7 @@ import {
   toDocId,
 } from "./utils";
 
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 const CACHE_DIR_NAME = ".cache";
 const CACHE_FILE_NAME = "build-index.json";
 const OUTPUT_MARKER_FILE_NAME = ".eiam-output.json";
@@ -708,11 +708,11 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
       mtimeMs: stat.mtimeMs,
       size: stat.size,
     };
-    nextSources[relPath] = completeEntry;
-
     if (!completeEntry.publish || completeEntry.draft) {
       continue;
     }
+
+    nextSources[relPath] = completeEntry;
 
     if (!completeEntry.prefix) {
       console.warn(`[publish] Skipped published doc without prefix: ${relPath}`);
