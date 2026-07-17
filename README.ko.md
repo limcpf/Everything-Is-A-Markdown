@@ -118,6 +118,7 @@ export default config;
 
 - 서브패스 배포(예: `/blog`)를 정식 지원합니다.
 - 내부 라우팅/본문 fetch 링크에 동일한 base path가 적용됩니다.
+- 생성된 `404.html`의 Home 링크도 정규화된 base path를 사용합니다. 예를 들어 `/blog` 배포에서는 `/blog/`로 돌아갑니다.
 - 루트 배포는 빈 문자열(`""`)을 사용합니다.
 
 `markdown.allowUnsafeHtml`:

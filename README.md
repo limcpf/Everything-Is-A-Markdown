@@ -494,6 +494,7 @@ With SEO enabled, the build writes:
 - `sitemap.xml`
 
 `seo.pathBase` is supported for subpath deployments such as `/blog`.
+The generated `404.html` Home action uses the same normalized base, so `/blog` returns to `/blog/` while root deployments continue to use `/`.
 
 Example:
 

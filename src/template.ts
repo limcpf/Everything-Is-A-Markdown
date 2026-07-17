@@ -354,7 +354,7 @@ ${initialManifestScript}
 `;
 }
 
-export function render404Html(assets: AppShellAssets = DEFAULT_ASSETS): string {
+export function render404Html(assets: AppShellAssets = DEFAULT_ASSETS, homeHref = "/"): string {
   const symbolFontStylesheet =
     "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap";
 
@@ -378,7 +378,7 @@ export function render404Html(assets: AppShellAssets = DEFAULT_ASSETS): string {
       </div>
       <h1>404</h1>
       <p>요청한 문서를 찾을 수 없습니다.</p>
-      <a href="/" class="not-found-link">
+      <a href="${escapeHtmlAttribute(homeHref)}" class="not-found-link">
         <span class="material-symbols-outlined">home</span>
         홈으로 이동
       </a>
