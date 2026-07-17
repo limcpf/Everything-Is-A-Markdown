@@ -516,6 +516,8 @@ This allows it to:
 - restore missing hashed runtime assets on a later build
 - remove stale route pages and content files when documents are removed or routes change
 
+Every Markdown source is read and SHA-256 fingerprinted before a cache entry is reused. This catches content replacement even when file size and mtime are preserved. When the fingerprint is unchanged, frontmatter parsing and Markdown rendering are still skipped. The regression suite measures a 40-document no-op build and requires `rendered=0`, `skipped=40`, and under 10 seconds of wall-clock time; run it with `bunx playwright test tests/e2e/build-regression.spec.ts --grep "ordinary no-op"`.
+
 ## Markdown Lint for Published Docs
 
 This repository includes a publish-only Markdown lint command:

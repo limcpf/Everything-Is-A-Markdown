@@ -21,7 +21,7 @@ import {
   toDocId,
 } from "./utils";
 
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 const CACHE_ROOT_SEGMENTS = [".cache", "eiam"] as const;
 const CACHE_NAMESPACE_VERSION = 1;
 const CACHE_FILE_NAME = "build-index.json";
@@ -630,11 +630,19 @@ function extractWikiTargets(markdown: string): string[] {
   return Array.from(targets).sort((left, right) => left.localeCompare(right, "ko-KR"));
 }
 
-function toCachedSourceEntry(raw: string, parsed: matter.GrayMatterFile<string>): CachedSourceEntry {
+function makeSourceFingerprint(raw: string): string {
+  return crypto.createHash("sha256").update(raw).digest("hex");
+}
+
+function toCachedSourceEntry(
+  raw: string,
+  rawHash: string,
+  parsed: matter.GrayMatterFile<string>,
+): CachedSourceEntry {
   return {
     mtimeMs: 0,
     size: 0,
-    rawHash: makeHash(raw),
+    rawHash,
     publish: parsed.data.publish === true,
     draft: parsed.data.draft === true,
     title: typeof parsed.data.title === "string" && parsed.data.title.trim().length > 0 ? parsed.data.title.trim() : undefined,
@@ -702,14 +710,14 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
 
   for (const { sourcePath, relPath, stat } of fileEntries) {
     const prev = previousSources[relPath];
+    const raw = await Bun.file(sourcePath).text();
+    const rawHash = makeSourceFingerprint(raw);
 
     let entry: CachedSourceEntry;
-    const canReuse = !!prev && prev.mtimeMs === stat.mtimeMs && prev.size === stat.size;
+    const canReuse = !!prev && prev.rawHash === rawHash;
     if (canReuse) {
       entry = prev;
     } else {
-      const raw = await Bun.file(sourcePath).text();
-
       let parsed: matter.GrayMatterFile<string>;
       try {
         parsed = matter(raw);
@@ -717,7 +725,7 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
         throw new Error(`Frontmatter parse failed: ${relPath}\n${(error as Error).message}`);
       }
 
-      entry = toCachedSourceEntry(raw, parsed);
+      entry = toCachedSourceEntry(raw, rawHash, parsed);
     }
 
     const completeEntry: CachedSourceEntry = {
