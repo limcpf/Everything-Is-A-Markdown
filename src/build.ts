@@ -22,7 +22,8 @@ import {
 } from "./utils";
 
 const CACHE_VERSION = 5;
-const CACHE_DIR_NAME = ".cache";
+const CACHE_ROOT_SEGMENTS = [".cache", "eiam"] as const;
+const CACHE_NAMESPACE_VERSION = 1;
 const CACHE_FILE_NAME = "build-index.json";
 const OUTPUT_MARKER_FILE_NAME = ".eiam-output.json";
 const OUTPUT_MARKER_FORMAT = "everything-is-a-markdown-output";
@@ -62,12 +63,14 @@ interface BuildResult {
   skippedDocs: number;
 }
 
-function toContentFileName(id: string): string {
-  return `${makeHash(id)}.html`;
+interface CacheLocation {
+  rootDir: string;
+  namespaceDir: string;
+  cachePath: string;
 }
 
-function toCachePath(): string {
-  return path.join(process.cwd(), CACHE_DIR_NAME, CACHE_FILE_NAME);
+function toContentFileName(id: string): string {
+  return `${makeHash(id)}.html`;
 }
 
 function isSamePathOrAncestor(candidate: string, target: string): boolean {
@@ -99,6 +102,22 @@ async function toCanonicalPath(input: string): Promise<string> {
       existingAncestor = parent;
     }
   }
+}
+
+async function resolveCacheLocation(options: BuildOptions): Promise<CacheLocation> {
+  const [vaultRoot, outputRoot] = await Promise.all([
+    toCanonicalPath(options.vaultDir),
+    toCanonicalPath(options.outDir),
+  ]);
+  const namespace = `v${CACHE_NAMESPACE_VERSION}-${makeHash(`${vaultRoot}\0${outputRoot}`)}`;
+  const rootDir = path.join(process.cwd(), ...CACHE_ROOT_SEGMENTS);
+  const namespaceDir = path.join(rootDir, namespace);
+
+  return {
+    rootDir,
+    namespaceDir,
+    cachePath: path.join(namespaceDir, CACHE_FILE_NAME),
+  };
 }
 
 async function assertSafeOutputRoot(outDir: string, vaultDir: string): Promise<string> {
@@ -176,12 +195,10 @@ async function prepareOwnedOutputDirectory(options: BuildOptions): Promise<void>
   }
 }
 
-async function removeLegacyCacheIndex(): Promise<void> {
-  const cachePath = toCachePath();
-  await fs.rm(cachePath, { force: true });
-
+async function removeCacheNamespace(location: CacheLocation): Promise<void> {
+  await fs.rm(location.namespaceDir, { recursive: true, force: true });
   try {
-    await fs.rmdir(path.dirname(cachePath));
+    await fs.rmdir(location.rootDir);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code !== "ENOENT" && code !== "ENOTEMPTY") {
@@ -1620,6 +1637,7 @@ async function cleanRemovedOutputs(outDir: string, oldCache: BuildCache, current
 }
 
 export async function cleanBuildArtifacts(options: BuildOptions): Promise<void> {
+  const cacheLocation = await resolveCacheLocation(options);
   const requestedOutputRoot = path.resolve(options.outDir);
   const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir);
 
@@ -1640,7 +1658,7 @@ export async function cleanBuildArtifacts(options: BuildOptions): Promise<void> 
     }
   }
 
-  await removeLegacyCacheIndex();
+  await removeCacheNamespace(cacheLocation);
 }
 
 function buildWikiResolutionSignature(doc: DocRecord, lookup: WikiLookup): string {
@@ -1695,7 +1713,7 @@ export async function buildSite(options: BuildOptions): Promise<BuildResult> {
   await prepareOwnedOutputDirectory(options);
   await ensureDir(path.join(options.outDir, "content"));
 
-  const cachePath = toCachePath();
+  const { cachePath } = await resolveCacheLocation(options);
   const previousCache = await readCache(cachePath);
   const canReuseOutputs = await fileExists(path.join(options.outDir, "manifest.json"));
   const previousDocs = canReuseOutputs ? previousCache.docs : {};

@@ -33,9 +33,9 @@ bun run blog [build|dev|clean] [options]
 
 - `bun run build`: 정적 파일 빌드
 - `bun run dev`: 로컬 개발 서버 실행 (기본 `http://localhost:3000`)
-- `bun run clean`: EIAM 소유권 마커가 확인된 `dist`와 EIAM cache index만 삭제
+- `bun run clean`: EIAM 소유권 마커가 확인된 `dist`와 일치하는 EIAM cache namespace만 삭제
 
-빌드는 전용 출력 디렉터리에 `.eiam-output.json` 소유권 마커를 기록합니다. 비어 있지 않은 미소유 디렉터리는 출력 경로로 사용하지 않으며, `clean`도 광범위한 경로나 마커가 없는 디렉터리를 삭제하지 않습니다. 일반 `.cache`의 다른 파일은 보존합니다.
+빌드는 전용 출력 디렉터리에 `.eiam-output.json` 소유권 마커를 기록합니다. 비어 있지 않은 미소유 디렉터리는 출력 경로로 사용하지 않으며, `clean`도 광범위한 경로나 마커가 없는 디렉터리를 삭제하지 않습니다. sibling EIAM cache namespace와 일반 `.cache`의 다른 파일은 보존합니다.
 
 자주 쓰는 옵션:
 
@@ -206,6 +206,8 @@ title: Work In Progress
 ```
 
 ## 캐시와 비공개 문서
+
+빌드 cache는 실행 작업 디렉터리 기준 `.cache/eiam/v1-<namespace>/build-index.json`에 저장됩니다. namespace는 canonical `vaultDir`와 `outDir` 경로 쌍의 안정적인 hash입니다. config를 먼저 해석한 다음 CLI의 `--vault`와 `--out`이 이를 덮어쓰며, 어느 경로든 달라지면 별도 namespace를 선택합니다. cache root 자체를 별도로 재지정하는 옵션은 없습니다. `clean`은 선택된 경로 쌍의 namespace만 삭제합니다.
 
 증분 빌드 cache에는 `publish: true`이면서 draft가 아닌 Markdown 본문만 저장됩니다. 비공개 문서와 draft 문서는 persistent cache entry에서 완전히 제외되며, publish/draft 상태가 바뀌면 다음 빌드에서 다시 평가됩니다.
 
