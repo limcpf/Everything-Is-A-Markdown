@@ -46,6 +46,8 @@ bun run blog [build|dev|clean] [options]
 - `--recent-limit <n>`: Recent 폴더 문서 수 제한 (정수 `>= 1`, 기본 `5`)
 - `--port <n>`: 개발 서버 포트 (기본 `3000`)
 
+값을 받는 옵션에서 값을 생략하거나 다음 CLI flag를 값 자리에 두면 `[cli] Missing value for <option>` 오류로 즉시 종료합니다. 음수 등 실제 숫자 형태는 값으로 읽은 뒤 기존 숫자 범위 검증을 적용합니다.
+
 ## Markdown Lint (publish 전용)
 
 `publish: true` 문서만 대상으로 Markdown lint를 실행하고, 결과를 JSON 파일로 저장할 수 있습니다.

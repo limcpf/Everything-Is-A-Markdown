@@ -73,6 +73,27 @@ function normalizeMermaidTheme(value: unknown): string {
   return normalized;
 }
 
+function readOptionValue(
+  args: string[],
+  optionIndex: number,
+  option: string,
+  allowNegativeNumber = false,
+): string {
+  const value = args[optionIndex + 1];
+  const isFlagShaped = !value || value.startsWith("-");
+  const isNegativeNumber =
+    allowNegativeNumber &&
+    typeof value === "string" &&
+    value.startsWith("-") &&
+    !Number.isNaN(Number(value));
+
+  if (!value || (isFlagShaped && !isNegativeNumber)) {
+    throw new Error(`[cli] Missing value for ${option}`);
+  }
+
+  return value;
+}
+
 export function parseCliArgs(argv: string[]): CliArgs {
   const [first] = argv;
   const command = first === "build" || first === "dev" || first === "clean" ? first : "build";
@@ -91,31 +112,38 @@ export function parseCliArgs(argv: string[]): CliArgs {
       continue;
     }
     if (token === "--vault") {
-      parsed.vaultDir = rest[++i];
+      parsed.vaultDir = readOptionValue(rest, i, token);
+      i += 1;
       continue;
     }
     if (token === "--out") {
-      parsed.outDir = rest[++i];
+      parsed.outDir = readOptionValue(rest, i, token);
+      i += 1;
       continue;
     }
     if (token === "--exclude") {
-      parsed.exclude.push(rest[++i]);
+      parsed.exclude.push(readOptionValue(rest, i, token));
+      i += 1;
       continue;
     }
     if (token === "--new-within-days") {
-      parsed.newWithinDays = Number(rest[++i]);
+      parsed.newWithinDays = Number(readOptionValue(rest, i, token, true));
+      i += 1;
       continue;
     }
     if (token === "--recent-limit") {
-      parsed.recentLimit = Number(rest[++i]);
+      parsed.recentLimit = Number(readOptionValue(rest, i, token, true));
+      i += 1;
       continue;
     }
     if (token === "--menu-config") {
-      parsed.menuConfigPath = rest[++i];
+      parsed.menuConfigPath = readOptionValue(rest, i, token);
+      i += 1;
       continue;
     }
     if (token === "--port") {
-      parsed.port = Number(rest[++i]);
+      parsed.port = Number(readOptionValue(rest, i, token, true));
+      i += 1;
       continue;
     }
     throw new Error(`Unknown option: ${token}`);

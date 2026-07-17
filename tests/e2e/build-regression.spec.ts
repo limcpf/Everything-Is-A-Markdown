@@ -669,6 +669,7 @@ DRAFT_CACHE_SECRET
       ]);
       expect(invalidRecent.status).not.toBe(0);
       expect(invalidRecent.output).toContain("--recent-limit");
+      expect(invalidRecent.output).not.toContain("[cli] Missing value");
 
       const invalidNewWithinDays = runCli(workDir, [
         cliPath,
@@ -682,6 +683,35 @@ DRAFT_CACHE_SECRET
       ]);
       expect(invalidNewWithinDays.status).not.toBe(0);
       expect(invalidNewWithinDays.output).toContain("--new-within-days");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("build, dev, clean의 모든 값 옵션은 누락되거나 다음 flag인 값을 거부한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-cli-missing-values-"));
+    const cases = [
+      { command: "build", option: "--vault" },
+      { command: "dev", option: "--out" },
+      { command: "clean", option: "--exclude" },
+      { command: "build", option: "--new-within-days" },
+      { command: "dev", option: "--recent-limit" },
+      { command: "clean", option: "--menu-config" },
+      { command: "dev", option: "--port" },
+    ] as const;
+
+    try {
+      for (const { command, option } of cases) {
+        const expectedError = `[cli] Missing value for ${option}`;
+
+        const omitted = runCli(workDir, [cliPath, command, option]);
+        expect(omitted.status, `${command} ${option}\n${omitted.output}`).not.toBe(0);
+        expect(omitted.output).toContain(expectedError);
+
+        const followedByFlag = runCli(workDir, [cliPath, command, option, "--help"]);
+        expect(followedByFlag.status, `${command} ${option} --help\n${followedByFlag.output}`).not.toBe(0);
+        expect(followedByFlag.output).toContain(expectedError);
+      }
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
