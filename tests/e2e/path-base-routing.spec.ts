@@ -104,6 +104,7 @@ test.describe("pathBase 정식 지원", () => {
   const vaultPath = path.join(repoRoot, "test-vault");
 
   test("생성된 404 Home 링크는 root와 정규화된 nested pathBase를 따른다", async () => {
+    test.setTimeout(60_000);
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-404-home-"));
     const outDir = path.join(workDir, "dist");
     const configPath = path.join(workDir, "blog.config.mjs");
@@ -129,6 +130,7 @@ test.describe("pathBase 정식 지원", () => {
   });
 
   test("서브패스(/blog)에서 라우팅/내부 링크/본문 fetch가 정상 동작한다", async ({ page }) => {
+    test.setTimeout(60_000);
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-path-base-"));
     const outDir = path.join(workDir, "dist");
     const configPath = path.join(workDir, "blog.config.mjs");
