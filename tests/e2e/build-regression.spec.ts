@@ -202,6 +202,68 @@ test.describe("빌드 회귀 가드", () => {
     }
   });
 
+  test("raw HTML은 기본 sanitize되고 명시적 unsafe 설정에서만 유지된다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-html-sanitize-"));
+    const vaultDir = path.join(workDir, "vault");
+    const safeWorkDir = path.join(workDir, "safe");
+    const unsafeWorkDir = path.join(workDir, "unsafe");
+    const rawPayload = `---
+publish: true
+prefix: SAFE-HTML-01
+category_path: security/html
+title: HTML Policy
+---
+
+<div class="safe-format"><strong>Allowed formatting</strong></div>
+<script>window.__script_payload = 1</script>
+<img src="https://example.com/safe.png" alt="safe" onerror="window.__event_payload = 1" />
+<a href="javascript:window.__url_payload = 1">Unsafe URL</a>
+<iframe src="https://example.com/unsafe"></iframe>
+`;
+
+    try {
+      writeText(path.join(vaultDir, "unsafe.md"), rawPayload);
+      fs.mkdirSync(safeWorkDir, { recursive: true });
+      fs.mkdirSync(unsafeWorkDir, { recursive: true });
+
+      const safeOutDir = path.join(safeWorkDir, "dist");
+      const safeBuild = runCli(safeWorkDir, [cliPath, "build", "--vault", vaultDir, "--out", safeOutDir]);
+      expect(safeBuild.status, safeBuild.output).toBe(0);
+      const safeContent = readDocContentHtml(safeOutDir, "/SAFE-HTML-01/");
+      const safeRoute = fs.readFileSync(path.join(safeOutDir, "SAFE-HTML-01", "index.html"), "utf8");
+      for (const rendered of [safeContent, safeRoute]) {
+        expect(rendered).toContain('<div class="safe-format"><strong>Allowed formatting</strong></div>');
+        expect(rendered).not.toContain("window.__script_payload");
+        expect(rendered).not.toContain("window.__event_payload");
+        expect(rendered).not.toContain("javascript:window.__url_payload");
+        expect(rendered).not.toContain("https://example.com/unsafe");
+      }
+
+      writeText(
+        path.join(unsafeWorkDir, "blog.config.mjs"),
+        "export default { markdown: { allowUnsafeHtml: true } };\n",
+      );
+      const unsafeOutDir = path.join(unsafeWorkDir, "dist");
+      const unsafeBuild = runCli(unsafeWorkDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultDir,
+        "--out",
+        unsafeOutDir,
+      ]);
+      expect(unsafeBuild.status, unsafeBuild.output).toBe(0);
+      expect(unsafeBuild.output).toContain("allowUnsafeHtml=true disables rendered HTML sanitization");
+      const unsafeContent = readDocContentHtml(unsafeOutDir, "/SAFE-HTML-01/");
+      expect(unsafeContent).toContain("<script>window.__script_payload = 1</script>");
+      expect(unsafeContent).toContain('onerror="window.__event_payload = 1"');
+      expect(unsafeContent).toContain('href="javascript:window.__url_payload = 1"');
+      expect(unsafeContent).toContain('<iframe src="https://example.com/unsafe"></iframe>');
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
   test("CLI 숫자 옵션은 잘못된 값을 거부한다", async () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-cli-validation-"));
 

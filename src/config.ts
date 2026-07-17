@@ -24,6 +24,7 @@ const DEFAULTS = {
   wikilinks: true,
   imagePolicy: "omit-local" as const,
   gfm: true,
+  allowUnsafeHtml: false,
   shikiTheme: "github-dark",
   mermaid: {
     enabled: true,
@@ -314,6 +315,7 @@ export function resolveBuildOptions(
     wikilinks: userConfig.markdown?.wikilinks ?? DEFAULTS.wikilinks,
     imagePolicy: userConfig.markdown?.images ?? DEFAULTS.imagePolicy,
     gfm: userConfig.markdown?.gfm ?? DEFAULTS.gfm,
+    allowUnsafeHtml: userConfig.markdown?.allowUnsafeHtml === true,
     shikiTheme: userConfig.markdown?.highlight?.theme ?? DEFAULTS.shikiTheme,
     mermaid: {
       enabled: normalizeMermaidEnabled(userConfig.markdown?.mermaid?.enabled),

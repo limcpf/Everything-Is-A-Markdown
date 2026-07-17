@@ -241,6 +241,7 @@ export default {
     wikilinks: true,
     images: "omit-local",
     gfm: true,
+    allowUnsafeHtml: false,
     highlight: {
       engine: "shiki",
       theme: "github-dark",
@@ -282,6 +283,7 @@ export default {
 - `markdown.wikilinks`: enable or disable wikilink resolution.
 - `markdown.images`: `"keep"` or `"omit-local"`.
 - `markdown.gfm`: enable or disable GFM table/strikethrough support.
+- `markdown.allowUnsafeHtml`: disables rendered HTML sanitization only when explicitly set to `true`; default `false`.
 - `markdown.highlight.theme`: Shiki theme.
 - `markdown.mermaid.*`: Mermaid runtime settings.
 - `seo.*`: canonical URL, social metadata, sitemap, robots, and path-base behavior.
@@ -370,6 +372,22 @@ Remote URLs are kept even when `"omit-local"` is used.
 
 This rule also applies to Obsidian-style image embeds such as `![[image.png]]`.
 
+### Raw HTML safety
+
+Rendered HTML is sanitized by default before it is written to fetched content files or embedded in direct route pages. The allowlist keeps standard Markdown formatting, tables, images, figures, details, and EIAM/Shiki code markup. It permits classes, safe link/image URLs (`http`, `https`, `mailto`, and relative paths), and Shiki's hex `color`/`background-color` styles. Scripts, event-handler attributes, `javascript:` URLs, iframes, SVG, and arbitrary inline styles are removed.
+
+Trusted vaults can opt out explicitly:
+
+```ts
+export default {
+  markdown: {
+    allowUnsafeHtml: true,
+  },
+};
+```
+
+This setting allows arbitrary authored HTML and can execute client-side code. Do not enable it for content that is untrusted or may be published accidentally.
+
 ### Code Blocks
 
 Regular fenced code blocks are rendered with:
@@ -414,7 +432,7 @@ Body images now use orientation-aware sizing inside the viewer:
 - Near-square images get an intermediate width.
 
 When local Markdown images are enabled with `markdown.images: "keep"`, standalone image paragraphs are promoted into a dedicated `figure.content-image` wrapper automatically.
-Raw HTML remains available for manual framing when you want a fixed ratio or a specific crop mode.
+Allowlisted raw HTML remains available for manual framing when you want a fixed ratio or a specific crop mode.
 
 Example frame utilities:
 
