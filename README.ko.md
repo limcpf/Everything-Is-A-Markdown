@@ -211,6 +211,8 @@ title: Work In Progress
 
 증분 빌드 cache에는 `publish: true`이면서 draft가 아닌 Markdown 본문만 저장됩니다. 비공개 문서와 draft 문서는 persistent cache entry에서 완전히 제외되며, publish/draft 상태가 바뀌면 다음 빌드에서 다시 평가됩니다.
 
+cache entry를 재사용하기 전에 모든 Markdown 원문을 읽어 SHA-256 fingerprint를 계산합니다. 파일 크기와 mtime을 유지한 채 본문을 교체해도 변경을 감지하며, fingerprint가 같으면 frontmatter parse와 Markdown render는 계속 건너뜁니다. 회귀 테스트는 40개 문서 no-op 빌드에서 `rendered=0`, `skipped=40`, wall-clock 10초 미만을 측정합니다. `bunx playwright test tests/e2e/build-regression.spec.ts --grep "ordinary no-op"`로 실행할 수 있습니다.
+
 ## 위키링크 지원
 
 위키링크는 아래 순서로 해석됩니다.

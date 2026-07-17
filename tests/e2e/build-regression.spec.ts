@@ -317,6 +317,165 @@ VAULT_B_BODY
     }
   });
 
+  test("같은 size와 mtime을 유지한 body, wikilink, frontmatter 변경도 다시 빌드한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-content-fingerprint-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+    const fixedTime = new Date("2024-02-03T04:05:06.000Z");
+    const mutablePath = path.join(vaultDir, "mutable.md");
+    const linkerPath = path.join(vaultDir, "linker.md");
+    const frontmatterPath = path.join(vaultDir, "frontmatter.md");
+
+    const mutableBefore = `---
+publish: true
+prefix: FP-MUTABLE
+category_path: cache/fingerprint
+title: Mutable
+---
+
+ALPHA
+`;
+    const mutableAfter = mutableBefore.replace("ALPHA", "BRAVO");
+    const linkerBefore = `---
+publish: true
+prefix: FP-LINKER
+category_path: cache/fingerprint
+title: Linker
+---
+
+[[Target A]]
+`;
+    const linkerAfter = linkerBefore.replace("Target A", "Target B");
+    const frontmatterBefore = `---
+publish: true
+prefix: FP-ROUTE-A
+category_path: cache/fingerprint
+title: Frontmatter
+---
+
+UNCHANGED_BODY
+`;
+    const frontmatterAfter = frontmatterBefore.replace("FP-ROUTE-A", "FP-ROUTE-B");
+
+    try {
+      writeText(
+        path.join(vaultDir, "target-a.md"),
+        `---
+publish: true
+prefix: FP-TARGET-A
+category_path: cache/fingerprint
+title: Target A
+---
+
+TARGET_A_BODY
+`,
+      );
+      writeText(
+        path.join(vaultDir, "target-b.md"),
+        `---
+publish: true
+prefix: FP-TARGET-B
+category_path: cache/fingerprint
+title: Target B
+---
+
+TARGET_B_BODY
+`,
+      );
+
+      for (const [sourcePath, before, after] of [
+        [mutablePath, mutableBefore, mutableAfter],
+        [linkerPath, linkerBefore, linkerAfter],
+        [frontmatterPath, frontmatterBefore, frontmatterAfter],
+      ] as const) {
+        expect(Buffer.byteLength(before)).toBe(Buffer.byteLength(after));
+        writeText(sourcePath, before);
+        fs.utimesSync(sourcePath, fixedTime, fixedTime);
+      }
+
+      const initialStats = new Map(
+        [mutablePath, linkerPath, frontmatterPath].map((sourcePath) => [sourcePath, fs.statSync(sourcePath)]),
+      );
+      const firstBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(firstBuild.status, firstBuild.output).toBe(0);
+      expect(readDocContentHtml(outDir, "/FP-MUTABLE/")).toContain("ALPHA");
+      expect(readDocContentHtml(outDir, "/FP-LINKER/")).toContain('href="/FP-TARGET-A/"');
+      expect(fs.existsSync(path.join(outDir, "FP-ROUTE-A", "index.html"))).toBe(true);
+
+      for (const [sourcePath, replacement] of [
+        [mutablePath, mutableAfter],
+        [linkerPath, linkerAfter],
+        [frontmatterPath, frontmatterAfter],
+      ] as const) {
+        writeText(sourcePath, replacement);
+        fs.utimesSync(sourcePath, fixedTime, fixedTime);
+        const previous = initialStats.get(sourcePath)!;
+        const current = fs.statSync(sourcePath);
+        expect(current.size).toBe(previous.size);
+        expect(current.mtimeMs).toBe(previous.mtimeMs);
+      }
+
+      const changedBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(changedBuild.status, changedBuild.output).toBe(0);
+      expect(changedBuild.output).toContain("total=5 rendered=3 skipped=2");
+      expect(readDocContentHtml(outDir, "/FP-MUTABLE/")).toContain("BRAVO");
+      const linkerHtml = readDocContentHtml(outDir, "/FP-LINKER/");
+      expect(linkerHtml).toContain('href="/FP-TARGET-B/"');
+      expect(linkerHtml).not.toContain('href="/FP-TARGET-A/"');
+      expect(fs.existsSync(path.join(outDir, "FP-ROUTE-A", "index.html"))).toBe(false);
+      expect(fs.existsSync(path.join(outDir, "FP-ROUTE-B", "index.html"))).toBe(true);
+
+      const manifest = readManifest(outDir) as {
+        docs: Array<{ route: string; backlinks: Array<{ route: string }> }>;
+      };
+      const targetA = manifest.docs.find((doc) => doc.route === "/FP-TARGET-A/");
+      const targetB = manifest.docs.find((doc) => doc.route === "/FP-TARGET-B/");
+      expect(targetA?.backlinks).toEqual([]);
+      expect(targetB?.backlinks.map((backlink) => backlink.route)).toEqual(["/FP-LINKER/"]);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("ordinary no-op 빌드는 fingerprint 후 parse와 render를 건너뛴다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-noop-performance-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+    const docCount = 40;
+
+    try {
+      for (let index = 0; index < docCount; index += 1) {
+        const id = String(index).padStart(2, "0");
+        writeText(
+          path.join(vaultDir, `doc-${id}.md`),
+          `---
+publish: true
+prefix: PERF-${id}
+category_path: cache/performance
+title: Performance ${id}
+---
+
+PERFORMANCE_BODY_${id}
+`,
+        );
+      }
+
+      const firstBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(firstBuild.status, firstBuild.output).toBe(0);
+
+      const startedAt = performance.now();
+      const noOpBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      const elapsedMs = performance.now() - startedAt;
+      console.info(`[perf] no-op incremental docs=${docCount} elapsedMs=${elapsedMs.toFixed(1)}`);
+
+      expect(noOpBuild.status, noOpBuild.output).toBe(0);
+      expect(noOpBuild.output).toContain(`total=${docCount} rendered=0 skipped=${docCount}`);
+      expect(elapsedMs).toBeLessThan(10_000);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
   test("raw HTML은 기본 sanitize되고 명시적 unsafe 설정에서만 유지된다", async () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-html-sanitize-"));
     const vaultDir = path.join(workDir, "vault");
