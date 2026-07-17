@@ -33,7 +33,9 @@ bun run blog [build|dev|clean] [options]
 
 - `bun run build`: 정적 파일 빌드
 - `bun run dev`: 로컬 개발 서버 실행 (기본 `http://localhost:3000`)
-- `bun run clean`: `dist`와 `.cache` 삭제
+- `bun run clean`: EIAM 소유권 마커가 확인된 `dist`와 EIAM cache index만 삭제
+
+빌드는 전용 출력 디렉터리에 `.eiam-output.json` 소유권 마커를 기록합니다. 비어 있지 않은 미소유 디렉터리는 출력 경로로 사용하지 않으며, `clean`도 광범위한 경로나 마커가 없는 디렉터리를 삭제하지 않습니다. 일반 `.cache`의 다른 파일은 보존합니다.
 
 자주 쓰는 옵션:
 

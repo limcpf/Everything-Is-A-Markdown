@@ -24,6 +24,9 @@ import {
 const CACHE_VERSION = 4;
 const CACHE_DIR_NAME = ".cache";
 const CACHE_FILE_NAME = "build-index.json";
+const OUTPUT_MARKER_FILE_NAME = ".eiam-output.json";
+const OUTPUT_MARKER_FORMAT = "everything-is-a-markdown-output";
+const OUTPUT_MARKER_VERSION = 1;
 const DEFAULT_BRANCH = "dev";
 const DEFAULT_SITE_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
 const DEFAULT_SITE_TITLE = "File-System Blog";
@@ -65,6 +68,126 @@ function toContentFileName(id: string): string {
 
 function toCachePath(): string {
   return path.join(process.cwd(), CACHE_DIR_NAME, CACHE_FILE_NAME);
+}
+
+function isSamePathOrAncestor(candidate: string, target: string): boolean {
+  const relative = path.relative(candidate, target);
+  return (
+    relative === "" ||
+    (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`))
+  );
+}
+
+async function toCanonicalPath(input: string): Promise<string> {
+  let existingAncestor = path.resolve(input);
+  const missingSegments: string[] = [];
+
+  while (true) {
+    try {
+      const canonicalAncestor = await fs.realpath(existingAncestor);
+      return path.join(canonicalAncestor, ...missingSegments);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+
+      const parent = path.dirname(existingAncestor);
+      if (parent === existingAncestor) {
+        return path.resolve(input);
+      }
+      missingSegments.unshift(path.basename(existingAncestor));
+      existingAncestor = parent;
+    }
+  }
+}
+
+async function assertSafeOutputRoot(outDir: string, vaultDir: string): Promise<string> {
+  const outputRoot = await toCanonicalPath(outDir);
+  const filesystemRoot = path.parse(outputRoot).root;
+  const cwd = await toCanonicalPath(process.cwd());
+  const vaultRoot = await toCanonicalPath(vaultDir);
+
+  if (
+    outputRoot === filesystemRoot ||
+    isSamePathOrAncestor(outputRoot, cwd) ||
+    isSamePathOrAncestor(outputRoot, vaultRoot)
+  ) {
+    throw new Error(
+      `[safety] Refusing dangerous output directory: ${outputRoot}. Choose a dedicated child directory.`,
+    );
+  }
+
+  return outputRoot;
+}
+
+async function hasValidOutputMarker(outputRoot: string): Promise<boolean> {
+  const markerPath = path.join(outputRoot, OUTPUT_MARKER_FILE_NAME);
+
+  try {
+    const markerStat = await fs.lstat(markerPath);
+    if (!markerStat.isFile() || markerStat.isSymbolicLink()) {
+      return false;
+    }
+
+    const parsed = (await Bun.file(markerPath).json()) as unknown;
+    return (
+      isRecord(parsed) &&
+      parsed.format === OUTPUT_MARKER_FORMAT &&
+      parsed.version === OUTPUT_MARKER_VERSION
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function writeOutputMarker(outputRoot: string): Promise<void> {
+  const marker = {
+    format: OUTPUT_MARKER_FORMAT,
+    version: OUTPUT_MARKER_VERSION,
+  };
+  await Bun.write(path.join(outputRoot, OUTPUT_MARKER_FILE_NAME), `${JSON.stringify(marker, null, 2)}\n`);
+}
+
+async function prepareOwnedOutputDirectory(options: BuildOptions): Promise<void> {
+  const requestedOutputRoot = path.resolve(options.outDir);
+  const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir);
+
+  try {
+    const outputStat = await fs.lstat(requestedOutputRoot);
+    if (!outputStat.isDirectory() || outputStat.isSymbolicLink()) {
+      throw new Error(`[safety] Output path must be a real directory: ${outputRoot}`);
+    }
+
+    const entries = await fs.readdir(outputRoot);
+    if (entries.length > 0 && !(await hasValidOutputMarker(outputRoot))) {
+      throw new Error(
+        `[safety] Refusing non-empty output directory without a valid ${OUTPUT_MARKER_FILE_NAME}: ${outputRoot}`,
+      );
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+    await fs.mkdir(requestedOutputRoot, { recursive: true });
+  }
+
+  if (!(await hasValidOutputMarker(outputRoot))) {
+    await writeOutputMarker(outputRoot);
+  }
+}
+
+async function removeLegacyCacheIndex(): Promise<void> {
+  const cachePath = toCachePath();
+  await fs.rm(cachePath, { force: true });
+
+  try {
+    await fs.rmdir(path.dirname(cachePath));
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT" && code !== "ENOTEMPTY") {
+      throw error;
+    }
+  }
 }
 
 function createEmptyCache(): BuildCache {
@@ -1496,10 +1619,28 @@ async function cleanRemovedOutputs(outDir: string, oldCache: BuildCache, current
   }
 }
 
-export async function cleanBuildArtifacts(outDir: string): Promise<void> {
-  const cachePath = toCachePath();
-  await fs.rm(outDir, { recursive: true, force: true });
-  await fs.rm(path.dirname(cachePath), { recursive: true, force: true });
+export async function cleanBuildArtifacts(options: BuildOptions): Promise<void> {
+  const requestedOutputRoot = path.resolve(options.outDir);
+  const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir);
+
+  try {
+    const outputStat = await fs.lstat(requestedOutputRoot);
+    if (!outputStat.isDirectory() || outputStat.isSymbolicLink()) {
+      throw new Error(`[safety] Refusing to clean non-directory output path: ${outputRoot}`);
+    }
+    if (!(await hasValidOutputMarker(outputRoot))) {
+      throw new Error(
+        `[safety] Refusing to clean output directory without a valid ${OUTPUT_MARKER_FILE_NAME}: ${outputRoot}`,
+      );
+    }
+    await fs.rm(requestedOutputRoot, { recursive: true, force: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  await removeLegacyCacheIndex();
 }
 
 function buildWikiResolutionSignature(doc: DocRecord, lookup: WikiLookup): string {
@@ -1551,7 +1692,7 @@ function buildBacklinksByDocId(
 }
 
 export async function buildSite(options: BuildOptions): Promise<BuildResult> {
-  await ensureDir(options.outDir);
+  await prepareOwnedOutputDirectory(options);
   await ensureDir(path.join(options.outDir, "content"));
 
   const cachePath = toCachePath();

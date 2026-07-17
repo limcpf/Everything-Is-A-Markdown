@@ -116,7 +116,8 @@ Notes:
 
 - Unknown CLI options fail fast.
 - Invalid numeric options fail fast.
-- `clean` removes both the output directory and `.cache`.
+- Builds mark a dedicated output directory with `.eiam-output.json` and refuse to claim a non-empty unmarked directory.
+- `clean` refuses broad or unmarked output paths. It removes only the marked output directory and EIAM's `.cache/build-index.json`, preserving unrelated `.cache` data.
 
 ## Frontmatter
 
