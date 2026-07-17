@@ -17,7 +17,7 @@ async function main(): Promise<void> {
 
   if (cli.command === "clean") {
     await cleanBuildArtifacts(buildOptions);
-    console.log(`[clean] removed ${buildOptions.outDir} and EIAM cache index`);
+    console.log(`[clean] removed ${buildOptions.outDir} and matching EIAM cache namespace`);
     return;
   }
 

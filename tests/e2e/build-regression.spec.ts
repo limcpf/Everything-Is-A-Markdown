@@ -51,6 +51,26 @@ function readManifest(outDir: string): unknown {
   return JSON.parse(fs.readFileSync(path.join(outDir, "manifest.json"), "utf8")) as unknown;
 }
 
+function findCacheIndexPaths(workDir: string): string[] {
+  const cacheRoot = path.join(workDir, ".cache", "eiam");
+  if (!fs.existsSync(cacheRoot)) {
+    return [];
+  }
+
+  return fs
+    .readdirSync(cacheRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(cacheRoot, entry.name, "build-index.json"))
+    .filter((cachePath) => fs.existsSync(cachePath))
+    .sort();
+}
+
+function findOnlyCacheIndexPath(workDir: string): string {
+  const cachePaths = findCacheIndexPaths(workDir);
+  expect(cachePaths).toHaveLength(1);
+  return cachePaths[0];
+}
+
 function findFolderNodeByPath(
   nodes: Array<{ type: string; path?: string; children?: Array<{ type: string; path?: string; children?: unknown[] }> }>,
   targetPath: string,
@@ -137,7 +157,7 @@ test.describe("빌드 회귀 가드", () => {
     }
   });
 
-  test("clean은 EIAM 소유 출력과 cache index만 제거한다", async () => {
+  test("clean은 EIAM 소유 출력과 matching cache namespace만 제거한다", async () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-safe-clean-"));
     const outDir = path.join(workDir, "dist");
     const unrelatedCacheFile = path.join(workDir, ".cache", "keep.txt");
@@ -146,13 +166,13 @@ test.describe("빌드 회귀 가드", () => {
       const build = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
       expect(build.status, build.output).toBe(0);
       expect(fs.existsSync(path.join(outDir, ".eiam-output.json"))).toBe(true);
-      expect(fs.existsSync(path.join(workDir, ".cache", "build-index.json"))).toBe(true);
+      const cachePath = findOnlyCacheIndexPath(workDir);
 
       writeText(unrelatedCacheFile, "unrelated cache data");
       const clean = runCli(workDir, [cliPath, "clean", "--vault", vaultPath, "--out", outDir]);
       expect(clean.status, clean.output).toBe(0);
       expect(fs.existsSync(outDir)).toBe(false);
-      expect(fs.existsSync(path.join(workDir, ".cache", "build-index.json"))).toBe(false);
+      expect(fs.existsSync(cachePath)).toBe(false);
       expect(fs.readFileSync(unrelatedCacheFile, "utf8")).toBe("unrelated cache data");
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
@@ -197,6 +217,101 @@ test.describe("빌드 회귀 가드", () => {
       expect(cleanCwd.status).not.toBe(0);
       expect(cleanCwd.output).toContain("Refusing dangerous output directory");
       expect(fs.readFileSync(cwdSentinel, "utf8")).toBe("keep cwd");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("vault와 output 경로 쌍마다 cache namespace를 분리하고 clean은 선택한 namespace만 제거한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-cache-namespace-"));
+    const vaultA = path.join(workDir, "vault-a");
+    const vaultB = path.join(workDir, "vault-b");
+    const outA = path.join(workDir, "dist-a");
+    const outB = path.join(workDir, "dist-b");
+    const outAAlternate = path.join(workDir, "dist-a-alternate");
+    const sourceA = path.join(vaultA, "same.md");
+    const sourceB = path.join(vaultB, "same.md");
+    const fixedTime = new Date("2024-01-02T03:04:05.000Z");
+
+    try {
+      const bodyA = `---
+publish: true
+prefix: NS-CACHE-A
+category_path: cache/namespace
+title: Vault A
+---
+
+VAULT_A_BODY
+`;
+      const bodyB = `---
+publish: true
+prefix: NS-CACHE-B
+category_path: cache/namespace
+title: Vault B
+---
+
+VAULT_B_BODY
+`;
+      expect(Buffer.byteLength(bodyA)).toBe(Buffer.byteLength(bodyB));
+      writeText(sourceA, bodyA);
+      writeText(sourceB, bodyB);
+      fs.utimesSync(sourceA, fixedTime, fixedTime);
+      fs.utimesSync(sourceB, fixedTime, fixedTime);
+
+      const buildA = runCli(workDir, [cliPath, "build", "--vault", vaultA, "--out", outA]);
+      expect(buildA.status, buildA.output).toBe(0);
+      expect(buildA.output).toContain("total=1 rendered=1 skipped=0");
+      const [cacheA] = findCacheIndexPaths(workDir);
+      expect(cacheA).toBeDefined();
+      expect(fs.readFileSync(cacheA, "utf8")).toContain("VAULT_A_BODY");
+
+      const buildB = runCli(workDir, [cliPath, "build", "--vault", vaultB, "--out", outB]);
+      expect(buildB.status, buildB.output).toBe(0);
+      const afterBuildB = findCacheIndexPaths(workDir);
+      expect(afterBuildB).toHaveLength(2);
+      const cacheB = afterBuildB.find((cachePath) => cachePath !== cacheA);
+      expect(cacheB).toBeDefined();
+      expect(fs.readFileSync(cacheB!, "utf8")).toContain("VAULT_B_BODY");
+      const manifestB = readManifest(outB) as { docs: Array<{ route: string }> };
+      expect(manifestB.docs.map((doc) => doc.route)).toEqual(["/NS-CACHE-B/"]);
+
+      const alternateBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultA,
+        "--out",
+        outAAlternate,
+      ]);
+      expect(alternateBuild.status, alternateBuild.output).toBe(0);
+      const afterAlternate = findCacheIndexPaths(workDir);
+      expect(afterAlternate).toHaveLength(3);
+      const cacheAAlternate = afterAlternate.find(
+        (cachePath) => cachePath !== cacheA && cachePath !== cacheB,
+      );
+      expect(cacheAAlternate).toBeDefined();
+
+      const rebuildA = runCli(workDir, [cliPath, "build", "--vault", vaultA, "--out", outA]);
+      expect(rebuildA.status, rebuildA.output).toBe(0);
+      expect(rebuildA.output).toContain("total=1 rendered=0 skipped=1");
+      const manifestA = readManifest(outA) as { docs: Array<{ route: string }> };
+      expect(manifestA.docs.map((doc) => doc.route)).toEqual(["/NS-CACHE-A/"]);
+
+      const unrelatedCacheFile = path.join(workDir, ".cache", "keep.txt");
+      writeText(unrelatedCacheFile, "unrelated cache data");
+      const cleanA = runCli(workDir, [cliPath, "clean", "--vault", vaultA, "--out", outA]);
+      expect(cleanA.status, cleanA.output).toBe(0);
+      expect(fs.existsSync(outA)).toBe(false);
+      expect(fs.existsSync(cacheA)).toBe(false);
+      expect(fs.existsSync(cacheB!)).toBe(true);
+      expect(fs.existsSync(cacheAAlternate!)).toBe(true);
+      expect(fs.existsSync(outB)).toBe(true);
+      expect(fs.existsSync(outAAlternate)).toBe(true);
+      expect(fs.readFileSync(unrelatedCacheFile, "utf8")).toBe("unrelated cache data");
+
+      const rebuildB = runCli(workDir, [cliPath, "build", "--vault", vaultB, "--out", outB]);
+      expect(rebuildB.status, rebuildB.output).toBe(0);
+      expect(rebuildB.output).toContain("total=1 rendered=0 skipped=1");
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
@@ -268,7 +383,6 @@ title: HTML Policy
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-private-cache-"));
     const vaultDir = path.join(workDir, "vault");
     const outDir = path.join(workDir, "dist");
-    const cachePath = path.join(workDir, ".cache", "build-index.json");
     const publicPath = path.join(vaultDir, "public.md");
     const privatePath = path.join(vaultDir, "private.md");
     const draftPath = path.join(vaultDir, "draft.md");
@@ -310,6 +424,7 @@ DRAFT_CACHE_SECRET
 
       const firstBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
       expect(firstBuild.status, firstBuild.output).toBe(0);
+      const cachePath = findOnlyCacheIndexPath(workDir);
       const firstCache = fs.readFileSync(cachePath, "utf8");
       expect(firstCache).toContain("PUBLIC_CACHE_BODY");
       expect(firstCache).not.toContain("PRIVATE_CACHE_SECRET");

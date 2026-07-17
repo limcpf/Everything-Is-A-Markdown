@@ -117,7 +117,7 @@ Notes:
 - Unknown CLI options fail fast.
 - Invalid numeric options fail fast.
 - Builds mark a dedicated output directory with `.eiam-output.json` and refuse to claim a non-empty unmarked directory.
-- `clean` refuses broad or unmarked output paths. It removes only the marked output directory and EIAM's `.cache/build-index.json`, preserving unrelated `.cache` data.
+- `clean` refuses broad or unmarked output paths. It removes only the marked output directory and its matching EIAM cache namespace, preserving sibling namespaces and unrelated `.cache` data.
 
 ## Frontmatter
 
@@ -210,7 +210,7 @@ Key points:
 - Rendered article bodies are stored separately under `dist/content/`.
 - Runtime assets are content-hashed.
 - Static files declared in config are copied into the same relative paths under `dist/`.
-- Build cache is stored under `.cache/build-index.json`.
+- Build cache is stored under `.cache/eiam/v1-<namespace>/build-index.json`.
 
 ## Config File
 
@@ -503,7 +503,9 @@ Example:
 
 ## Incremental Build and Caching
 
-The build caches source metadata and output hashes in `.cache/build-index.json`.
+The build caches source metadata and output hashes in `.cache/eiam/v1-<namespace>/build-index.json`, relative to the process working directory. The namespace is a stable hash of the canonical, resolved `vaultDir` and `outDir` pair.
+
+Config values are resolved first, with CLI `--vault` and `--out` values taking precedence. Changing either resolved path selects a different namespace; it does not reuse or overwrite the previous pair's cache. The cache root itself has no separate override. `clean` removes only the namespace for the selected pair, never sibling EIAM namespaces or general-purpose `.cache` files.
 
 Only published, non-draft Markdown source bodies are persisted. Unpublished and draft entries are omitted from the cache, so their content is re-evaluated when needed but never written to persistent build state.
 
