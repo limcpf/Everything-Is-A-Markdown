@@ -1553,7 +1553,7 @@ async function writeShellPages(
   await writeOutputIfChanged(
     context,
     "404.html",
-    render404Html(buildAppShellAssetsForOutput("404.html", runtimeAssets)),
+    render404Html(buildAppShellAssetsForOutput("404.html", runtimeAssets), toPathWithBase("/", pathBase)),
   );
 
   for (const doc of docs) {
