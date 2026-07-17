@@ -54,6 +54,7 @@ export interface UserConfig {
     wikilinks?: boolean;
     images?: ImagePolicy;
     gfm?: boolean;
+    allowUnsafeHtml?: boolean;
     highlight?: {
       engine?: "shiki";
       theme?: string;
@@ -79,6 +80,7 @@ export interface BuildOptions {
   wikilinks: boolean;
   imagePolicy: ImagePolicy;
   gfm: boolean;
+  allowUnsafeHtml: boolean;
   shikiTheme: string;
   mermaid: {
     enabled: boolean;

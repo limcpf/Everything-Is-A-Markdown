@@ -1739,6 +1739,7 @@ export async function buildSite(options: BuildOptions): Promise<BuildResult> {
         options.shikiTheme,
         options.imagePolicy,
         options.wikilinks ? "wikilinks-on" : "wikilinks-off",
+        options.allowUnsafeHtml ? "unsafe-html-v1" : "safe-html-v1",
         wikiSignature,
       ].join("::"),
     );

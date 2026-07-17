@@ -87,6 +87,7 @@ const config = {
     defaultOgImage: "/assets/og.png",
   },
   markdown: {
+    allowUnsafeHtml: false,
     mermaid: {
       enabled: true,
       cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
@@ -116,6 +117,13 @@ export default config;
 - 서브패스 배포(예: `/blog`)를 정식 지원합니다.
 - 내부 라우팅/본문 fetch 링크에 동일한 base path가 적용됩니다.
 - 루트 배포는 빈 문자열(`""`)을 사용합니다.
+
+`markdown.allowUnsafeHtml`:
+
+- 기본값은 `false`이며, 렌더된 HTML을 직접 route와 client navigation용 본문 모두에서 sanitize합니다.
+- 일반 Markdown 서식, 표, 이미지, figure/details, EIAM/Shiki 코드 마크업, 안전한 URL과 Shiki 색상 스타일은 유지합니다.
+- script, 이벤트 핸들러, `javascript:` URL, iframe, SVG, 임의 style은 제거합니다.
+- 신뢰할 수 있는 볼트에서만 `true`로 명시할 수 있으며, 이 경우 임의의 client-side 코드가 실행될 수 있습니다.
 
 예시:
 
@@ -265,6 +273,7 @@ Mermaid fence는 일반 코드 블록 UI와 분리된 전용 컨테이너(`.merm
 
 ```ts
 markdown: {
+  allowUnsafeHtml: false, // true면 렌더 HTML sanitize를 비활성화하므로 신뢰된 볼트에서만 사용
   mermaid: {
     enabled: true, // false면 코드 블록만 표시
     cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js", // http/https 또는 /, ./, ../ 경로
