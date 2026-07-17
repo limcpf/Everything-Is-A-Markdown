@@ -137,6 +137,71 @@ test.describe("빌드 회귀 가드", () => {
     }
   });
 
+  test("clean은 EIAM 소유 출력과 cache index만 제거한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-safe-clean-"));
+    const outDir = path.join(workDir, "dist");
+    const unrelatedCacheFile = path.join(workDir, ".cache", "keep.txt");
+
+    try {
+      const build = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
+      expect(build.status, build.output).toBe(0);
+      expect(fs.existsSync(path.join(outDir, ".eiam-output.json"))).toBe(true);
+      expect(fs.existsSync(path.join(workDir, ".cache", "build-index.json"))).toBe(true);
+
+      writeText(unrelatedCacheFile, "unrelated cache data");
+      const clean = runCli(workDir, [cliPath, "clean", "--vault", vaultPath, "--out", outDir]);
+      expect(clean.status, clean.output).toBe(0);
+      expect(fs.existsSync(outDir)).toBe(false);
+      expect(fs.existsSync(path.join(workDir, ".cache", "build-index.json"))).toBe(false);
+      expect(fs.readFileSync(unrelatedCacheFile, "utf8")).toBe("unrelated cache data");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("build와 clean은 broad 또는 미소유 출력 디렉터리를 거부한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-safe-output-"));
+    const unownedOutDir = path.join(workDir, "unowned");
+    const unownedSentinel = path.join(unownedOutDir, "keep.txt");
+    const cwdSentinel = path.join(workDir, "cwd-keep.txt");
+
+    try {
+      writeText(unownedSentinel, "do not remove");
+      writeText(cwdSentinel, "keep cwd");
+
+      const buildIntoUnowned = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        unownedOutDir,
+      ]);
+      expect(buildIntoUnowned.status).not.toBe(0);
+      expect(buildIntoUnowned.output).toContain("Refusing non-empty output directory");
+      expect(fs.readFileSync(unownedSentinel, "utf8")).toBe("do not remove");
+
+      const cleanUnowned = runCli(workDir, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultPath,
+        "--out",
+        unownedOutDir,
+      ]);
+      expect(cleanUnowned.status).not.toBe(0);
+      expect(cleanUnowned.output).toContain("Refusing to clean output directory");
+      expect(fs.readFileSync(unownedSentinel, "utf8")).toBe("do not remove");
+
+      const cleanCwd = runCli(workDir, [cliPath, "clean", "--vault", vaultPath, "--out", workDir]);
+      expect(cleanCwd.status).not.toBe(0);
+      expect(cleanCwd.output).toContain("Refusing dangerous output directory");
+      expect(fs.readFileSync(cwdSentinel, "utf8")).toBe("keep cwd");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
   test("CLI 숫자 옵션은 잘못된 값을 거부한다", async () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-cli-validation-"));
 
