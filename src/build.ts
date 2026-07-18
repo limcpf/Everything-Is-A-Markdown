@@ -130,6 +130,22 @@ async function resolveCacheRoot(): Promise<string> {
   return candidate;
 }
 
+async function assertSafeCacheNamespace(namespaceDir: string): Promise<void> {
+  try {
+    const namespaceStat = await fs.lstat(namespaceDir);
+    if (namespaceStat.isSymbolicLink()) {
+      throw new Error(`[safety] Refusing symlinked cache namespace: ${namespaceDir}`);
+    }
+    if (!namespaceStat.isDirectory()) {
+      throw new Error(`[safety] Cache namespace must be a real directory: ${namespaceDir}`);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
 async function resolveCacheLocation(options: BuildOptions): Promise<CacheLocation> {
   const [vaultRoot, outputRoot, rootDir] = await Promise.all([
     toCanonicalPath(options.vaultDir),
@@ -138,6 +154,7 @@ async function resolveCacheLocation(options: BuildOptions): Promise<CacheLocatio
   ]);
   const namespace = `v${CACHE_NAMESPACE_VERSION}-${makeHash(`${vaultRoot}\0${outputRoot}\0${rootDir}`)}`;
   const namespaceDir = path.join(rootDir, namespace);
+  await assertSafeCacheNamespace(namespaceDir);
 
   return {
     namespace,
@@ -202,6 +219,21 @@ async function prepareOwnedOutputDirectory(
   cacheLocation: CacheLocation,
   outputRoot: string,
 ): Promise<void> {
+  await assertClaimableOutputDirectory(options, cacheLocation, outputRoot);
+
+  const requestedOutputRoot = path.resolve(options.outDir);
+  await fs.mkdir(requestedOutputRoot, { recursive: true });
+
+  if (!(await hasValidOutputMarker(outputRoot, cacheLocation.namespace))) {
+    await writeOutputMarker(outputRoot, cacheLocation.namespace);
+  }
+}
+
+async function assertClaimableOutputDirectory(
+  options: BuildOptions,
+  cacheLocation: CacheLocation,
+  outputRoot: string,
+): Promise<void> {
   const requestedOutputRoot = path.resolve(options.outDir);
 
   try {
@@ -220,11 +252,6 @@ async function prepareOwnedOutputDirectory(
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
     }
-    await fs.mkdir(requestedOutputRoot, { recursive: true });
-  }
-
-  if (!(await hasValidOutputMarker(outputRoot, cacheLocation.namespace))) {
-    await writeOutputMarker(outputRoot, cacheLocation.namespace);
   }
 }
 
@@ -258,6 +285,7 @@ async function removeLegacyCacheIndex(): Promise<void> {
 }
 
 async function removeCacheNamespace(location: CacheLocation): Promise<void> {
+  await assertSafeCacheNamespace(location.namespaceDir);
   await fs.rm(location.namespaceDir, { recursive: true, force: true });
   try {
     await fs.rmdir(location.rootDir);
@@ -408,8 +436,9 @@ function normalizeCachedSources(value: unknown): BuildCache["sources"] {
   return normalized;
 }
 
-async function readCache(cachePath: string): Promise<BuildCache> {
-  const file = Bun.file(cachePath);
+async function readCache(location: CacheLocation): Promise<BuildCache> {
+  await assertSafeCacheNamespace(location.namespaceDir);
+  const file = Bun.file(location.cachePath);
   if (!(await file.exists())) {
     return createEmptyCache();
   }
@@ -431,9 +460,11 @@ async function readCache(cachePath: string): Promise<BuildCache> {
   }
 }
 
-async function writeCache(cachePath: string, cache: BuildCache): Promise<void> {
-  await ensureDir(path.dirname(cachePath));
-  await Bun.write(cachePath, `${JSON.stringify(cache, null, 2)}\n`);
+async function writeCache(location: CacheLocation, cache: BuildCache): Promise<void> {
+  await assertSafeCacheNamespace(location.namespaceDir);
+  await ensureDir(location.namespaceDir);
+  await assertSafeCacheNamespace(location.namespaceDir);
+  await Bun.write(location.cachePath, `${JSON.stringify(cache, null, 2)}\n`);
 }
 
 async function walkMarkdownFiles(
@@ -1819,16 +1850,17 @@ export async function buildSite(options: BuildOptions): Promise<BuildResult> {
   const cacheLocation = await resolveCacheLocation(options);
   const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir, cacheLocation.rootDir);
   await removeLegacyCacheIndex();
-  await prepareOwnedOutputDirectory(options, cacheLocation, outputRoot);
-  await ensureDir(path.join(options.outDir, "content"));
+  await assertClaimableOutputDirectory(options, cacheLocation, outputRoot);
 
-  const { cachePath } = cacheLocation;
-  const previousCache = await readCache(cachePath);
+  const previousCache = await readCache(cacheLocation);
   const canReuseOutputs = await fileExists(path.join(options.outDir, "manifest.json"));
   const previousDocs = canReuseOutputs ? previousCache.docs : {};
   const previousOutputHashes = canReuseOutputs ? previousCache.outputHashes : {};
   const { docs, nextSources } = await readPublishedDocs(options, previousCache.sources);
   docs.sort((a, b) => a.relNoExt.localeCompare(b.relNoExt, "ko-KR"));
+
+  await prepareOwnedOutputDirectory(options, cacheLocation, outputRoot);
+  await ensureDir(path.join(options.outDir, "content"));
 
   await cleanRemovedOutputs(options.outDir, previousCache, docs);
   const outputContext: OutputWriteContext = {
@@ -1908,7 +1940,7 @@ export async function buildSite(options: BuildOptions): Promise<BuildResult> {
   await writeSeoArtifacts(outputContext, docs, options);
   await removeStaleOutputs(outputContext);
 
-  await writeCache(cachePath, nextCache);
+  await writeCache(cacheLocation, nextCache);
 
   return {
     totalDocs: docs.length,

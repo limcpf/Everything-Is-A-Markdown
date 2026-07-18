@@ -320,6 +320,70 @@ test.describe("빌드 회귀 가드", () => {
       expect(fs.readFileSync(cwdSentinel, "utf8")).toBe("keep cwd");
       expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
 
+      const namespaceGuardOutDir = path.join(workDir, "namespace-guard-dist");
+      const namespaceSeedBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        namespaceGuardOutDir,
+      ]);
+      expect(namespaceSeedBuild.status, namespaceSeedBuild.output).toBe(0);
+      const namespaceMarker = JSON.parse(
+        fs.readFileSync(path.join(namespaceGuardOutDir, ".eiam-output.json"), "utf8"),
+      ) as { cacheNamespace: string };
+      expect(namespaceMarker.cacheNamespace).toMatch(/^v2-[a-f0-9]{40}$/);
+
+      const namespaceSeedClean = runCli(workDir, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultPath,
+        "--out",
+        namespaceGuardOutDir,
+      ]);
+      expect(namespaceSeedClean.status, namespaceSeedClean.output).toBe(0);
+      expect(fs.existsSync(namespaceGuardOutDir)).toBe(false);
+
+      const cacheRoot = path.join(workDir, ".cache", "eiam");
+      const externalNamespaceTarget = path.join(workDir, "external-namespace-target");
+      const externalNamespaceSentinel = path.join(externalNamespaceTarget, "keep.txt");
+      const symlinkedNamespace = path.join(cacheRoot, namespaceMarker.cacheNamespace);
+      writeText(externalNamespaceSentinel, "keep external namespace data");
+      fs.mkdirSync(cacheRoot, { recursive: true });
+      fs.symlinkSync(externalNamespaceTarget, symlinkedNamespace, "dir");
+
+      const buildWithSymlinkedNamespace = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        namespaceGuardOutDir,
+      ]);
+      expect(buildWithSymlinkedNamespace.status).not.toBe(0);
+      expect(buildWithSymlinkedNamespace.output).toContain("Refusing symlinked cache namespace");
+      expect(fs.existsSync(namespaceGuardOutDir)).toBe(false);
+      expect(fs.lstatSync(symlinkedNamespace).isSymbolicLink()).toBe(true);
+      expect(fs.readFileSync(externalNamespaceSentinel, "utf8")).toBe("keep external namespace data");
+
+      const cleanWithSymlinkedNamespace = runCli(workDir, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultPath,
+        "--out",
+        namespaceGuardOutDir,
+      ]);
+      expect(cleanWithSymlinkedNamespace.status).not.toBe(0);
+      expect(cleanWithSymlinkedNamespace.output).toContain("Refusing symlinked cache namespace");
+      expect(fs.lstatSync(symlinkedNamespace).isSymbolicLink()).toBe(true);
+      expect(fs.readFileSync(externalNamespaceSentinel, "utf8")).toBe("keep external namespace data");
+
+      fs.unlinkSync(symlinkedNamespace);
+      fs.rmdirSync(cacheRoot);
+
       const externalCacheTarget = path.join(workDir, "external-cache-target");
       const symlinkedCacheRoot = path.join(workDir, ".cache", "eiam");
       const symlinkGuardOutDir = path.join(workDir, "symlink-guard-dist");
@@ -351,6 +415,32 @@ test.describe("빌드 회귀 가드", () => {
       expect(cleanWithSymlinkedCache.output).toContain("Refusing symlinked cache path");
       expect(fs.readdirSync(externalCacheTarget)).toEqual([]);
       expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("실패한 첫 build는 vault 검증 전에 output을 claim하지 않는다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-invalid-vault-output-"));
+    const missingVaultDir = path.join(workDir, "missing-vault");
+    const outDir = path.join(workDir, "dist");
+
+    try {
+      const failedBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        missingVaultDir,
+        "--out",
+        outDir,
+      ]);
+      expect(failedBuild.status).not.toBe(0);
+      expect(fs.existsSync(outDir)).toBe(false);
+      expect(findCacheIndexPaths(workDir)).toEqual([]);
+
+      const correctedBuild = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
+      expect(correctedBuild.status, correctedBuild.output).toBe(0);
+      expect(fs.existsSync(path.join(outDir, ".eiam-output.json"))).toBe(true);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
