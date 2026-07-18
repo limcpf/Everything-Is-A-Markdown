@@ -153,7 +153,6 @@ export interface ManifestDoc {
 
 export interface Manifest {
   schemaVersion: 2;
-  generatedAt: string;
   siteTitle: string;
   pathBase: string;
   defaultBranch: string;

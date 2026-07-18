@@ -22,6 +22,7 @@
 		"dev": "bun run src/cli.ts dev",
 		"clean": "bun run src/cli.ts clean",
 		"check:size": "bun run scripts/check-output-size.ts --out ./dist",
+		"check:reproducible": "bun run scripts/check-build-reproducibility.ts --vault ./test-vault --out ./dist",
 		"lint:md:publish": "bun run scripts/lint-published-markdown.ts --out-dir dist",
 		"test:e2e": "playwright test",
 		"test:e2e:focus-trap": "playwright test tests/e2e/mobile-sidebar-focus-trap.spec.ts"

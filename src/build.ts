@@ -1241,7 +1241,6 @@ function buildManifest(docs: DocRecord[], tree: TreeNode[], options: BuildOption
 
   return {
     schemaVersion: 2,
-    generatedAt: new Date().toISOString(),
     siteTitle: resolveSiteTitle(options),
     pathBase: options.seo?.pathBase ?? "",
     defaultBranch: DEFAULT_BRANCH,
