@@ -33,6 +33,9 @@ jobs:
       - name: Enforce generated asset size budgets
         run: bun run check:size
 
+      - name: Verify reproducible no-op builds
+        run: bun run check:reproducible
+
       - name: Run E2E tests
         run: bun run test:e2e
 

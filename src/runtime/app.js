@@ -1,5 +1,5 @@
 import { FileTree, prepareFileTreeInput } from "@pierre/trees";
-import { getManifestDocs, normalizeManifestPayload } from "./manifest-adapter.js";
+import { getRuntimeManifestDocs, normalizeManifestPayload } from "./manifest-adapter.js";
 import { buildTreesAdapterInput } from "./tree-adapter.js";
 
 const COMPACT_LAYOUT_QUERY = "(max-width: 1024px)";
@@ -811,8 +811,8 @@ function cloneFilteredTree(nodes, visibleDocIds) {
   return filteredNodes;
 }
 
-function buildBranchView(manifest, branch, defaultBranch) {
-  const docs = getManifestDocs(manifest).filter((doc) => isDocVisibleInBranch(doc, branch, defaultBranch));
+function buildBranchView(manifest, manifestDocs, branch, defaultBranch) {
+  const docs = manifestDocs.filter((doc) => isDocVisibleInBranch(doc, branch, defaultBranch));
   const visibleDocIds = new Set(docs.map((doc) => doc.id));
   const tree = cloneFilteredTree(manifest.tree, visibleDocIds);
   const trees = buildTreesAdapterInput(tree, docs);
@@ -1588,7 +1588,7 @@ async function start() {
   const siteTitle = resolveSiteTitle(manifest);
   const defaultBranch = normalizeBranch(manifest.defaultBranch) || DEFAULT_BRANCH;
   const availableBranchSet = new Set([defaultBranch]);
-  const manifestDocs = getManifestDocs(manifest);
+  const manifestDocs = getRuntimeManifestDocs(manifest);
   for (const doc of manifestDocs) {
     const docBranch = normalizeBranch(doc.branch);
     if (docBranch) {
@@ -1642,7 +1642,7 @@ async function start() {
     if (cached) {
       return cached;
     }
-    const nextView = buildBranchView(manifest, branch, defaultBranch);
+    const nextView = buildBranchView(manifest, manifestDocs, branch, defaultBranch);
     branchViewCache.set(branch, nextView);
     return nextView;
   };

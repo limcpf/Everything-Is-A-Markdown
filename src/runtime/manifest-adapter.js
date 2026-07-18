@@ -90,3 +90,18 @@ export function getManifestDocs(manifest) {
   }
   return manifest.docIds.map((id) => manifest.docsById[id]).filter(Boolean);
 }
+
+export function getRuntimeManifestDocs(manifest, nowMs = Date.now()) {
+  const newWithinDays = Number.isFinite(manifest?.ui?.newWithinDays)
+    ? Math.max(0, Number(manifest.ui.newWithinDays))
+    : 0;
+  const threshold = nowMs - newWithinDays * 24 * 60 * 60 * 1000;
+
+  return getManifestDocs(manifest).map((doc) => {
+    const publishedAt = typeof doc.date === "string" ? Date.parse(doc.date) : Number.NaN;
+    return {
+      ...doc,
+      isNew: Number.isFinite(publishedAt) && publishedAt >= threshold,
+    };
+  });
+}

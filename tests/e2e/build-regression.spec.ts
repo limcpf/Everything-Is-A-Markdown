@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -73,6 +74,26 @@ function readDocContentHtml(outDir: string, route: string): string {
 
 function readManifest(outDir: string): unknown {
   return JSON.parse(fs.readFileSync(path.join(outDir, "manifest.json"), "utf8")) as unknown;
+}
+
+function snapshotOutputHashes(outDir: string): Record<string, string> {
+  const hashes: Record<string, string> = {};
+  const walk = (directory: string) => {
+    const entries = fs.readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
+      left.name.localeCompare(right.name, "en"),
+    );
+    for (const entry of entries) {
+      const absolutePath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        walk(absolutePath);
+      } else if (entry.isFile()) {
+        const relativePath = path.relative(outDir, absolutePath).split(path.sep).join("/");
+        hashes[relativePath] = crypto.createHash("sha256").update(fs.readFileSync(absolutePath)).digest("hex");
+      }
+    }
+  };
+  walk(outDir);
+  return hashes;
 }
 
 function findCacheIndexPaths(workDir: string): string[] {
@@ -189,6 +210,65 @@ title: Document ${index}
       const sizeCheck = runCli(workDir, [sizeCheckPath, "--out", outDir]);
       expect(sizeCheck.status, sizeCheck.output).toBe(0);
       expect(sizeCheck.output).toContain("route-html files=2");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("no-op build는 byte-identical하고 content/config 변경은 관련 산출물을 갱신한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-reproducible-build-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+    const configPath = path.join(workDir, "blog.config.mjs");
+    const sourcePath = path.join(vaultDir, "stable.md");
+
+    try {
+      writeText(configPath, 'export default { seo: { siteName: "Stable A" } };\n');
+      writeText(
+        sourcePath,
+        `---
+publish: true
+prefix: STABLE-01
+category_path: stable
+title: Stable document
+date: "2026-07-18"
+---
+
+ALPHA
+`,
+      );
+
+      const firstBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(firstBuild.status, firstBuild.output).toBe(0);
+      const first = snapshotOutputHashes(outDir);
+      const firstManifest = readManifest(outDir) as ManifestDocIndex<{ contentUrl: string }> &
+        Record<string, unknown>;
+      expect(firstManifest).not.toHaveProperty("generatedAt");
+      expect(firstManifest.docsById[firstManifest.docIds[0]]).not.toHaveProperty("isNew");
+      const contentPath = firstManifest.docsById[firstManifest.docIds[0]]?.contentUrl.replace(/^\/+/, "");
+      expect(contentPath).toBeDefined();
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const secondBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(secondBuild.status, secondBuild.output).toBe(0);
+      const second = snapshotOutputHashes(outDir);
+      expect(second).toEqual(first);
+
+      writeText(sourcePath, fs.readFileSync(sourcePath, "utf8").replace("ALPHA", "BRAVO"));
+      const contentBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(contentBuild.status, contentBuild.output).toBe(0);
+      const afterContent = snapshotOutputHashes(outDir);
+      expect(afterContent[contentPath!]).not.toBe(second[contentPath!]);
+      expect(afterContent["STABLE-01/index.html"]).not.toBe(second["STABLE-01/index.html"]);
+      expect(afterContent["manifest.json"]).toBe(second["manifest.json"]);
+
+      writeText(configPath, 'export default { seo: { siteName: "Stable B" } };\n');
+      const configBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(configBuild.status, configBuild.output).toBe(0);
+      const afterConfig = snapshotOutputHashes(outDir);
+      expect(afterConfig["manifest.json"]).not.toBe(afterContent["manifest.json"]);
+      expect(afterConfig["index.html"]).not.toBe(afterContent["index.html"]);
+      expect(afterConfig[contentPath!]).toBe(afterContent[contentPath!]);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

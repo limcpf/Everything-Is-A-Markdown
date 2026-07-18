@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { getManifestDocs, normalizeManifestPayload } from "../../src/runtime/manifest-adapter.js";
+import {
+  getManifestDocs,
+  getRuntimeManifestDocs,
+  normalizeManifestPayload,
+} from "../../src/runtime/manifest-adapter.js";
 
 const envelope = {
   tree: [],
@@ -44,6 +48,25 @@ test.describe("manifest schema adapter", () => {
       },
     });
     expect(normalized).not.toHaveProperty("docs");
+  });
+
+  test("NEW 상태는 manifest date와 runtime 시각으로 파생한다", () => {
+    const normalized = normalizeManifestPayload({
+      ...envelope,
+      schemaVersion: 2,
+      ui: { newWithinDays: 10 },
+      docIds: ["recent", "old"],
+      docsById: {
+        recent: { id: "recent", route: "/RECENT/", date: "2026-07-15", isNew: false },
+        old: { id: "old", route: "/OLD/", date: "2026-07-01", isNew: true },
+      },
+    });
+
+    const docs = getRuntimeManifestDocs(normalized, Date.parse("2026-07-18T00:00:00Z"));
+    expect(docs.map((doc) => [doc.id, doc.isNew])).toEqual([
+      ["recent", true],
+      ["old", false],
+    ]);
   });
 
   test("unsupported version과 dangling doc reference를 거부한다", () => {
