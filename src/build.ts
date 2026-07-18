@@ -146,6 +146,27 @@ async function assertSafeCacheNamespace(namespaceDir: string): Promise<void> {
   }
 }
 
+async function assertSafeCacheIndex(cachePath: string): Promise<void> {
+  try {
+    const cacheStat = await fs.lstat(cachePath);
+    if (cacheStat.isSymbolicLink()) {
+      throw new Error(`[safety] Refusing symlinked cache index: ${cachePath}`);
+    }
+    if (!cacheStat.isFile()) {
+      throw new Error(`[safety] Cache index must be a real file: ${cachePath}`);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function assertSafeCacheLocation(location: CacheLocation): Promise<void> {
+  await assertSafeCacheNamespace(location.namespaceDir);
+  await assertSafeCacheIndex(location.cachePath);
+}
+
 async function resolveCacheLocation(options: BuildOptions): Promise<CacheLocation> {
   const [vaultRoot, outputRoot, rootDir] = await Promise.all([
     toCanonicalPath(options.vaultDir),
@@ -154,14 +175,15 @@ async function resolveCacheLocation(options: BuildOptions): Promise<CacheLocatio
   ]);
   const namespace = `v${CACHE_NAMESPACE_VERSION}-${makeHash(`${vaultRoot}\0${outputRoot}\0${rootDir}`)}`;
   const namespaceDir = path.join(rootDir, namespace);
-  await assertSafeCacheNamespace(namespaceDir);
-
-  return {
+  const location = {
     namespace,
     rootDir,
     namespaceDir,
     cachePath: path.join(namespaceDir, CACHE_FILE_NAME),
   };
+  await assertSafeCacheLocation(location);
+
+  return location;
 }
 
 async function assertSafeOutputRoot(outDir: string, vaultDir: string, cacheRoot: string): Promise<string> {
@@ -285,7 +307,7 @@ async function removeLegacyCacheIndex(): Promise<void> {
 }
 
 async function removeCacheNamespace(location: CacheLocation): Promise<void> {
-  await assertSafeCacheNamespace(location.namespaceDir);
+  await assertSafeCacheLocation(location);
   await fs.rm(location.namespaceDir, { recursive: true, force: true });
   try {
     await fs.rmdir(location.rootDir);
@@ -437,7 +459,7 @@ function normalizeCachedSources(value: unknown): BuildCache["sources"] {
 }
 
 async function readCache(location: CacheLocation): Promise<BuildCache> {
-  await assertSafeCacheNamespace(location.namespaceDir);
+  await assertSafeCacheLocation(location);
   const file = Bun.file(location.cachePath);
   if (!(await file.exists())) {
     return createEmptyCache();
@@ -461,9 +483,9 @@ async function readCache(location: CacheLocation): Promise<BuildCache> {
 }
 
 async function writeCache(location: CacheLocation, cache: BuildCache): Promise<void> {
-  await assertSafeCacheNamespace(location.namespaceDir);
+  await assertSafeCacheLocation(location);
   await ensureDir(location.namespaceDir);
-  await assertSafeCacheNamespace(location.namespaceDir);
+  await assertSafeCacheLocation(location);
   await Bun.write(location.cachePath, `${JSON.stringify(cache, null, 2)}\n`);
 }
 
@@ -1341,6 +1363,7 @@ async function copyOutputFileIfChanged(
   relOutputPath: string,
   sourcePath: string,
 ): Promise<void> {
+  assertSafeStaticOutputPath(relOutputPath);
   const bytes = new Uint8Array(await Bun.file(sourcePath).arrayBuffer());
   const outputHash = crypto.createHash("sha1").update(bytes).digest("hex");
   context.nextHashes[relOutputPath] = outputHash;
@@ -1353,6 +1376,22 @@ async function copyOutputFileIfChanged(
 
   await ensureDir(path.dirname(outputPath));
   await Bun.write(outputPath, bytes);
+}
+
+function assertSafeStaticOutputPath(relOutputPath: string): void {
+  const normalized = path.posix.normalize(toPosixPath(relOutputPath));
+  if (normalized === ".." || normalized.startsWith("../") || path.posix.isAbsolute(normalized)) {
+    throw new Error(`[safety] Refusing static output path outside the output directory: ${relOutputPath}`);
+  }
+  if (normalized === OUTPUT_MARKER_FILE_NAME || normalized.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`)) {
+    throw new Error(`[safety] Refusing reserved static output path: ${relOutputPath}`);
+  }
+}
+
+function assertSafeStaticPaths(options: BuildOptions): void {
+  for (const staticPath of options.staticPaths) {
+    assertSafeStaticOutputPath(staticPath);
+  }
 }
 
 async function listFilesRecursively(baseDir: string): Promise<string[]> {
@@ -1847,6 +1886,7 @@ function buildBacklinksByDocId(
 }
 
 export async function buildSite(options: BuildOptions): Promise<BuildResult> {
+  assertSafeStaticPaths(options);
   const cacheLocation = await resolveCacheLocation(options);
   const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir, cacheLocation.rootDir);
   await removeLegacyCacheIndex();

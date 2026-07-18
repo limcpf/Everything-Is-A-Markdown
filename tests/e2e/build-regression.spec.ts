@@ -382,6 +382,42 @@ test.describe("빌드 회귀 가드", () => {
       expect(fs.readFileSync(externalNamespaceSentinel, "utf8")).toBe("keep external namespace data");
 
       fs.unlinkSync(symlinkedNamespace);
+
+      const externalCacheIndex = path.join(workDir, "external-cache-index.json");
+      const symlinkedCacheIndex = path.join(symlinkedNamespace, "build-index.json");
+      writeText(externalCacheIndex, "keep external cache index data");
+      fs.mkdirSync(symlinkedNamespace, { recursive: true });
+      fs.symlinkSync(externalCacheIndex, symlinkedCacheIndex, "file");
+
+      const buildWithSymlinkedCacheIndex = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        namespaceGuardOutDir,
+      ]);
+      expect(buildWithSymlinkedCacheIndex.status).not.toBe(0);
+      expect(buildWithSymlinkedCacheIndex.output).toContain("Refusing symlinked cache index");
+      expect(fs.existsSync(namespaceGuardOutDir)).toBe(false);
+      expect(fs.lstatSync(symlinkedCacheIndex).isSymbolicLink()).toBe(true);
+      expect(fs.readFileSync(externalCacheIndex, "utf8")).toBe("keep external cache index data");
+
+      const cleanWithSymlinkedCacheIndex = runCli(workDir, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultPath,
+        "--out",
+        namespaceGuardOutDir,
+      ]);
+      expect(cleanWithSymlinkedCacheIndex.status).not.toBe(0);
+      expect(cleanWithSymlinkedCacheIndex.output).toContain("Refusing symlinked cache index");
+      expect(fs.lstatSync(symlinkedCacheIndex).isSymbolicLink()).toBe(true);
+      expect(fs.readFileSync(externalCacheIndex, "utf8")).toBe("keep external cache index data");
+
+      fs.unlinkSync(symlinkedCacheIndex);
+      fs.rmdirSync(symlinkedNamespace);
       fs.rmdirSync(cacheRoot);
 
       const externalCacheTarget = path.join(workDir, "external-cache-target");
@@ -415,6 +451,57 @@ test.describe("빌드 회귀 가드", () => {
       expect(cleanWithSymlinkedCache.output).toContain("Refusing symlinked cache path");
       expect(fs.readdirSync(externalCacheTarget)).toEqual([]);
       expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("staticPaths는 output 소유권 marker를 덮어쓸 수 없다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-static-marker-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+    const configPath = path.join(workDir, "blog.config.mjs");
+    const sourceMarker = path.join(vaultDir, ".eiam-output.json");
+
+    try {
+      writeText(
+        path.join(vaultDir, "post.md"),
+        `---
+publish: true
+prefix: STATIC-MARKER
+category_path: safety/static
+title: Static Marker
+---
+
+STATIC_MARKER_BODY
+`,
+      );
+      writeText(sourceMarker, '{"foreign":"marker"}\n');
+
+      for (const staticPath of [".eiam-output.json", "assets/../.eiam-output.json"]) {
+        writeText(configPath, `export default { staticPaths: [${JSON.stringify(staticPath)}] };\n`);
+        const rejectedBuild = runCli(workDir, [
+          cliPath,
+          "build",
+          "--vault",
+          vaultDir,
+          "--out",
+          outDir,
+        ]);
+        expect(rejectedBuild.status).not.toBe(0);
+        expect(rejectedBuild.output).toContain("Refusing reserved static output path");
+        expect(fs.existsSync(outDir)).toBe(false);
+        expect(findCacheIndexPaths(workDir)).toEqual([]);
+        expect(fs.readFileSync(sourceMarker, "utf8")).toBe('{"foreign":"marker"}\n');
+      }
+
+      writeText(configPath, "export default {};\n");
+      const correctedBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(correctedBuild.status, correctedBuild.output).toBe(0);
+      const outputMarker = JSON.parse(fs.readFileSync(path.join(outDir, ".eiam-output.json"), "utf8")) as {
+        format: string;
+      };
+      expect(outputMarker.format).toBe("everything-is-a-markdown-output");
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
