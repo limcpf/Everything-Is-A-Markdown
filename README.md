@@ -118,7 +118,7 @@ Notes:
 - Every value-taking option fails with `[cli] Missing value for <option>` when its value is omitted or the next argument is another flag.
 - Invalid numeric options fail fast.
 - Builds mark a dedicated output directory with `.eiam-output.json`, bind that marker to a cache namespace derived from the canonical vault, output, and cache-root paths, and refuse to claim a non-empty unmarked or mismatched directory.
-- Build migration and `clean` remove `.cache/build-index.json` only when it matches a historical EIAM cache schema. Cache-root-containing output paths are rejected; `clean` otherwise removes only the marked output directory and its matching EIAM cache namespace, preserving sibling namespaces and unrelated `.cache` data.
+- Build migration and `clean` remove `.cache/build-index.json` only when it matches a historical EIAM cache schema, including when `clean` must reject a pre-marker output directory. Cache-root-containing output paths are rejected; `clean` otherwise removes only the marked output directory and its matching EIAM cache namespace, preserving sibling namespaces and unrelated `.cache` data.
 
 ## Frontmatter
 

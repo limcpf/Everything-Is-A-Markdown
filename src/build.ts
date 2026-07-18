@@ -1714,6 +1714,7 @@ export async function cleanBuildArtifacts(options: BuildOptions): Promise<void> 
   const cacheLocation = await resolveCacheLocation(options);
   const requestedOutputRoot = path.resolve(options.outDir);
   const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir, cacheLocation.rootDir);
+  await removeLegacyCacheIndex();
   let hasOwnedOutput = false;
 
   try {
@@ -1733,7 +1734,6 @@ export async function cleanBuildArtifacts(options: BuildOptions): Promise<void> 
     }
   }
 
-  await removeLegacyCacheIndex();
   if (hasOwnedOutput) {
     await fs.rm(requestedOutputRoot, { recursive: true, force: true });
   }

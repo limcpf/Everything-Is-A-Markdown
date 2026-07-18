@@ -199,6 +199,23 @@ test.describe("빌드 회귀 가드", () => {
       const repeatedClean = runCli(workDir, [cliPath, "clean", "--vault", vaultPath, "--out", outDir]);
       expect(repeatedClean.status, repeatedClean.output).toBe(0);
       expect(fs.readFileSync(legacyCacheFile, "utf8")).toBe(foreignLegacyNamedContents);
+
+      const preMarkerOutDir = path.join(workDir, "pre-marker-dist");
+      const preMarkerSentinel = path.join(preMarkerOutDir, "keep.txt");
+      writeText(preMarkerSentinel, "keep legacy output");
+      writeText(legacyCacheFile, legacyCacheContents);
+      const preMarkerClean = runCli(workDir, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultPath,
+        "--out",
+        preMarkerOutDir,
+      ]);
+      expect(preMarkerClean.status).not.toBe(0);
+      expect(preMarkerClean.output).toContain("matching .eiam-output.json");
+      expect(fs.existsSync(legacyCacheFile)).toBe(false);
+      expect(fs.readFileSync(preMarkerSentinel, "utf8")).toBe("keep legacy output");
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
