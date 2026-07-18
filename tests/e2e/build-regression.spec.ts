@@ -878,6 +878,7 @@ title: HTML Policy
 <img src="https://example.com/safe.png" alt="safe" onerror="window.__event_payload = 1" />
 <a href="javascript:window.__url_payload = 1">Unsafe URL</a>
 <iframe src="https://example.com/unsafe"></iframe>
+<xmp><img src=x onerror="window.__xmp_payload = 1">XMP_RAW_TEXT_SECRET</xmp>
 `;
 
     try {
@@ -896,6 +897,8 @@ title: HTML Policy
         expect(rendered).not.toContain("window.__event_payload");
         expect(rendered).not.toContain("javascript:window.__url_payload");
         expect(rendered).not.toContain("https://example.com/unsafe");
+        expect(rendered).not.toContain("window.__xmp_payload");
+        expect(rendered).not.toContain("XMP_RAW_TEXT_SECRET");
       }
 
       writeText(
@@ -918,6 +921,8 @@ title: HTML Policy
       expect(unsafeContent).toContain('onerror="window.__event_payload = 1"');
       expect(unsafeContent).toContain('href="javascript:window.__url_payload = 1"');
       expect(unsafeContent).toContain('<iframe src="https://example.com/unsafe"></iframe>');
+      expect(unsafeContent).toContain('onerror="window.__xmp_payload = 1"');
+      expect(unsafeContent).toContain("XMP_RAW_TEXT_SECRET");
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

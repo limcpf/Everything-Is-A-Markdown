@@ -98,7 +98,7 @@ const SAFE_HTML_OPTIONS: sanitizeHtml.IOptions = {
   disallowedTagsMode: "discard",
   enforceHtmlBoundary: false,
   nestingLimit: 100,
-  nonTextTags: ["script", "style", "textarea", "option", "noscript"],
+  nonTextTags: ["script", "style", "textarea", "option", "noscript", "xmp"],
   transformTags: {
     a(tagName, attributes) {
       const attribs = { ...attributes };

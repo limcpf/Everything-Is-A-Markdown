@@ -39,10 +39,12 @@ test.describe("런타임 렌더링 XSS 가드", () => {
         __raw_script?: number;
         __raw_event?: number;
         __raw_url?: number;
+        __raw_xmp?: number;
       };
       target.__raw_script = 0;
       target.__raw_event = 0;
       target.__raw_url = 0;
+      target.__raw_xmp = 0;
     });
 
     const assertSanitizedContent = async () => {
@@ -51,16 +53,24 @@ test.describe("런타임 렌더링 XSS 가드", () => {
       await expect(page.locator("#viewer-content iframe")).toHaveCount(0);
       await expect(page.locator("#viewer-content [onerror]")).toHaveCount(0);
       await expect(page.locator("#viewer-content .raw-html-url")).not.toHaveAttribute("href", /javascript:/i);
+      await expect(page.locator("#viewer-content .raw-html-xmp")).toHaveCount(0);
+      await expect(page.locator("#viewer-content")).not.toContainText("XMP_RAW_TEXT_SECRET");
 
       const flags = await page.evaluate(() => {
         const target = window as Window & {
           __raw_script?: number;
           __raw_event?: number;
           __raw_url?: number;
+          __raw_xmp?: number;
         };
-        return [target.__raw_script ?? 0, target.__raw_event ?? 0, target.__raw_url ?? 0];
+        return [
+          target.__raw_script ?? 0,
+          target.__raw_event ?? 0,
+          target.__raw_url ?? 0,
+          target.__raw_xmp ?? 0,
+        ];
       });
-      expect(flags).toEqual([0, 0, 0]);
+      expect(flags).toEqual([0, 0, 0, 0]);
     };
 
     await page.goto("/BC-XSS-01/");

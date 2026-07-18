@@ -15,4 +15,5 @@ description: Regression fixture for runtime XSS escaping.
 <script>window.__raw_script = 1</script>
 <img class="raw-html-event" src="/missing-xss-fixture.png" alt="event payload" onerror="window.__raw_event = 1" />
 <a class="raw-html-url" href="javascript:window.__raw_url = 1">Unsafe URL</a>
+<xmp><img class="raw-html-xmp" src="/missing-xmp-fixture.png" onerror="window.__raw_xmp = 1">XMP_RAW_TEXT_SECRET</xmp>
 <iframe src="https://example.com/unsafe-frame"></iframe>
