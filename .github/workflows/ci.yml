@@ -30,6 +30,9 @@ jobs:
       - name: Build site
         run: bun run build -- --vault ./test-vault --out ./dist
 
+      - name: Enforce generated asset size budgets
+        run: bun run check:size
+
       - name: Run E2E tests
         run: bun run test:e2e
 

@@ -210,9 +210,11 @@ Key points:
 
 - Every published route gets its own `index.html` for direct access.
 - Rendered article bodies are stored separately under `dist/content/`.
-- Runtime assets are content-hashed.
+- Production JavaScript and CSS are minified, then content-hashed from the final emitted bytes.
 - Static files declared in config are copied into the same relative paths under `dist/`.
 - Build cache is stored under `.cache/eiam/v1-<namespace>/build-index.json`.
+
+CI enforces raw and gzip budgets for the generated runtime assets. After a sample build, run `bun run check:size` to apply the same limits locally. The current budgets are 300,000 raw / 90,000 gzip bytes for JavaScript and 31,000 raw / 7,000 gzip bytes for CSS.
 
 ## Config File
 
