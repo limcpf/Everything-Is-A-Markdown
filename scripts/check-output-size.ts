@@ -27,6 +27,7 @@ const BUDGETS: Record<AssetKind, SizeBudget> = {
   js: { raw: 300_000, gzip: 90_000 },
   css: { raw: 31_000, gzip: 7_000 },
 };
+const MANIFEST_RATIO_MIN_DOCS = 2;
 
 function parseOutDir(argv: string[]): string {
   const index = argv.indexOf("--out");
@@ -181,11 +182,15 @@ function checkManifest(manifestPath: string): string[] {
   const legacyGzipBytes = gzipSync(legacyRaw, { level: 9 }).byteLength;
   const gzipRatio = gzipBytes / legacyGzipBytes;
 
-  if (rawRatio > 0.75) {
-    failures.push(`manifest raw ratio ${(rawRatio * 100).toFixed(1)}% exceeds 75% of the legacy projection`);
-  }
-  if (gzipRatio > 0.95) {
-    failures.push(`manifest gzip ratio ${(gzipRatio * 100).toFixed(1)}% exceeds 95% of the legacy projection`);
+  if (docIds.length >= MANIFEST_RATIO_MIN_DOCS) {
+    if (rawRatio > 0.75) {
+      failures.push(`manifest raw ratio ${(rawRatio * 100).toFixed(1)}% exceeds 75% of the legacy projection`);
+    }
+    if (gzipRatio > 0.95) {
+      failures.push(`manifest gzip ratio ${(gzipRatio * 100).toFixed(1)}% exceeds 95% of the legacy projection`);
+    }
+  } else {
+    console.log(`[size] manifest ratio gate skipped for ${docIds.length} doc(s)`);
   }
 
   console.log(

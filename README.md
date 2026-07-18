@@ -215,7 +215,7 @@ Key points:
 - Static files declared in config are copied into the same relative paths under `dist/`.
 - Build cache is stored under `.cache/eiam/v1-<namespace>/build-index.json`.
 
-CI enforces raw and gzip budgets for the generated runtime assets. After a sample build, run `bun run check:size` to apply the same limits locally. The current budgets are 300,000 raw / 90,000 gzip bytes for JavaScript and 31,000 raw / 7,000 gzip bytes for CSS. The same command validates manifest schema v2 canonical document references and requires at least 25% raw and 5% gzip reduction versus the former duplicated tree/document projection.
+CI enforces raw and gzip budgets for the generated runtime assets. After a sample build, run `bun run check:size` to apply the same limits locally. The current budgets are 300,000 raw / 90,000 gzip bytes for JavaScript and 31,000 raw / 7,000 gzip bytes for CSS. The same command always validates manifest schema v2 canonical document references; for manifests with at least two documents, it also requires at least 25% raw and 5% gzip reduction versus the former duplicated tree/document projection. Empty and one-document manifests skip only this relative ratio because fixed schema/gzip overhead dominates when there is no meaningful duplication to remove.
 
 ## Config File
 

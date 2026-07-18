@@ -117,7 +117,41 @@ function findFolderNodeByPath(
 test.describe("빌드 회귀 가드", () => {
   const repoRoot = process.cwd();
   const cliPath = path.join(repoRoot, "src/cli.ts");
+  const sizeCheckPath = path.join(repoRoot, "scripts/check-output-size.ts");
   const vaultPath = path.join(repoRoot, "test-vault");
+
+  test("manifest size gate는 empty/one-doc vault의 고정 overhead를 허용한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-small-manifest-size-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+
+    try {
+      fs.mkdirSync(vaultDir, { recursive: true });
+      const emptyBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(emptyBuild.status, emptyBuild.output).toBe(0);
+      const emptyCheck = runCli(workDir, [sizeCheckPath, "--out", outDir]);
+      expect(emptyCheck.status, emptyCheck.output).toBe(0);
+      expect(emptyCheck.output).toContain("manifest ratio gate skipped for 0 doc(s)");
+
+      writeText(
+        path.join(vaultDir, "only.md"),
+        `---
+publish: true
+prefix: SMALL-01
+category_path: small
+title: Only document
+---
+`,
+      );
+      const oneDocBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(oneDocBuild.status, oneDocBuild.output).toBe(0);
+      const oneDocCheck = runCli(workDir, [sizeCheckPath, "--out", outDir]);
+      expect(oneDocCheck.status, oneDocCheck.output).toBe(0);
+      expect(oneDocCheck.output).toContain("manifest ratio gate skipped for 1 doc(s)");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
 
   test("증분 빌드에서 누락된 content 파일을 복구한다", async () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-build-regression-"));
