@@ -138,7 +138,7 @@ export function buildTreesAdapterInput(treeNodes, docs = []) {
       const treePath = registerPath(joinTreePath(parentPath, formatTreesFileBasename(node, doc), false), {
         branch: node.branch ?? doc?.branch ?? null,
         docId: node.id,
-        isNew: (node.isNew ?? doc?.isNew) === true,
+        isNew: (doc?.isNew ?? node.isNew) === true,
         kind: "file",
         prefix: node.prefix ?? doc?.prefix ?? "",
         route: node.route ?? doc?.route ?? "",

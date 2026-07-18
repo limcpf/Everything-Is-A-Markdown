@@ -110,6 +110,29 @@ test.describe("Trees sidebar adapter", () => {
     ).toBe("DOC - 01 Setup - Install");
   });
 
+  test("runtime-derived NEW state overrides stale legacy tree metadata", () => {
+    const tree = [
+      {
+        type: "folder",
+        name: "Legacy",
+        path: "legacy",
+        children: [
+          { type: "file", id: "recent", name: "recent.md", title: "Recent", isNew: false },
+          { type: "file", id: "old", name: "old.md", title: "Old", isNew: true },
+        ],
+      },
+    ];
+    const docs = [
+      { id: "recent", route: "/RECENT/", title: "Recent", isNew: true },
+      { id: "old", route: "/OLD/", title: "Old", isNew: false },
+    ];
+
+    const adapter = buildTreesAdapterInput(tree, docs);
+
+    expect(adapter.metadataByTreePath.get("Legacy/Recent")?.isNew).toBe(true);
+    expect(adapter.metadataByTreePath.get("Legacy/Old")?.isNew).toBe(false);
+  });
+
   test("duplicate canonical paths receive stable suffixes without changing route lookup", () => {
     const tree = [
       {
