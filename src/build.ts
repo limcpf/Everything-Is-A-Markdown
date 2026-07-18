@@ -106,11 +106,35 @@ async function toCanonicalPath(input: string): Promise<string> {
   }
 }
 
+async function resolveCacheRoot(): Promise<string> {
+  const canonicalCwd = await toCanonicalPath(process.cwd());
+  let candidate = canonicalCwd;
+
+  for (const segment of CACHE_ROOT_SEGMENTS) {
+    candidate = path.join(candidate, segment);
+    try {
+      const candidateStat = await fs.lstat(candidate);
+      if (candidateStat.isSymbolicLink()) {
+        throw new Error(`[safety] Refusing symlinked cache path: ${candidate}`);
+      }
+      if (!candidateStat.isDirectory()) {
+        throw new Error(`[safety] Cache path component must be a real directory: ${candidate}`);
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
+  }
+
+  return candidate;
+}
+
 async function resolveCacheLocation(options: BuildOptions): Promise<CacheLocation> {
   const [vaultRoot, outputRoot, rootDir] = await Promise.all([
     toCanonicalPath(options.vaultDir),
     toCanonicalPath(options.outDir),
-    toCanonicalPath(path.join(process.cwd(), ...CACHE_ROOT_SEGMENTS)),
+    resolveCacheRoot(),
   ]);
   const namespace = `v${CACHE_NAMESPACE_VERSION}-${makeHash(`${vaultRoot}\0${outputRoot}\0${rootDir}`)}`;
   const namespaceDir = path.join(rootDir, namespace);
@@ -173,9 +197,12 @@ async function writeOutputMarker(outputRoot: string, cacheNamespace: string): Pr
   await Bun.write(path.join(outputRoot, OUTPUT_MARKER_FILE_NAME), `${JSON.stringify(marker, null, 2)}\n`);
 }
 
-async function prepareOwnedOutputDirectory(options: BuildOptions, cacheLocation: CacheLocation): Promise<void> {
+async function prepareOwnedOutputDirectory(
+  options: BuildOptions,
+  cacheLocation: CacheLocation,
+  outputRoot: string,
+): Promise<void> {
   const requestedOutputRoot = path.resolve(options.outDir);
-  const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir, cacheLocation.rootDir);
 
   try {
     const outputStat = await fs.lstat(requestedOutputRoot);
@@ -1790,8 +1817,9 @@ function buildBacklinksByDocId(
 
 export async function buildSite(options: BuildOptions): Promise<BuildResult> {
   const cacheLocation = await resolveCacheLocation(options);
-  await prepareOwnedOutputDirectory(options, cacheLocation);
+  const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir, cacheLocation.rootDir);
   await removeLegacyCacheIndex();
+  await prepareOwnedOutputDirectory(options, cacheLocation, outputRoot);
   await ensureDir(path.join(options.outDir, "content"));
 
   const { cachePath } = cacheLocation;

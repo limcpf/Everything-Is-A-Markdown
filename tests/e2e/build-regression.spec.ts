@@ -216,6 +216,20 @@ test.describe("빌드 회귀 가드", () => {
       expect(preMarkerClean.output).toContain("matching .eiam-output.json");
       expect(fs.existsSync(legacyCacheFile)).toBe(false);
       expect(fs.readFileSync(preMarkerSentinel, "utf8")).toBe("keep legacy output");
+
+      writeText(legacyCacheFile, legacyCacheContents);
+      const preMarkerBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        preMarkerOutDir,
+      ]);
+      expect(preMarkerBuild.status).not.toBe(0);
+      expect(preMarkerBuild.output).toContain("matching .eiam-output.json");
+      expect(fs.existsSync(legacyCacheFile)).toBe(false);
+      expect(fs.readFileSync(preMarkerSentinel, "utf8")).toBe("keep legacy output");
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
@@ -292,6 +306,38 @@ test.describe("빌드 회귀 가드", () => {
       expect(cleanCwd.status).not.toBe(0);
       expect(cleanCwd.output).toContain("Refusing dangerous output directory");
       expect(fs.readFileSync(cwdSentinel, "utf8")).toBe("keep cwd");
+      expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
+
+      const externalCacheTarget = path.join(workDir, "external-cache-target");
+      const symlinkedCacheRoot = path.join(workDir, ".cache", "eiam");
+      const symlinkGuardOutDir = path.join(workDir, "symlink-guard-dist");
+      fs.mkdirSync(externalCacheTarget, { recursive: true });
+      fs.symlinkSync(externalCacheTarget, symlinkedCacheRoot, "dir");
+
+      const buildWithSymlinkedCache = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        symlinkGuardOutDir,
+      ]);
+      expect(buildWithSymlinkedCache.status).not.toBe(0);
+      expect(buildWithSymlinkedCache.output).toContain("Refusing symlinked cache path");
+      expect(fs.existsSync(symlinkGuardOutDir)).toBe(false);
+      expect(fs.readdirSync(externalCacheTarget)).toEqual([]);
+
+      const cleanWithSymlinkedCache = runCli(workDir, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultPath,
+        "--out",
+        symlinkGuardOutDir,
+      ]);
+      expect(cleanWithSymlinkedCache.status).not.toBe(0);
+      expect(cleanWithSymlinkedCache.output).toContain("Refusing symlinked cache path");
+      expect(fs.readdirSync(externalCacheTarget)).toEqual([]);
       expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
