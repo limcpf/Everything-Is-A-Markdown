@@ -32,13 +32,18 @@ export function escapeRegExp(value: string): string {
 }
 
 export async function getInitialManifest(page: Page): Promise<ManifestShape> {
-  const manifest = await page.evaluate(() => {
-    const script = document.getElementById("initial-manifest-data");
+  const manifest = await page.evaluate(async () => {
+    const script = document.getElementById("initial-runtime-data");
     if (!(script instanceof HTMLScriptElement) || !script.textContent) {
       return null;
     }
     try {
-      return JSON.parse(script.textContent);
+      const runtimeData = JSON.parse(script.textContent) as { manifestUrl?: unknown };
+      if (typeof runtimeData.manifestUrl !== "string") {
+        return null;
+      }
+      const response = await fetch(runtimeData.manifestUrl);
+      return response.ok ? await response.json() : null;
     } catch {
       return null;
     }

@@ -663,8 +663,8 @@ function loadInitialViewData() {
   }
 }
 
-function loadInitialManifestData() {
-  const script = document.getElementById("initial-manifest-data");
+function loadInitialRuntimeData() {
+  const script = document.getElementById("initial-runtime-data");
   if (!(script instanceof HTMLScriptElement)) {
     return null;
   }
@@ -676,7 +676,17 @@ function loadInitialManifestData() {
 
   try {
     const parsed = JSON.parse(raw);
-    return normalizeManifestPayload(parsed);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    const pathBase = normalizePathBase(parsed.pathBase);
+    const manifestUrl = typeof parsed.manifestUrl === "string" ? parsed.manifestUrl : "";
+    if (!manifestUrl || manifestUrl !== toPathWithBase("/manifest.json", pathBase)) {
+      return null;
+    }
+
+    return { manifestUrl, pathBase };
   } catch {
     return null;
   }
@@ -1562,17 +1572,16 @@ async function start() {
     }
   });
 
-  let manifest = loadInitialManifestData();
-  const initialPathBase = normalizePathBase(manifest?.pathBase);
+  const initialRuntimeData = loadInitialRuntimeData();
+  const initialPathBase = normalizePathBase(initialRuntimeData?.pathBase);
+  const manifestUrl = initialRuntimeData?.manifestUrl ?? toPathWithBase("/manifest.json", initialPathBase);
+  const manifestRes = await fetch(manifestUrl);
+  if (!manifestRes.ok) {
+    throw new Error(`Failed to load manifest: ${manifestRes.status}`);
+  }
+  const manifest = normalizeManifestPayload(await manifestRes.json());
   if (!manifest) {
-    const manifestRes = await fetch(toPathWithBase("/manifest.json", initialPathBase));
-    if (!manifestRes.ok) {
-      throw new Error(`Failed to load manifest: ${manifestRes.status}`);
-    }
-    manifest = normalizeManifestPayload(await manifestRes.json());
-    if (!manifest) {
-      throw new Error("Failed to load a supported manifest schema");
-    }
+    throw new Error("Failed to load a supported manifest schema");
   }
   const mermaidConfig = resolveMermaidConfig(manifest);
   const pathBase = normalizePathBase(manifest.pathBase);

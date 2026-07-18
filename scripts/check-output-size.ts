@@ -201,12 +201,82 @@ function checkManifest(manifestPath: string): string[] {
   return failures;
 }
 
+function findRouteHtmlFiles(outDir: string): string[] {
+  const files: string[] = [];
+  const walk = (directory: string) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const entryPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        walk(entryPath);
+      } else if (entry.isFile() && entry.name === "index.html") {
+        files.push(entryPath);
+      }
+    }
+  };
+  walk(outDir);
+  return files.sort();
+}
+
+function checkRouteHtml(outDir: string): string[] {
+  const failures: string[] = [];
+  const routeHtmlFiles = findRouteHtmlFiles(outDir);
+  let maxBootstrapBytes = 0;
+
+  for (const htmlPath of routeHtmlFiles) {
+    const relativePath = path.relative(outDir, htmlPath);
+    const html = fs.readFileSync(htmlPath, "utf8");
+    if (html.includes('id="initial-manifest-data"')) {
+      failures.push(`${relativePath} embeds the full initial manifest`);
+    }
+
+    const matches = Array.from(
+      html.matchAll(/<script id="initial-runtime-data" type="application\/json">([^<]*)<\/script>/g),
+    );
+    if (matches.length !== 1) {
+      failures.push(`${relativePath} must contain exactly one initial runtime bootstrap`);
+      continue;
+    }
+
+    const payloadText = matches[0]?.[1] ?? "";
+    const payloadBytes = Buffer.byteLength(payloadText);
+    maxBootstrapBytes = Math.max(maxBootstrapBytes, payloadBytes);
+    if (payloadBytes > 256) {
+      failures.push(`${relativePath} runtime bootstrap ${payloadBytes}B exceeds 256B`);
+      continue;
+    }
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(payloadText) as unknown;
+    } catch {
+      failures.push(`${relativePath} runtime bootstrap is not valid JSON`);
+      continue;
+    }
+    if (!isRecord(payload) || Object.keys(payload).sort().join(",") !== "manifestUrl,pathBase") {
+      failures.push(`${relativePath} runtime bootstrap must contain only manifestUrl and pathBase`);
+      continue;
+    }
+    const pathBase = typeof payload.pathBase === "string" ? payload.pathBase.replace(/\/+$/, "") : "";
+    const expectedManifestUrl = pathBase ? `${pathBase}/manifest.json` : "/manifest.json";
+    if (payload.manifestUrl !== expectedManifestUrl) {
+      failures.push(`${relativePath} runtime bootstrap has an invalid manifestUrl`);
+    }
+  }
+
+  if (routeHtmlFiles.length === 0) {
+    failures.push("generated output must contain at least one route index.html");
+  }
+  console.log(`[size] route-html files=${routeHtmlFiles.length} bootstrap-max=${maxBootstrapBytes}/256`);
+  return failures;
+}
+
 const outDir = parseOutDir(process.argv.slice(2));
 const assetsDir = path.join(outDir, "assets");
 const failures = (["js", "css"] as const).flatMap((kind) =>
   checkAsset(findRuntimeAsset(assetsDir, kind), kind),
 );
 failures.push(...checkManifest(path.join(outDir, "manifest.json")));
+failures.push(...checkRouteHtml(outDir));
 
 if (failures.length > 0) {
   for (const failure of failures) {
