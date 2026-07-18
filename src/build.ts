@@ -1484,6 +1484,7 @@ async function bundleRuntimeJs(entrypoint: string): Promise<string> {
     format: "esm",
     splitting: false,
     sourcemap: "none",
+    minify: true,
   });
 
   if (!result.success) {
@@ -1499,10 +1500,31 @@ async function bundleRuntimeJs(entrypoint: string): Promise<string> {
   return output.text();
 }
 
+async function bundleRuntimeCss(entrypoint: string): Promise<string> {
+  const result = await Bun.build({
+    entrypoints: [entrypoint],
+    target: "browser",
+    sourcemap: "none",
+    minify: true,
+  });
+
+  if (!result.success) {
+    const details = result.logs.map((log) => String(log)).filter(Boolean).join("\n");
+    throw new Error(`Failed to bundle runtime app.css${details ? `:\n${details}` : ""}`);
+  }
+
+  const output = result.outputs.find((artifact) => artifact.path.endsWith(".css")) ?? result.outputs[0];
+  if (!output) {
+    throw new Error("Failed to bundle runtime app.css: no CSS output was produced");
+  }
+
+  return output.text();
+}
+
 async function writeRuntimeAssets(context: OutputWriteContext): Promise<RuntimeAssets> {
   const runtimeDir = path.join(import.meta.dir, "runtime");
   const runtimeJs = await bundleRuntimeJs(path.join(runtimeDir, "app.js"));
-  const runtimeCss = await Bun.file(path.join(runtimeDir, "app.css")).text();
+  const runtimeCss = await bundleRuntimeCss(path.join(runtimeDir, "app.css"));
 
   const jsRelPath = `assets/app.${makeHash(runtimeJs).slice(0, 12)}.js`;
   const cssRelPath = `assets/app.${makeHash(runtimeCss).slice(0, 12)}.css`;
