@@ -1930,6 +1930,7 @@ async function start() {
         },
         fileTreeSearchMode: "hide-non-matches",
         flattenEmptyDirectories: false,
+        icons: "minimal",
         initialExpansion: 1,
         initialSelectedPaths: selectedTreePath ? [selectedTreePath] : [],
         itemHeight: 38,

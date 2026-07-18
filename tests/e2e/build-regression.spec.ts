@@ -141,6 +141,26 @@ test.describe("빌드 회귀 가드", () => {
   const sizeCheckPath = path.join(repoRoot, "scripts/check-output-size.ts");
   const vaultPath = path.join(repoRoot, "test-vault");
 
+  test("runtime size gate는 built-in file icon catalog 재진입을 거부한다", () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-tree-icon-size-"));
+    const outDir = path.join(workDir, "dist");
+
+    try {
+      const build = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
+      expect(build.status, build.output).toBe(0);
+      const assetsDir = path.join(outDir, "assets");
+      const runtimeJs = fs.readdirSync(assetsDir).find((fileName) => /^app\.[a-f0-9]{12}\.js$/.test(fileName));
+      expect(runtimeJs).toBeDefined();
+      fs.appendFileSync(path.join(assetsDir, runtimeJs!), '"file-tree-builtin-astro";\n', "utf8");
+
+      const sizeCheck = runCli(workDir, [sizeCheckPath, "--out", outDir]);
+      expect(sizeCheck.status).toBe(1);
+      expect(sizeCheck.output).toContain("ships the @pierre/trees built-in file icon catalog");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
   test("manifest size gate는 tiny vault의 고정 overhead를 허용한다", async () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-small-manifest-size-"));
     const vaultDir = path.join(workDir, "vault");

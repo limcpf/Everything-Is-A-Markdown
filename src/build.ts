@@ -1472,7 +1472,30 @@ function buildAppShellAssetsForOutput(outputPath: string, runtimeAssets: Runtime
   };
 }
 
+function createMinimalTreeIconPlugin(): { plugin: Bun.BunPlugin; replacementCount: () => number } {
+  const minimalIconModule = path.join(import.meta.dir, "runtime", "tree-icons-minimal.js");
+  let replacements = 0;
+
+  return {
+    plugin: {
+      name: "eiam-minimal-tree-icons",
+      setup(builder) {
+        builder.onResolve({ filter: /builtInIcons[.]js$/ }, (args) => {
+          const importer = toPosixPath(args.importer);
+          if (!importer.includes("/node_modules/@pierre/trees/dist/")) {
+            return undefined;
+          }
+          replacements += 1;
+          return { path: minimalIconModule };
+        });
+      },
+    },
+    replacementCount: () => replacements,
+  };
+}
+
 async function bundleRuntimeJs(entrypoint: string): Promise<string> {
+  const minimalTreeIcons = createMinimalTreeIconPlugin();
   const result = await Bun.build({
     entrypoints: [entrypoint],
     target: "browser",
@@ -1480,6 +1503,7 @@ async function bundleRuntimeJs(entrypoint: string): Promise<string> {
     splitting: false,
     sourcemap: "none",
     minify: true,
+    plugins: [minimalTreeIcons.plugin],
   });
 
   if (!result.success) {
@@ -1492,7 +1516,15 @@ async function bundleRuntimeJs(entrypoint: string): Promise<string> {
     throw new Error("Failed to bundle runtime app.js: no JavaScript output was produced");
   }
 
-  return output.text();
+  if (minimalTreeIcons.replacementCount() === 0) {
+    throw new Error("Failed to replace the pinned @pierre/trees built-in icon module");
+  }
+
+  const runtimeJs = await output.text();
+  if (runtimeJs.includes("file-tree-builtin-")) {
+    throw new Error("Failed to remove the @pierre/trees built-in file icon catalog");
+  }
+  return runtimeJs;
 }
 
 async function bundleRuntimeCss(entrypoint: string): Promise<string> {
