@@ -49,6 +49,14 @@ function extractRuntimeAssetPath(html: string, extension: "js" | "css"): string 
   return match[0];
 }
 
+function extractTreeRuntimeAssetPath(html: string): string {
+  const match = html.match(/assets\/tree\.[a-f0-9]+\.js/);
+  if (!match) {
+    throw new Error("deferred tree 런타임 자산 경로를 찾지 못했습니다.");
+  }
+  return match[0];
+}
+
 function runCli(cwd: string, args: string[], timeout?: number): CliResult {
   const result = spawnSync("bun", args, {
     cwd,
@@ -319,7 +327,7 @@ ALPHA
     }
   });
 
-  test("증분 빌드에서 누락된 해시 런타임 자산(js/css)을 복구한다", async () => {
+  test("증분 빌드에서 누락된 해시 런타임 자산(app/tree/css)을 복구한다", async () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-build-runtime-regression-"));
     const outDir = path.join(workDir, "dist");
 
@@ -332,21 +340,27 @@ ALPHA
       const entryHtml = fs.readFileSync(entryHtmlPath, "utf8");
 
       const runtimeJsRelPath = extractRuntimeAssetPath(entryHtml, "js");
+      const treeRuntimeJsRelPath = extractTreeRuntimeAssetPath(entryHtml);
       const runtimeCssRelPath = extractRuntimeAssetPath(entryHtml, "css");
       const runtimeJsPath = path.join(outDir, runtimeJsRelPath);
+      const treeRuntimeJsPath = path.join(outDir, treeRuntimeJsRelPath);
       const runtimeCssPath = path.join(outDir, runtimeCssRelPath);
 
       expect(fs.existsSync(runtimeJsPath)).toBe(true);
+      expect(fs.existsSync(treeRuntimeJsPath)).toBe(true);
       expect(fs.existsSync(runtimeCssPath)).toBe(true);
 
       fs.rmSync(runtimeJsPath);
+      fs.rmSync(treeRuntimeJsPath);
       fs.rmSync(runtimeCssPath);
       expect(fs.existsSync(runtimeJsPath)).toBe(false);
+      expect(fs.existsSync(treeRuntimeJsPath)).toBe(false);
       expect(fs.existsSync(runtimeCssPath)).toBe(false);
 
       const secondBuild = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
       expect(secondBuild.status, secondBuild.output).toBe(0);
       expect(fs.existsSync(runtimeJsPath)).toBe(true);
+      expect(fs.existsSync(treeRuntimeJsPath)).toBe(true);
       expect(fs.existsSync(runtimeCssPath)).toBe(true);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });

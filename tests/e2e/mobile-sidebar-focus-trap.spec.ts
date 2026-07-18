@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { waitForAppReady } from "./utils/app-ready";
+import { waitForAppReady, waitForTreeReady } from "./utils/app-ready";
 
 test.describe("모바일 사이드바 포커스 트랩", () => {
   test("Tab/Shift+Tab 이동이 사이드바 내부에 머무른다", async ({ page }) => {
@@ -14,6 +14,7 @@ test.describe("모바일 사이드바 포커스 트랩", () => {
     await expect(toggle).toBeVisible();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await toggle.click();
+    await waitForTreeReady(page);
     await expect(page.locator("#sidebar-toggle")).toHaveAttribute("aria-expanded", "true");
     await expect(sidebar).toHaveAttribute("role", "dialog");
     await expect(sidebar).toHaveAttribute("aria-modal", "true");

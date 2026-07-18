@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import { waitForAppReady } from "./utils/app-ready";
+import { waitForAppReady, waitForTreeReady } from "./utils/app-ready";
 
 interface Rect {
   bottom: number;
@@ -134,6 +134,7 @@ async function openSidebar(page: Page, baseUrl: string): Promise<void> {
   await expect(toggle).toBeVisible();
   await toggle.click();
   await expect(page.locator("#sidebar-panel")).toHaveAttribute("role", "dialog");
+  await waitForTreeReady(page);
 }
 
 async function getRect(page: Page, selector: string): Promise<Rect> {

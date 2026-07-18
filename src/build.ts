@@ -54,6 +54,7 @@ interface OutputWriteContext {
 interface RuntimeAssets {
   cssRelPath: string;
   jsRelPath: string;
+  treeJsRelPath: string;
 }
 
 interface WikiLookup {
@@ -1469,6 +1470,7 @@ function buildAppShellAssetsForOutput(outputPath: string, runtimeAssets: Runtime
   return {
     cssHref: toRelativeAssetPath(outputPath, runtimeAssets.cssRelPath),
     jsSrc: toRelativeAssetPath(outputPath, runtimeAssets.jsRelPath),
+    treeModulePath: `/${runtimeAssets.treeJsRelPath}`,
   };
 }
 
@@ -1494,8 +1496,11 @@ function createMinimalTreeIconPlugin(): { plugin: Bun.BunPlugin; replacementCoun
   };
 }
 
-async function bundleRuntimeJs(entrypoint: string): Promise<string> {
-  const minimalTreeIcons = createMinimalTreeIconPlugin();
+async function bundleRuntimeJs(
+  entrypoint: string,
+  options: { label: string; replaceTreeIcons: boolean },
+): Promise<string> {
+  const minimalTreeIcons = options.replaceTreeIcons ? createMinimalTreeIconPlugin() : null;
   const result = await Bun.build({
     entrypoints: [entrypoint],
     target: "browser",
@@ -1503,20 +1508,20 @@ async function bundleRuntimeJs(entrypoint: string): Promise<string> {
     splitting: false,
     sourcemap: "none",
     minify: true,
-    plugins: [minimalTreeIcons.plugin],
+    plugins: minimalTreeIcons ? [minimalTreeIcons.plugin] : [],
   });
 
   if (!result.success) {
     const details = result.logs.map((log) => String(log)).filter(Boolean).join("\n");
-    throw new Error(`Failed to bundle runtime app.js${details ? `:\n${details}` : ""}`);
+    throw new Error(`Failed to bundle runtime ${options.label}${details ? `:\n${details}` : ""}`);
   }
 
   const output = result.outputs.find((artifact) => artifact.path.endsWith(".js")) ?? result.outputs[0];
   if (!output) {
-    throw new Error("Failed to bundle runtime app.js: no JavaScript output was produced");
+    throw new Error(`Failed to bundle runtime ${options.label}: no JavaScript output was produced`);
   }
 
-  if (minimalTreeIcons.replacementCount() === 0) {
+  if (minimalTreeIcons && minimalTreeIcons.replacementCount() === 0) {
     throw new Error("Failed to replace the pinned @pierre/trees built-in icon module");
   }
 
@@ -1550,17 +1555,28 @@ async function bundleRuntimeCss(entrypoint: string): Promise<string> {
 
 async function writeRuntimeAssets(context: OutputWriteContext): Promise<RuntimeAssets> {
   const runtimeDir = path.join(import.meta.dir, "runtime");
-  const runtimeJs = await bundleRuntimeJs(path.join(runtimeDir, "app.js"));
-  const runtimeCss = await bundleRuntimeCss(path.join(runtimeDir, "app.css"));
+  const [runtimeJs, treeRuntimeJs, runtimeCss] = await Promise.all([
+    bundleRuntimeJs(path.join(runtimeDir, "app.js"), {
+      label: "app.js",
+      replaceTreeIcons: false,
+    }),
+    bundleRuntimeJs(path.join(runtimeDir, "tree-runtime.js"), {
+      label: "tree-runtime.js",
+      replaceTreeIcons: true,
+    }),
+    bundleRuntimeCss(path.join(runtimeDir, "app.css")),
+  ]);
 
   const jsRelPath = `assets/app.${makeHash(runtimeJs).slice(0, 12)}.js`;
+  const treeJsRelPath = `assets/tree.${makeHash(treeRuntimeJs).slice(0, 12)}.js`;
   const cssRelPath = `assets/app.${makeHash(runtimeCss).slice(0, 12)}.css`;
 
   for (const previousPath of Object.keys(context.previousHashes)) {
     const isLegacyRuntimeAsset =
-      previousPath.startsWith("assets/app") &&
+      (previousPath.startsWith("assets/app") || previousPath.startsWith("assets/tree")) &&
       (previousPath.endsWith(".js") || previousPath.endsWith(".css")) &&
       previousPath !== jsRelPath &&
+      previousPath !== treeJsRelPath &&
       previousPath !== cssRelPath;
     if (!isLegacyRuntimeAsset) {
       continue;
@@ -1569,11 +1585,13 @@ async function writeRuntimeAssets(context: OutputWriteContext): Promise<RuntimeA
   }
 
   await writeOutputIfChanged(context, jsRelPath, runtimeJs);
+  await writeOutputIfChanged(context, treeJsRelPath, treeRuntimeJs);
   await writeOutputIfChanged(context, cssRelPath, runtimeCss);
 
   return {
     cssRelPath,
     jsRelPath,
+    treeJsRelPath,
   };
 }
 

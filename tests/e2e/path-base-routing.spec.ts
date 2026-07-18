@@ -5,6 +5,7 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
+import { waitForTreeReady } from "./utils/app-ready";
 
 function runCli(cwd: string, args: string[]): { status: number | null; output: string } {
   const result = spawnSync("bun", args, { cwd, encoding: "utf8" });
@@ -142,6 +143,9 @@ test.describe("pathBase 정식 지원", () => {
       expect(encodedIndexHtml).toContain(
         '\"manifestUrl\":\"/docs%20guides/%ED%95%9C%EA%B8%80/manifest.json\"',
       );
+      expect(encodedIndexHtml).toMatch(
+        /"treeModuleUrl":"\/docs%20guides\/%ED%95%9C%EA%B8%80\/assets\/tree\.[a-f0-9]{12}\.js"/,
+      );
 
       const encodedServer = await startStaticServer(outDir, "/docs guides/한글");
       try {
@@ -187,6 +191,7 @@ test.describe("pathBase 정식 지원", () => {
     try {
       await page.goto(`${server.baseUrl}/blog/BC-VO-00/`);
       await expect(page.locator("#viewer-title")).toHaveText("About");
+      await waitForTreeReady(page);
 
       const setupRow = page
         .locator('#tree-root [data-type="item"][data-item-type="file"][data-item-path="Recent/BC-VO-02 Setup Guide"]')

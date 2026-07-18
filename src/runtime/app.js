@@ -1,4 +1,3 @@
-import { FileTree, prepareFileTreeInput } from "@pierre/trees";
 import { getRuntimeManifestDocs, normalizeManifestPayload } from "./manifest-adapter.js";
 import { buildTreesAdapterInput } from "./tree-adapter.js";
 
@@ -16,85 +15,9 @@ const DEFAULT_BRANCH = "dev";
 const DEFAULT_SITE_TITLE = "File-System Blog";
 const BRANCH_KEY = "fsblog.branch";
 const APP_READY_STATE_ATTR = "data-app-ready";
+const TREE_RUNTIME_STATE_ATTR = "data-tree-runtime";
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
-const TREE_UNSAFE_CSS = `
-[data-type='item'][data-item-selected] {
-  border-left: 4px solid var(--trees-accent-override, currentColor);
-  box-shadow: inset 0 0 0 1px var(--trees-selected-focused-border-color-override, transparent);
-  padding-left: calc(var(--trees-item-padding-x) - 4px);
-}
-
-[data-type='item'][data-item-selected] [data-item-section='content'] {
-  font-weight: var(--trees-font-weight-semibold);
-}
-
-/* EIAM owns the visible search controls while Trees keeps search projection enabled. */
-[data-file-tree-search-container] {
-  display: none;
-}
-
-[data-item-section='decoration'] > span {
-  flex: 0 0 auto;
-  width: auto;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: var(--trees-new-badge-bg, #d20f39);
-  color: var(--trees-new-badge-fg, #ffffff);
-  font-size: 0.625rem;
-  font-weight: 800;
-  line-height: 1;
-}
-
-[data-type='item'][data-item-type='file'] [data-item-section='content'] {
-  display: flex;
-  align-items: center;
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tree-item-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-}
-
-.tree-item-prefix-badge {
-  flex: 0 0 auto;
-  max-width: 6.5rem;
-  overflow: hidden;
-  padding: 2px 6px;
-  border: 1px solid var(--trees-prefix-badge-border, rgba(203, 166, 247, 0.38));
-  border-radius: 999px;
-  background: var(--trees-prefix-badge-bg, rgba(203, 166, 247, 0.14));
-  color: var(--trees-prefix-badge-fg, currentColor);
-  font-size: 0.66rem;
-  font-weight: 800;
-  line-height: 1.15;
-  letter-spacing: 0.02em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tree-item-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-[data-type='item'][data-item-type='file'] [data-item-section='decoration'] {
-  flex: 0 0 auto;
-  margin-left: 6px;
-  min-width: max-content;
-}
-`;
 const MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
 const MERMAID_DEFAULT_THEME = "default";
 const MERMAID_SELECTOR = "pre.mermaid";
@@ -682,11 +605,26 @@ function loadInitialRuntimeData() {
 
     const pathBase = normalizePathBase(parsed.pathBase);
     const manifestUrl = typeof parsed.manifestUrl === "string" ? parsed.manifestUrl : "";
+    const treeModuleUrl = typeof parsed.treeModuleUrl === "string" ? parsed.treeModuleUrl : "";
     if (!manifestUrl || manifestUrl !== toPathWithBase("/manifest.json", pathBase)) {
       return null;
     }
 
-    return { manifestUrl, pathBase };
+    let resolvedTreeModuleUrl;
+    try {
+      resolvedTreeModuleUrl = new URL(treeModuleUrl, document.baseURI);
+    } catch {
+      return null;
+    }
+    const treeModulePath = stripPathBase(resolvedTreeModuleUrl.pathname, pathBase);
+    if (
+      resolvedTreeModuleUrl.origin !== window.location.origin ||
+      !/^\/assets\/tree\.[a-f0-9]{12}\.js$/.test(treeModulePath)
+    ) {
+      return null;
+    }
+
+    return { manifestUrl, pathBase, treeModuleUrl: resolvedTreeModuleUrl.href };
   } catch {
     return null;
   }
@@ -1157,8 +1095,16 @@ function setAppReadyState(state) {
   document.documentElement.setAttribute(APP_READY_STATE_ATTR, state);
 }
 
+function setTreeRuntimeState(state) {
+  if (!(document.documentElement instanceof HTMLElement)) {
+    return;
+  }
+  document.documentElement.setAttribute(TREE_RUNTIME_STATE_ATTR, state);
+}
+
 async function start() {
   setAppReadyState("booting");
+  setTreeRuntimeState("idle");
 
   const treeRoot = document.getElementById("tree-root");
   const treeSearchInput = document.getElementById("tree-search-input");
@@ -1199,6 +1145,15 @@ async function start() {
   let treePathOrder = new Map();
   let treeSearchValue = "";
   let renderedTreeBranch = "";
+  let treeRuntime = null;
+  let treeLoadPromise = null;
+  let treeRetryCount = 0;
+  let treeLoadAllowed = false;
+  let pendingTreeLoadReason = "";
+  let requestTreeLoad = (reason) => {
+    pendingTreeLoadReason = reason;
+    return Promise.resolve(false);
+  };
 
   const announceA11yStatus = (message) => {
     if (!(a11yStatusEl instanceof HTMLElement)) {
@@ -1364,6 +1319,7 @@ async function start() {
     }
     document.body.classList.add("menu-open");
     syncSidebarA11y(true);
+    void requestTreeLoad("mobile-sidebar");
     const focusables = getFocusableElements(sidebar);
     if (focusables.length > 0) {
       focusables[0].focus();
@@ -1394,6 +1350,9 @@ async function start() {
       }
       syncSidebarA11y(false);
       syncDesktopSidebarWidth(false);
+      if (treeLoadAllowed) {
+        void requestTreeLoad("desktop-layout");
+      }
       return;
     }
     closeSidebar();
@@ -1575,6 +1534,7 @@ async function start() {
   const initialRuntimeData = loadInitialRuntimeData();
   const initialPathBase = normalizePathBase(initialRuntimeData?.pathBase);
   const manifestUrl = initialRuntimeData?.manifestUrl ?? toPathWithBase("/manifest.json", initialPathBase);
+  const treeModuleUrl = initialRuntimeData?.treeModuleUrl ?? "";
   const manifestRes = await fetch(manifestUrl);
   if (!manifestRes.ok) {
     throw new Error(`Failed to load manifest: ${manifestRes.status}`);
@@ -1729,8 +1689,12 @@ async function start() {
   };
 
   if (treeSearchInput instanceof HTMLInputElement) {
+    treeSearchInput.addEventListener("focus", () => {
+      void requestTreeLoad("tree-search");
+    });
     treeSearchInput.addEventListener("input", () => {
       applyTreeSearch(treeSearchInput.value);
+      void requestTreeLoad("tree-search");
     });
     treeSearchInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
@@ -1848,8 +1812,11 @@ async function start() {
   };
 
   const prepareTreesInput = () => {
+    if (!treeRuntime) {
+      throw new Error("Tree runtime is not loaded");
+    }
     treePathOrder = new Map(view.trees.paths.map((treePath, index) => [treePath, index]));
-    return prepareFileTreeInput(view.trees.paths, { sort: compareTreesByBranchOrder });
+    return treeRuntime.prepareFileTreeInput(view.trees.paths, { sort: compareTreesByBranchOrder });
   };
 
   const renderTreeRowDecoration = ({ item }) => {
@@ -1906,7 +1873,7 @@ async function start() {
   };
 
   const renderTree = (state) => {
-    if (!(treeRoot instanceof HTMLElement)) {
+    if (!(treeRoot instanceof HTMLElement) || !treeRuntime) {
       return;
     }
 
@@ -1920,7 +1887,8 @@ async function start() {
       : null;
 
     if (!fileTree) {
-      fileTree = new FileTree({
+      treeRoot.replaceChildren();
+      fileTree = new treeRuntime.FileTree({
         composition: {
           contextMenu: {
             enabled: true,
@@ -1954,7 +1922,7 @@ async function start() {
         search: true,
         searchBlurBehavior: "retain",
         stickyFolders: true,
-        unsafeCSS: TREE_UNSAFE_CSS,
+        unsafeCSS: treeRuntime.TREE_UNSAFE_CSS,
       });
       fileTree.render({ containerWrapper: treeRoot });
     } else {
@@ -1970,6 +1938,133 @@ async function start() {
     syncActiveTreeSelection(state.currentDocId || "");
     applyTreeSearch(treeSearchValue);
     setupTreeLabelDecorations(treeRoot, view.trees.metadataByTreePath);
+  };
+
+  const renderTreeLoadingState = () => {
+    if (!(treeRoot instanceof HTMLElement) || fileTree) {
+      return;
+    }
+    const status = document.createElement("p");
+    status.className = "tree-load-status";
+    status.setAttribute("role", "status");
+    status.textContent = "문서 탐색기를 불러오는 중입니다.";
+    treeRoot.replaceChildren(status);
+  };
+
+  const renderTreeFallback = (error) => {
+    if (!(treeRoot instanceof HTMLElement)) {
+      return;
+    }
+
+    const fallback = document.createElement("section");
+    fallback.className = "tree-load-fallback";
+    fallback.setAttribute("aria-label", "간이 문서 탐색기");
+
+    const message = document.createElement("p");
+    message.className = "tree-load-fallback-message";
+    message.setAttribute("role", "alert");
+    message.textContent = "문서 트리를 불러오지 못했습니다. 아래 링크로 계속 탐색할 수 있습니다.";
+
+    const retry = document.createElement("button");
+    retry.className = "tree-load-retry";
+    retry.type = "button";
+    retry.textContent = "탐색기 다시 불러오기";
+    retry.addEventListener("click", () => {
+      void requestTreeLoad("retry", { retry: true });
+    });
+
+    const links = document.createElement("ul");
+    links.className = "tree-load-fallback-links";
+    for (const doc of view.docs) {
+      const item = document.createElement("li");
+      const link = document.createElement("a");
+      link.href = toPathWithBase(doc.route, pathBase);
+      link.textContent = doc.title;
+      link.addEventListener("click", (event) => {
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        ) {
+          return;
+        }
+        event.preventDefault();
+        void state.navigate(doc.route, true);
+      });
+      item.appendChild(link);
+      links.appendChild(item);
+    }
+
+    fallback.append(message, retry, links);
+    fallback.dataset.error = error instanceof Error ? error.name : "TreeLoadError";
+    treeRoot.replaceChildren(fallback);
+  };
+
+  const loadTreeRuntime = ({ reason, retry = false }) => {
+    if (treeRuntime) {
+      renderTree(state);
+      return Promise.resolve(true);
+    }
+    if (treeLoadPromise) {
+      return treeLoadPromise;
+    }
+    if (!treeModuleUrl) {
+      const error = new Error("Tree module URL is unavailable");
+      setTreeRuntimeState("error");
+      renderTreeFallback(error);
+      return Promise.resolve(false);
+    }
+
+    const importUrl = new URL(treeModuleUrl);
+    if (retry) {
+      treeRetryCount += 1;
+      importUrl.searchParams.set("retry", String(treeRetryCount));
+    }
+
+    setTreeRuntimeState("loading");
+    if (treeRoot instanceof HTMLElement) {
+      treeRoot.setAttribute("aria-busy", "true");
+      treeRoot.dataset.treeLoadReason = reason;
+    }
+    renderTreeLoadingState();
+    window.performance?.mark?.("eiam-tree-load-start");
+
+    treeLoadPromise = import(importUrl.href)
+      .then((module) => {
+        if (
+          typeof module.FileTree !== "function" ||
+          typeof module.prepareFileTreeInput !== "function" ||
+          typeof module.TREE_UNSAFE_CSS !== "string"
+        ) {
+          throw new Error("Tree runtime exports are invalid");
+        }
+        treeRuntime = module;
+        renderTree(state);
+        if (treeRoot instanceof HTMLElement) {
+          treeRoot.setAttribute("aria-busy", "false");
+        }
+        setTreeRuntimeState("ready");
+        window.performance?.mark?.("eiam-tree-ready");
+        return true;
+      })
+      .catch((error) => {
+        destroyFileTree();
+        treeRuntime = null;
+        treeLoadPromise = null;
+        if (treeRoot instanceof HTMLElement) {
+          treeRoot.setAttribute("aria-busy", "false");
+        }
+        setTreeRuntimeState("error");
+        renderTreeFallback(error);
+        announceA11yStatus("문서 트리를 불러오지 못했습니다. 간이 링크 탐색기를 사용할 수 있습니다.");
+        console.error("Tree runtime load failed:", error);
+        return false;
+      });
+
+    return treeLoadPromise;
   };
 
   const updateBacklinks = (doc) => {
@@ -2005,7 +2100,9 @@ async function start() {
           activeBranch = targetBranch;
           view = getBranchView(activeBranch);
           updateBranchInfo();
-          renderTree(state);
+          if (treeRuntime) {
+            renderTree(state);
+          }
           localStorage.setItem(BRANCH_KEY, activeBranch);
           id = view.routeMap[route];
         }
@@ -2088,6 +2185,41 @@ async function start() {
       }
       announceA11yStatus(`탐색 완료: ${doc.title} 문서를 열었습니다.`);
     },
+  };
+
+  requestTreeLoad = (reason, options = {}) => {
+    if (!treeLoadAllowed) {
+      pendingTreeLoadReason = reason;
+      return Promise.resolve(false);
+    }
+    pendingTreeLoadReason = "";
+    return loadTreeRuntime({ reason, retry: options.retry === true });
+  };
+
+  const scheduleTreeLoadAfterFirstContentPaint = () => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        treeLoadAllowed = true;
+        window.performance?.mark?.("eiam-first-content-paint-opportunity");
+
+        if (pendingTreeLoadReason) {
+          void requestTreeLoad(pendingTreeLoadReason);
+          return;
+        }
+        if (isCompactLayout()) {
+          return;
+        }
+
+        const loadForDesktop = () => {
+          void requestTreeLoad("desktop-idle");
+        };
+        if (typeof window.requestIdleCallback === "function") {
+          window.requestIdleCallback(loadForDesktop, { timeout: 500 });
+        } else {
+          window.setTimeout(loadForDesktop, 0);
+        }
+      });
+    });
   };
 
   if (contentEl instanceof HTMLElement) {
@@ -2185,7 +2317,7 @@ async function start() {
     view = getBranchView(activeBranch);
     localStorage.setItem(BRANCH_KEY, activeBranch);
     updateBranchInfo();
-    renderTree(state);
+    void requestTreeLoad("branch");
 
     const currentRoute = resolveRouteFromLocation(view.routeMap, pathBase);
     if (view.routeMap[currentRoute]) {
@@ -2199,13 +2331,14 @@ async function start() {
 
   renderBranchPills();
   updateBranchInfo();
-  renderTree(state);
 
   const currentRoute = resolveRouteFromLocation(view.routeMap, pathBase);
   const initialRoute = currentRoute === "/" ? pickHomeRoute(view) : currentRoute;
   handleLayoutChange();
   await state.navigate(initialRoute, currentRoute === "/" && initialRoute !== "/");
   setAppReadyState("ready");
+  window.performance?.mark?.("eiam-app-ready");
+  scheduleTreeLoadAfterFirstContentPaint();
 
   window.addEventListener("popstate", async () => {
     await state.navigate(resolveRouteFromLocation(view.routeMap, pathBase), false);

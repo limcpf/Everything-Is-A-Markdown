@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 
-type AssetKind = "js" | "css";
+type AssetKind = "app-js" | "tree-js" | "css";
 
 interface ManifestDoc {
   id: string;
@@ -24,9 +24,11 @@ interface SizeBudget {
 }
 
 const BUDGETS: Record<AssetKind, SizeBudget> = {
-  js: { raw: 260_000, gzip: 75_000 },
+  "app-js": { raw: 45_000, gzip: 15_000 },
+  "tree-js": { raw: 220_000, gzip: 60_000 },
   css: { raw: 31_000, gzip: 7_000 },
 };
+const TOTAL_JS_BUDGET: SizeBudget = { raw: 260_000, gzip: 78_000 };
 const REQUIRED_MINIMAL_TREE_ICONS = [
   "file-tree-icon-chevron",
   "file-tree-icon-dot",
@@ -49,16 +51,16 @@ function parseOutDir(argv: string[]): string {
   return path.resolve(value);
 }
 
-function findRuntimeAsset(assetsDir: string, kind: AssetKind): string {
-  const pattern = new RegExp(`^app\\.([a-f0-9]{12})\\.${kind}$`);
+function findRuntimeAsset(assetsDir: string, stem: "app" | "tree", extension: "js" | "css"): string {
+  const pattern = new RegExp(`^${stem}\\.([a-f0-9]{12})\\.${extension}$`);
   const matches = fs.readdirSync(assetsDir).filter((entry) => pattern.test(entry));
   if (matches.length !== 1) {
-    throw new Error(`[size] Expected exactly one app.*.${kind} asset, found ${matches.length}`);
+    throw new Error(`[size] Expected exactly one ${stem}.*.${extension} asset, found ${matches.length}`);
   }
   return path.join(assetsDir, matches[0]);
 }
 
-function checkAsset(assetPath: string, kind: AssetKind): string[] {
+function inspectAsset(assetPath: string, kind: AssetKind): { failures: string[]; gzipBytes: number; rawBytes: number } {
   const bytes = fs.readFileSync(assetPath);
   const rawBytes = bytes.byteLength;
   const gzipBytes = gzipSync(bytes, { level: 9 }).byteLength;
@@ -77,14 +79,22 @@ function checkAsset(assetPath: string, kind: AssetKind): string[] {
   if (gzipBytes > budget.gzip) {
     failures.push(`${fileName} gzip ${gzipBytes} exceeds ${budget.gzip}`);
   }
-  if (kind === "js") {
+  if (kind === "app-js" || kind === "tree-js") {
     const source = bytes.toString("utf8");
     if (source.includes("file-tree-builtin-")) {
       failures.push(`${fileName} ships the @pierre/trees built-in file icon catalog`);
     }
-    for (const iconName of REQUIRED_MINIMAL_TREE_ICONS) {
-      if (!source.includes(iconName)) {
-        failures.push(`${fileName} is missing required minimal tree icon ${iconName}`);
+    if (kind === "app-js") {
+      for (const iconName of REQUIRED_MINIMAL_TREE_ICONS) {
+        if (source.includes(iconName)) {
+          failures.push(`${fileName} ships deferred tree icon ${iconName} on the critical path`);
+        }
+      }
+    } else {
+      for (const iconName of REQUIRED_MINIMAL_TREE_ICONS) {
+        if (!source.includes(iconName)) {
+          failures.push(`${fileName} is missing required minimal tree icon ${iconName}`);
+        }
       }
     }
   }
@@ -92,7 +102,7 @@ function checkAsset(assetPath: string, kind: AssetKind): string[] {
   console.log(
     `[size] ${kind} raw=${rawBytes}/${budget.raw} gzip=${gzipBytes}/${budget.gzip} hash=${finalHash}`,
   );
-  return failures;
+  return { failures, gzipBytes, rawBytes };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -232,7 +242,7 @@ function findRouteHtmlFiles(outDir: string): string[] {
   return Array.from(relativePaths, (relativePath) => path.join(outDir, relativePath)).sort();
 }
 
-function checkRouteHtml(outDir: string): string[] {
+function checkRouteHtml(outDir: string, treeAssetFileName: string): string[] {
   const failures: string[] = [];
   const routeHtmlFiles = findRouteHtmlFiles(outDir);
   let maxBootstrapBytes = 0;
@@ -271,8 +281,13 @@ function checkRouteHtml(outDir: string): string[] {
       failures.push(`${relativePath} runtime bootstrap is not valid JSON`);
       continue;
     }
-    if (!isRecord(payload) || Object.keys(payload).sort().join(",") !== "manifestUrl,pathBase") {
-      failures.push(`${relativePath} runtime bootstrap must contain only manifestUrl and pathBase`);
+    if (
+      !isRecord(payload) ||
+      Object.keys(payload).sort().join(",") !== "manifestUrl,pathBase,treeModuleUrl"
+    ) {
+      failures.push(
+        `${relativePath} runtime bootstrap must contain only manifestUrl, pathBase, and treeModuleUrl`,
+      );
       continue;
     }
     const pathBase = typeof payload.pathBase === "string" ? payload.pathBase.replace(/\/+$/, "") : "";
@@ -283,6 +298,16 @@ function checkRouteHtml(outDir: string): string[] {
       .join("/");
     if (payload.manifestUrl !== expectedManifestUrl) {
       failures.push(`${relativePath} runtime bootstrap has an invalid manifestUrl`);
+    }
+    const rawTreeModuleUrl = pathBase
+      ? `${pathBase}/assets/${treeAssetFileName}`
+      : `/assets/${treeAssetFileName}`;
+    const expectedTreeModuleUrl = rawTreeModuleUrl
+      .split("/")
+      .map((segment, index) => (index === 0 && segment === "" ? "" : encodeURIComponent(segment)))
+      .join("/");
+    if (payload.treeModuleUrl !== expectedTreeModuleUrl) {
+      failures.push(`${relativePath} runtime bootstrap has an invalid treeModuleUrl`);
     }
   }
 
@@ -295,11 +320,26 @@ function checkRouteHtml(outDir: string): string[] {
 
 const outDir = parseOutDir(process.argv.slice(2));
 const assetsDir = path.join(outDir, "assets");
-const failures = (["js", "css"] as const).flatMap((kind) =>
-  checkAsset(findRuntimeAsset(assetsDir, kind), kind),
+const appJsPath = findRuntimeAsset(assetsDir, "app", "js");
+const treeJsPath = findRuntimeAsset(assetsDir, "tree", "js");
+const cssPath = findRuntimeAsset(assetsDir, "app", "css");
+const appJs = inspectAsset(appJsPath, "app-js");
+const treeJs = inspectAsset(treeJsPath, "tree-js");
+const css = inspectAsset(cssPath, "css");
+const failures = [...appJs.failures, ...treeJs.failures, ...css.failures];
+const totalJsRaw = appJs.rawBytes + treeJs.rawBytes;
+const totalJsGzip = appJs.gzipBytes + treeJs.gzipBytes;
+console.log(
+  `[size] total-js raw=${totalJsRaw}/${TOTAL_JS_BUDGET.raw} gzip=${totalJsGzip}/${TOTAL_JS_BUDGET.gzip}`,
 );
+if (totalJsRaw > TOTAL_JS_BUDGET.raw) {
+  failures.push(`total JavaScript raw ${totalJsRaw} exceeds ${TOTAL_JS_BUDGET.raw}`);
+}
+if (totalJsGzip > TOTAL_JS_BUDGET.gzip) {
+  failures.push(`total JavaScript gzip ${totalJsGzip} exceeds ${TOTAL_JS_BUDGET.gzip}`);
+}
 failures.push(...checkManifest(path.join(outDir, "manifest.json")));
-failures.push(...checkRouteHtml(outDir));
+failures.push(...checkRouteHtml(outDir, path.basename(treeJsPath)));
 
 if (failures.length > 0) {
   for (const failure of failures) {
