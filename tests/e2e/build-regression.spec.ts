@@ -171,6 +171,29 @@ title: Document ${index}
     }
   });
 
+  test("route bootstrap gate는 복사된 static index.html을 검사 대상에서 제외한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-static-index-size-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+
+    try {
+      writeText(
+        path.join(workDir, "blog.config.mjs"),
+        'export default { vaultDir: "./vault", outDir: "./dist", staticPaths: ["static-site"] };\n',
+      );
+      writeText(path.join(vaultDir, "static-site", "index.html"), "<!doctype html><title>Static microsite</title>\n");
+      const build = runCli(workDir, [cliPath, "build"]);
+      expect(build.status, build.output).toBe(0);
+      expect(fs.readFileSync(path.join(outDir, "static-site", "index.html"), "utf8")).toContain("Static microsite");
+
+      const sizeCheck = runCli(workDir, [sizeCheckPath, "--out", outDir]);
+      expect(sizeCheck.status, sizeCheck.output).toBe(0);
+      expect(sizeCheck.output).toContain("route-html files=2");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
   test("증분 빌드에서 누락된 content 파일을 복구한다", async () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-build-regression-"));
     const outDir = path.join(workDir, "dist");

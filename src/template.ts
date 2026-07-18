@@ -48,6 +48,11 @@ interface AppShellInitialViewPayload {
 
 interface AppShellManifestPayload extends Manifest {}
 
+interface AppShellRuntimePayload {
+  manifestUrl: string;
+  pathBase: string;
+}
+
 const DEFAULT_ASSETS: AppShellAssets = {
   cssHref: "/assets/app.css",
   jsSrc: "/assets/app.js",
@@ -160,17 +165,30 @@ function renderInitialViewScript(initialView: AppShellInitialView | null): strin
   return `\n    <script id="initial-view-data" type="application/json">${payload}</script>`;
 }
 
-function renderInitialManifestScript(manifest: AppShellManifestPayload | null): string {
+function toManifestUrl(pathBase: string): string {
+  const normalized = pathBase.trim().replace(/\/+$/, "");
+  const rawPath = normalized ? `${normalized}/manifest.json` : "/manifest.json";
+  return rawPath
+    .split("/")
+    .map((segment, index) => (index === 0 && segment === "" ? "" : encodeURIComponent(segment)))
+    .join("/");
+}
+
+function renderRuntimeBootstrapScript(manifest: AppShellManifestPayload | null): string {
   if (!manifest) {
     return "";
   }
 
-  const payload = JSON.stringify(manifest)
+  const payloadData: AppShellRuntimePayload = {
+    manifestUrl: toManifestUrl(manifest.pathBase),
+    pathBase: manifest.pathBase,
+  };
+  const payload = JSON.stringify(payloadData)
     .replaceAll("<", "\\u003c")
     .replaceAll("\u2028", "\\u2028")
     .replaceAll("\u2029", "\\u2029");
 
-  return `\n    <script id="initial-manifest-data" type="application/json">${payload}</script>`;
+  return `\n    <script id="initial-runtime-data" type="application/json">${payload}</script>`;
 }
 
 export function renderAppShellHtml(
@@ -181,7 +199,7 @@ export function renderAppShellHtml(
 ): string {
   const headMeta = renderHeadMeta(meta);
   const initialViewScript = renderInitialViewScript(initialView);
-  const initialManifestScript = renderInitialManifestScript(manifest);
+  const runtimeBootstrapScript = renderRuntimeBootstrapScript(manifest);
   const symbolFontStylesheet =
     "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap";
   const appTitle = typeof manifest?.siteTitle === "string" && manifest.siteTitle.trim().length > 0
@@ -347,7 +365,7 @@ ${headMeta}
     </div>
     <div id="tree-label-tooltip" class="tree-label-tooltip" role="tooltip" hidden></div>
 ${initialViewScript}
-${initialManifestScript}
+${runtimeBootstrapScript}
     <script type="module" src="${escapeHtmlAttribute(assets.jsSrc)}"></script>
   </body>
 </html>
