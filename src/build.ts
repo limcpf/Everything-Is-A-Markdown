@@ -23,8 +23,9 @@ import {
 
 const CACHE_VERSION = 6;
 const CACHE_ROOT_SEGMENTS = [".cache", "eiam"] as const;
-const CACHE_NAMESPACE_VERSION = 1;
+const CACHE_NAMESPACE_VERSION = 2;
 const CACHE_FILE_NAME = "build-index.json";
+const LEGACY_CACHE_PATH_SEGMENTS = [".cache", CACHE_FILE_NAME] as const;
 const OUTPUT_MARKER_FILE_NAME = ".eiam-output.json";
 const OUTPUT_MARKER_FORMAT = "everything-is-a-markdown-output";
 const OUTPUT_MARKER_VERSION = 2;
@@ -106,12 +107,12 @@ async function toCanonicalPath(input: string): Promise<string> {
 }
 
 async function resolveCacheLocation(options: BuildOptions): Promise<CacheLocation> {
-  const [vaultRoot, outputRoot] = await Promise.all([
+  const [vaultRoot, outputRoot, rootDir] = await Promise.all([
     toCanonicalPath(options.vaultDir),
     toCanonicalPath(options.outDir),
+    toCanonicalPath(path.join(process.cwd(), ...CACHE_ROOT_SEGMENTS)),
   ]);
-  const namespace = `v${CACHE_NAMESPACE_VERSION}-${makeHash(`${vaultRoot}\0${outputRoot}`)}`;
-  const rootDir = path.join(process.cwd(), ...CACHE_ROOT_SEGMENTS);
+  const namespace = `v${CACHE_NAMESPACE_VERSION}-${makeHash(`${vaultRoot}\0${outputRoot}\0${rootDir}`)}`;
   const namespaceDir = path.join(rootDir, namespace);
 
   return {
@@ -184,7 +185,7 @@ async function prepareOwnedOutputDirectory(options: BuildOptions, cacheNamespace
     const entries = await fs.readdir(outputRoot);
     if (entries.length > 0 && !(await hasValidOutputMarker(outputRoot, cacheNamespace))) {
       throw new Error(
-        `[safety] Refusing non-empty output directory without a matching ${OUTPUT_MARKER_FILE_NAME} for the requested vault/output pair: ${outputRoot}`,
+        `[safety] Refusing non-empty output directory without a matching ${OUTPUT_MARKER_FILE_NAME} for the requested vault/output/cache-root context: ${outputRoot}`,
       );
     }
   } catch (error) {
@@ -196,6 +197,21 @@ async function prepareOwnedOutputDirectory(options: BuildOptions, cacheNamespace
 
   if (!(await hasValidOutputMarker(outputRoot, cacheNamespace))) {
     await writeOutputMarker(outputRoot, cacheNamespace);
+  }
+}
+
+async function removeLegacyCacheIndex(): Promise<void> {
+  const legacyCachePath = path.join(process.cwd(), ...LEGACY_CACHE_PATH_SEGMENTS);
+
+  try {
+    const legacyCacheStat = await fs.lstat(legacyCachePath);
+    if (legacyCacheStat.isFile() || legacyCacheStat.isSymbolicLink()) {
+      await fs.rm(legacyCachePath, { force: true });
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
   }
 }
 
@@ -1649,6 +1665,7 @@ async function cleanRemovedOutputs(outDir: string, oldCache: BuildCache, current
 }
 
 export async function cleanBuildArtifacts(options: BuildOptions): Promise<void> {
+  await removeLegacyCacheIndex();
   const cacheLocation = await resolveCacheLocation(options);
   const requestedOutputRoot = path.resolve(options.outDir);
   const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir);
@@ -1660,7 +1677,7 @@ export async function cleanBuildArtifacts(options: BuildOptions): Promise<void> 
     }
     if (!(await hasValidOutputMarker(outputRoot, cacheLocation.namespace))) {
       throw new Error(
-        `[safety] Refusing to clean output directory without a matching ${OUTPUT_MARKER_FILE_NAME} for the requested vault/output pair: ${outputRoot}`,
+        `[safety] Refusing to clean output directory without a matching ${OUTPUT_MARKER_FILE_NAME} for the requested vault/output/cache-root context: ${outputRoot}`,
       );
     }
     await fs.rm(requestedOutputRoot, { recursive: true, force: true });
@@ -1722,6 +1739,7 @@ function buildBacklinksByDocId(
 }
 
 export async function buildSite(options: BuildOptions): Promise<BuildResult> {
+  await removeLegacyCacheIndex();
   const cacheLocation = await resolveCacheLocation(options);
   await prepareOwnedOutputDirectory(options, cacheLocation.namespace);
   await ensureDir(path.join(options.outDir, "content"));

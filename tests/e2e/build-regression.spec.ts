@@ -160,11 +160,16 @@ test.describe("빌드 회귀 가드", () => {
   test("clean은 EIAM 소유 출력과 matching cache namespace만 제거한다", async () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-safe-clean-"));
     const outDir = path.join(workDir, "dist");
+    const legacyCacheFile = path.join(workDir, ".cache", "build-index.json");
     const unrelatedCacheFile = path.join(workDir, ".cache", "keep.txt");
 
     try {
+      writeText(legacyCacheFile, "legacy private cache body");
+      writeText(unrelatedCacheFile, "unrelated cache data");
       const build = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
       expect(build.status, build.output).toBe(0);
+      expect(fs.existsSync(legacyCacheFile)).toBe(false);
+      expect(fs.readFileSync(unrelatedCacheFile, "utf8")).toBe("unrelated cache data");
       const markerPath = path.join(outDir, ".eiam-output.json");
       expect(fs.existsSync(markerPath)).toBe(true);
       const marker = JSON.parse(fs.readFileSync(markerPath, "utf8")) as {
@@ -172,14 +177,15 @@ test.describe("빌드 회귀 가드", () => {
         cacheNamespace: string;
       };
       expect(marker.version).toBe(2);
-      expect(marker.cacheNamespace).toMatch(/^v1-[a-f0-9]{40}$/);
+      expect(marker.cacheNamespace).toMatch(/^v2-[a-f0-9]{40}$/);
       const cachePath = findOnlyCacheIndexPath(workDir);
 
-      writeText(unrelatedCacheFile, "unrelated cache data");
+      writeText(legacyCacheFile, "legacy private cache body recreated before clean");
       const clean = runCli(workDir, [cliPath, "clean", "--vault", vaultPath, "--out", outDir]);
       expect(clean.status, clean.output).toBe(0);
       expect(fs.existsSync(outDir)).toBe(false);
       expect(fs.existsSync(cachePath)).toBe(false);
+      expect(fs.existsSync(legacyCacheFile)).toBe(false);
       expect(fs.readFileSync(unrelatedCacheFile, "utf8")).toBe("unrelated cache data");
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
@@ -236,6 +242,7 @@ test.describe("빌드 회귀 가드", () => {
     const outA = path.join(workDir, "dist-a");
     const outB = path.join(workDir, "dist-b");
     const outAAlternate = path.join(workDir, "dist-a-alternate");
+    const alternateCwd = path.join(workDir, "alternate-cwd");
     const sourceA = path.join(vaultA, "same.md");
     const sourceB = path.join(vaultB, "same.md");
     const fixedTime = new Date("2024-01-02T03:04:05.000Z");
@@ -262,6 +269,7 @@ VAULT_B_BODY
       expect(Buffer.byteLength(bodyA)).toBe(Buffer.byteLength(bodyB));
       writeText(sourceA, bodyA);
       writeText(sourceB, bodyB);
+      fs.mkdirSync(alternateCwd, { recursive: true });
       fs.utimesSync(sourceA, fixedTime, fixedTime);
       fs.utimesSync(sourceB, fixedTime, fixedTime);
 
@@ -284,6 +292,35 @@ VAULT_B_BODY
       const wrongVaultClean = runCli(workDir, [cliPath, "clean", "--vault", vaultB, "--out", outA]);
       expect(wrongVaultClean.status).not.toBe(0);
       expect(wrongVaultClean.output).toContain("matching .eiam-output.json");
+      expect(fs.existsSync(outA)).toBe(true);
+      expect(fs.existsSync(cacheA)).toBe(true);
+
+      const wrongCwdBuild = runCli(alternateCwd, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultA,
+        "--out",
+        outA,
+      ]);
+      expect(wrongCwdBuild.status).not.toBe(0);
+      expect(wrongCwdBuild.output).toContain("matching .eiam-output.json");
+      expect(fs.readFileSync(markerAPath, "utf8")).toBe(markerABefore);
+      expect(fs.existsSync(path.join(alternateCwd, ".cache", "eiam"))).toBe(false);
+      expect((readManifest(outA) as { docs: Array<{ route: string }> }).docs.map((doc) => doc.route)).toEqual([
+        "/NS-CACHE-A/",
+      ]);
+
+      const wrongCwdClean = runCli(alternateCwd, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultA,
+        "--out",
+        outA,
+      ]);
+      expect(wrongCwdClean.status).not.toBe(0);
+      expect(wrongCwdClean.output).toContain("matching .eiam-output.json");
       expect(fs.existsSync(outA)).toBe(true);
       expect(fs.existsSync(cacheA)).toBe(true);
 
