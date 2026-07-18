@@ -109,7 +109,6 @@ export interface DocRecord {
   body: string;
   rawHash: string;
   wikiTargets: string[];
-  isNew: boolean;
   branch: string | null;
 }
 
@@ -140,7 +139,6 @@ export interface ManifestDoc {
   updatedDate?: string;
   tags: string[];
   description?: string;
-  isNew: boolean;
   branch: string | null;
   wikiTargets: string[];
   backlinks: Array<{

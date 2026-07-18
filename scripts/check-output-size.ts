@@ -106,7 +106,6 @@ function toLegacyTree(nodes: unknown[], docsById: Record<string, ManifestDoc>): 
       prefix: doc.prefix,
       route: doc.route,
       contentUrl: doc.contentUrl,
-      isNew: doc.isNew,
       tags: doc.tags,
       description: doc.description,
       date: doc.date,

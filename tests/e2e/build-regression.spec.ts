@@ -231,6 +231,7 @@ publish: true
 prefix: STABLE-01
 category_path: stable
 title: Stable document
+date: "2026-07-18"
 ---
 
 ALPHA
@@ -243,6 +244,7 @@ ALPHA
       const firstManifest = readManifest(outDir) as ManifestDocIndex<{ contentUrl: string }> &
         Record<string, unknown>;
       expect(firstManifest).not.toHaveProperty("generatedAt");
+      expect(firstManifest.docsById[firstManifest.docIds[0]]).not.toHaveProperty("isNew");
       const contentPath = firstManifest.docsById[firstManifest.docIds[0]]?.contentUrl.replace(/^\/+/, "");
       expect(contentPath).toBeDefined();
 

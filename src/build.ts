@@ -819,7 +819,6 @@ function toDocRecord(
   sourcePath: string,
   relPath: string,
   entry: CachedSourceEntry,
-  newThreshold: number,
 ): DocRecord {
   const relNoExt = stripMdExt(relPath);
   const fileName = path.basename(relPath);
@@ -844,7 +843,6 @@ function toDocRecord(
     body: entry.body,
     rawHash: entry.rawHash,
     wikiTargets: entry.wikiTargets,
-    isNew: isNewByFrontmatterDate(entry.date, newThreshold),
     branch: entry.branch,
   };
 }
@@ -859,9 +857,6 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
       stat: await fs.stat(sourcePath),
     })),
   );
-  const now = Date.now();
-  const newThreshold = now - options.newWithinDays * 24 * 60 * 60 * 1000;
-
   const docs: DocRecord[] = [];
   const nextSources: BuildCache["sources"] = {};
 
@@ -905,7 +900,7 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
     }
 
     nextSources[relPath] = completeEntry;
-    docs.push(toDocRecord(sourcePath, relPath, completeEntry, newThreshold));
+    docs.push(toDocRecord(sourcePath, relPath, completeEntry));
   }
 
   ensureUniqueRoutes(docs);
@@ -1059,11 +1054,6 @@ function parseDateToEpochMs(value: string | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function isNewByFrontmatterDate(date: string | undefined, newThreshold: number): boolean {
-  const publishedAt = parseDateToEpochMs(date);
-  return publishedAt != null && publishedAt >= newThreshold;
-}
-
 function getRecentSortEpochMs(doc: DocRecord): number | null {
   return parseDateToEpochMs(doc.updatedDate) ?? parseDateToEpochMs(doc.date);
 }
@@ -1213,7 +1203,6 @@ function buildManifest(docs: DocRecord[], tree: TreeNode[], options: BuildOption
         updatedDate: doc.updatedDate,
         tags: doc.tags,
         description: doc.description,
-        isNew: doc.isNew,
         contentUrl: doc.contentUrl,
         branch: doc.branch,
         wikiTargets: doc.wikiTargets,

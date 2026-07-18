@@ -213,7 +213,7 @@ Key points:
 - Production JavaScript and CSS are minified, then content-hashed from the final emitted bytes.
 - `manifest.json` uses schema v2: `docIds` preserves order, `docsById` is the canonical metadata index, and tree file nodes carry document references instead of duplicated metadata. The runtime adapter also accepts legacy unversioned/v1 `docs` arrays during migration.
 - Route HTML embeds only a small path-aware runtime bootstrap; the shared manifest is fetched once from `manifest.json` instead of being copied into every generated page.
-- Generated files omit wall-clock build metadata, so two builds with unchanged content and config produce byte-identical output.
+- Generated files omit wall-clock build metadata and derived current-time flags, so two builds with unchanged content and config produce byte-identical output. The runtime derives each `NEW` badge from the manifest `date` and configured `newWithinDays` when the page loads.
 - Static files declared in config are copied into the same relative paths under `dist/`.
 - Build cache is stored under `.cache/eiam/v1-<namespace>/build-index.json`.
 
