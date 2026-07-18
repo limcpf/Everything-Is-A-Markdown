@@ -120,7 +120,7 @@ test.describe("빌드 회귀 가드", () => {
   const sizeCheckPath = path.join(repoRoot, "scripts/check-output-size.ts");
   const vaultPath = path.join(repoRoot, "test-vault");
 
-  test("manifest size gate는 empty/one-doc vault의 고정 overhead를 허용한다", async () => {
+  test("manifest size gate는 tiny vault의 고정 overhead를 허용한다", async () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-small-manifest-size-"));
     const vaultDir = path.join(workDir, "vault");
     const outDir = path.join(workDir, "dist");
@@ -131,7 +131,7 @@ test.describe("빌드 회귀 가드", () => {
       expect(emptyBuild.status, emptyBuild.output).toBe(0);
       const emptyCheck = runCli(workDir, [sizeCheckPath, "--out", outDir]);
       expect(emptyCheck.status, emptyCheck.output).toBe(0);
-      expect(emptyCheck.output).toContain("manifest ratio gate skipped for 0 doc(s)");
+      expect(emptyCheck.output).toContain("manifest ratio gate skipped for legacy projection");
 
       writeText(
         path.join(vaultDir, "only.md"),
@@ -147,7 +147,25 @@ title: Only document
       expect(oneDocBuild.status, oneDocBuild.output).toBe(0);
       const oneDocCheck = runCli(workDir, [sizeCheckPath, "--out", outDir]);
       expect(oneDocCheck.status, oneDocCheck.output).toBe(0);
-      expect(oneDocCheck.output).toContain("manifest ratio gate skipped for 1 doc(s)");
+      expect(oneDocCheck.output).toContain("manifest ratio gate skipped for legacy projection");
+
+      for (let index = 2; index <= 3; index += 1) {
+        writeText(
+          path.join(vaultDir, `doc-${index}.md`),
+          `---
+publish: true
+prefix: SMALL-0${index}
+category_path: small
+title: Document ${index}
+---
+`,
+        );
+        const tinyBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+        expect(tinyBuild.status, tinyBuild.output).toBe(0);
+        const tinyCheck = runCli(workDir, [sizeCheckPath, "--out", outDir]);
+        expect(tinyCheck.status, tinyCheck.output).toBe(0);
+        expect(tinyCheck.output).toContain("manifest ratio gate skipped for legacy projection");
+      }
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
