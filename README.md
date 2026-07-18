@@ -403,6 +403,9 @@ This setting allows arbitrary authored HTML and can execute client-side code. Do
 Regular fenced code blocks are rendered with:
 
 - Shiki highlighting
+- explicit default grammars/theme, with additional known fence languages and
+  non-default themes loaded on demand
+- escaped plaintext fallback for unknown fence languages
 - a desktop-style code header
 - a copy button
 - optional filename text when fence info contains extra tokens

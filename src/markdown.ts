@@ -1,9 +1,13 @@
 import MarkdownIt from "markdown-it";
 import sanitizeHtml from "sanitize-html";
-import { createBundledHighlighter, type HighlighterGeneric } from "shiki/core";
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
-import { bundledLanguages } from "shiki/langs";
-import { bundledThemes } from "shiki/themes";
+import { createHighlighterCore, type HighlighterCore, type LanguageInput } from "@shikijs/core";
+import { createJavaScriptRegexEngine } from "@shikijs/engine-javascript";
+import bashLanguage from "@shikijs/langs/bash";
+import javascriptLanguage from "@shikijs/langs/javascript";
+import jsonLanguage from "@shikijs/langs/json";
+import markdownLanguage from "@shikijs/langs/markdown";
+import typescriptLanguage from "@shikijs/langs/typescript";
+import githubDarkTheme from "@shikijs/themes/github-dark";
 import type { BuildOptions, WikiResolver } from "./types";
 import { isRemoteUrl } from "./utils";
 
@@ -18,6 +22,20 @@ export interface MarkdownRenderer {
 
 const FENCE_LANG_RE = /^```([\w-+#.]+)/gm;
 const MERMAID_LANG = "mermaid";
+const DEFAULT_SHIKI_THEME = "github-dark";
+const SHIKI_MODULE_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
+const SHIKI_LANGUAGE_MODULE_ALIASES: Readonly<Record<string, string>> = {
+  "c#": "csharp",
+  "c++": "cpp",
+  "f#": "fsharp",
+};
+const DEFAULT_SHIKI_LANGUAGES: LanguageInput[] = [
+  markdownLanguage,
+  bashLanguage,
+  jsonLanguage,
+  typescriptLanguage,
+  javascriptLanguage,
+];
 const SAFE_COLOR_VALUE = /^#[0-9a-f]{3,8}$/i;
 const SAFE_HTML_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
@@ -203,9 +221,62 @@ function preprocessMarkdown(
   return { markdown: output, warnings };
 }
 
-async function loadFenceLanguages<L extends string, T extends string>(
-  highlighter: HighlighterGeneric<L, T>,
+function isMissingShikiModule(error: unknown, specifier: string): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const code = "code" in error ? String(error.code) : "";
+  const message = "message" in error ? String(error.message) : "";
+  const moduleSubpath = `./${specifier.slice(specifier.lastIndexOf("/") + 1)}`;
+  const isMissingCode = code === "ERR_MODULE_NOT_FOUND" || code === "ERR_PACKAGE_PATH_NOT_EXPORTED";
+  const matchesSpecifier =
+    message.includes(specifier) || message.includes(`'${moduleSubpath}'`) || message.includes(`"${moduleSubpath}"`);
+  return isMissingCode && matchesSpecifier;
+}
+
+async function loadShikiTheme(theme: string): Promise<typeof githubDarkTheme> {
+  if (theme === DEFAULT_SHIKI_THEME) {
+    return githubDarkTheme;
+  }
+  if (!SHIKI_MODULE_NAME_RE.test(theme)) {
+    throw new Error(`[markdown] Invalid Shiki theme: ${JSON.stringify(theme)}.`);
+  }
+
+  const specifier = `@shikijs/themes/${theme}`;
+  try {
+    const themeModule = (await import(specifier)) as { default: typeof githubDarkTheme };
+    return themeModule.default;
+  } catch (error) {
+    if (isMissingShikiModule(error, specifier)) {
+      throw new Error(`[markdown] Unknown Shiki theme: ${JSON.stringify(theme)}.`);
+    }
+    throw error;
+  }
+}
+
+async function loadShikiLanguage(language: string): Promise<LanguageInput | null> {
+  const moduleName = SHIKI_LANGUAGE_MODULE_ALIASES[language] ?? language;
+  if (!SHIKI_MODULE_NAME_RE.test(moduleName)) {
+    return null;
+  }
+
+  const specifier = `@shikijs/langs/${moduleName}`;
+  try {
+    const languageModule = (await import(specifier)) as { default: LanguageInput };
+    return languageModule.default;
+  } catch (error) {
+    if (isMissingShikiModule(error, specifier)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function loadFenceLanguages(
+  highlighter: HighlighterCore,
   loaded: Set<string>,
+  unavailable: Set<string>,
   markdown: string,
 ): Promise<void> {
   const langs = new Set<string>();
@@ -223,15 +294,20 @@ async function loadFenceLanguages<L extends string, T extends string>(
     }
   }
 
-  for (const lang of langs) {
-    if (loaded.has(lang)) {
-      continue;
+  const requested = Array.from(langs).filter((lang) => !loaded.has(lang) && !unavailable.has(lang));
+  const languageInputs = await Promise.all(
+    requested.map(async (lang) => ({ lang, input: await loadShikiLanguage(lang) })),
+  );
+  const availableInputs = languageInputs.flatMap(({ input }) => (input ? [input] : []));
+  if (availableInputs.length > 0) {
+    await highlighter.loadLanguage(...availableInputs);
+    for (const loadedLanguage of highlighter.getLoadedLanguages()) {
+      loaded.add(String(loadedLanguage));
     }
-    try {
-      await highlighter.loadLanguage(lang as L);
-      loaded.add(lang);
-    } catch {
-      // Unknown language: fallback to plaintext in fence renderer.
+  }
+  for (const { lang, input } of languageInputs) {
+    if (!input) {
+      unavailable.add(lang);
     }
   }
 }
@@ -256,8 +332,8 @@ function isStandaloneImageParagraph(tokens: RuleTokens, idx: number): boolean {
   return children.length === 1 && children[0]?.type === "image";
 }
 
-function createMarkdownIt<L extends string, T extends string>(
-  highlighter: HighlighterGeneric<L, T>,
+function createMarkdownIt(
+  highlighter: HighlighterCore,
   theme: string,
   gfm: boolean,
 ): MarkdownIt {
@@ -395,19 +471,17 @@ function createMarkdownIt<L extends string, T extends string>(
 }
 
 export async function createMarkdownRenderer(options: BuildOptions): Promise<MarkdownRenderer> {
-  const createHighlighter = createBundledHighlighter({
-    langs: bundledLanguages,
-    themes: bundledThemes,
-    engine: () => createJavaScriptRegexEngine(),
-  });
-
-  const highlighter = await createHighlighter({
-    themes: [options.shikiTheme],
-    langs: ["text", "plaintext", "markdown", "bash", "json", "typescript", "javascript"],
+  const theme = await loadShikiTheme(options.shikiTheme);
+  const highlighter = await createHighlighterCore({
+    themes: [theme],
+    langs: DEFAULT_SHIKI_LANGUAGES,
+    engine: createJavaScriptRegexEngine(),
   });
   const loadedLanguages = new Set(highlighter.getLoadedLanguages().map(String));
+  const unavailableLanguages = new Set<string>();
+  let languageLoadQueue = Promise.resolve();
 
-  const md = createMarkdownIt(highlighter, options.shikiTheme, options.gfm);
+  const md = createMarkdownIt(highlighter, theme.name ?? options.shikiTheme, options.gfm);
   if (options.allowUnsafeHtml) {
     console.warn(
       "[security] markdown.allowUnsafeHtml=true disables rendered HTML sanitization. Only use trusted vault content.",
@@ -417,7 +491,11 @@ export async function createMarkdownRenderer(options: BuildOptions): Promise<Mar
   return {
     async render(markdown: string, resolver: WikiResolver): Promise<RenderResult> {
       const { markdown: preprocessed, warnings } = preprocessMarkdown(markdown, resolver, options.imagePolicy, options.wikilinks);
-      await loadFenceLanguages(highlighter, loadedLanguages, preprocessed);
+      const languageLoad = languageLoadQueue.then(() =>
+        loadFenceLanguages(highlighter, loadedLanguages, unavailableLanguages, preprocessed),
+      );
+      languageLoadQueue = languageLoad.catch(() => undefined);
+      await languageLoad;
       const renderedHtml = md.render(preprocessed);
       const html = options.allowUnsafeHtml ? renderedHtml : sanitizeHtml(renderedHtml, SAFE_HTML_OPTIONS);
       return { html, warnings };
