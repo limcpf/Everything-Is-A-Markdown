@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { waitForAppReady } from "./utils/app-ready";
+import { waitForAppReady, waitForTreeReady } from "./utils/app-ready";
 
 test.describe("런타임 렌더링 XSS 가드", () => {
   test("내비게이션/트리에서 악성 title이 HTML로 해석되지 않는다", async ({ page }) => {
@@ -9,6 +9,7 @@ test.describe("런타임 렌더링 XSS 가드", () => {
 
     await page.goto("/BC-VO-02/");
     await waitForAppReady(page);
+    await waitForTreeReady(page);
     await expect(page.locator("#tree-root")).toBeVisible();
     await expect(
       page
@@ -79,6 +80,7 @@ test.describe("런타임 렌더링 XSS 가드", () => {
 
     await page.goto("/BC-VO-02/");
     await waitForAppReady(page);
+    await waitForTreeReady(page);
     const xssRow = page
       .locator('#tree-root [data-type="item"][data-item-type="file"]')
       .filter({ hasText: "Unsafe" })

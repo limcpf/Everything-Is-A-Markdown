@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { waitForAppReady } from "./utils/app-ready";
+import { waitForAppReady, waitForTreeReady } from "./utils/app-ready";
 
 const MINIMAL_TREE_ICON_IDS = [
   "file-tree-icon-chevron",
@@ -24,6 +24,7 @@ test.describe("minimal Trees icon payload", () => {
   test("generic icon만 사용하면서 keyboard, virtualization, selection, ARIA 동작을 유지한다", async ({ page }) => {
     await page.goto("/BC-VO-00/");
     await waitForAppReady(page);
+    await waitForTreeReady(page);
 
     const state = await page.locator("#tree-root").evaluate((treeRoot) => {
       const host = treeRoot.querySelector("file-tree-container");

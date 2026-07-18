@@ -27,6 +27,7 @@ export interface AppShellMeta {
 export interface AppShellAssets {
   cssHref: string;
   jsSrc: string;
+  treeModulePath: string;
 }
 
 export interface AppShellInitialView {
@@ -51,11 +52,13 @@ interface AppShellManifestPayload extends Manifest {}
 interface AppShellRuntimePayload {
   manifestUrl: string;
   pathBase: string;
+  treeModuleUrl: string;
 }
 
 const DEFAULT_ASSETS: AppShellAssets = {
   cssHref: "/assets/app.css",
   jsSrc: "/assets/app.js",
+  treeModulePath: "/assets/tree.js",
 };
 
 function normalizeJsonLd(value: unknown | unknown[] | undefined): unknown[] {
@@ -165,23 +168,28 @@ function renderInitialViewScript(initialView: AppShellInitialView | null): strin
   return `\n    <script id="initial-view-data" type="application/json">${payload}</script>`;
 }
 
-function toManifestUrl(pathBase: string): string {
-  const normalized = pathBase.trim().replace(/\/+$/, "");
-  const rawPath = normalized ? `${normalized}/manifest.json` : "/manifest.json";
+function toPublicUrl(pathBase: string, pathname: string): string {
+  const normalizedBase = pathBase.trim().replace(/^\/+|\/+$/g, "");
+  const normalizedPath = pathname.trim().replace(/^\/+/g, "");
+  const rawPath = `/${[normalizedBase, normalizedPath].filter(Boolean).join("/")}`;
   return rawPath
     .split("/")
     .map((segment, index) => (index === 0 && segment === "" ? "" : encodeURIComponent(segment)))
     .join("/");
 }
 
-function renderRuntimeBootstrapScript(manifest: AppShellManifestPayload | null): string {
+function renderRuntimeBootstrapScript(
+  manifest: AppShellManifestPayload | null,
+  assets: AppShellAssets,
+): string {
   if (!manifest) {
     return "";
   }
 
   const payloadData: AppShellRuntimePayload = {
-    manifestUrl: toManifestUrl(manifest.pathBase),
+    manifestUrl: toPublicUrl(manifest.pathBase, "/manifest.json"),
     pathBase: manifest.pathBase,
+    treeModuleUrl: toPublicUrl(manifest.pathBase, assets.treeModulePath),
   };
   const payload = JSON.stringify(payloadData)
     .replaceAll("<", "\\u003c")
@@ -199,7 +207,7 @@ export function renderAppShellHtml(
 ): string {
   const headMeta = renderHeadMeta(meta);
   const initialViewScript = renderInitialViewScript(initialView);
-  const runtimeBootstrapScript = renderRuntimeBootstrapScript(manifest);
+  const runtimeBootstrapScript = renderRuntimeBootstrapScript(manifest, assets);
   const symbolFontStylesheet =
     "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap";
   const appTitle = typeof manifest?.siteTitle === "string" && manifest.siteTitle.trim().length > 0
