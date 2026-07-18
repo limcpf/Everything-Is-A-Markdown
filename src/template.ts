@@ -167,7 +167,11 @@ function renderInitialViewScript(initialView: AppShellInitialView | null): strin
 
 function toManifestUrl(pathBase: string): string {
   const normalized = pathBase.trim().replace(/\/+$/, "");
-  return normalized ? `${normalized}/manifest.json` : "/manifest.json";
+  const rawPath = normalized ? `${normalized}/manifest.json` : "/manifest.json";
+  return rawPath
+    .split("/")
+    .map((segment, index) => (index === 0 && segment === "" ? "" : encodeURIComponent(segment)))
+    .join("/");
 }
 
 function renderRuntimeBootstrapScript(manifest: AppShellManifestPayload | null): string {

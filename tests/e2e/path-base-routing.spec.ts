@@ -23,12 +23,18 @@ function normalizePathBase(pathBase: string): string {
 }
 
 function toFilePath(outDir: string, pathname: string, pathBase: string): string | null {
-  if (pathname.includes("..")) {
+  let decodedPathname: string;
+  try {
+    decodedPathname = decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
+  if (decodedPathname.includes("..")) {
     return null;
   }
 
   const normalizedBase = normalizePathBase(pathBase);
-  let routedPath = pathname;
+  let routedPath = decodedPathname;
   if (normalizedBase) {
     if (routedPath === normalizedBase) {
       routedPath = "/";
@@ -103,7 +109,7 @@ test.describe("pathBase 정식 지원", () => {
   const cliPath = path.join(repoRoot, "src/cli.ts");
   const vaultPath = path.join(repoRoot, "test-vault");
 
-  test("생성된 404 Home 링크는 root와 정규화된 nested pathBase를 따른다", async () => {
+  test("생성된 404 Home 링크와 bootstrap은 정규화·인코딩된 pathBase를 따른다", async ({ page }) => {
     test.setTimeout(60_000);
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-404-home-"));
     const outDir = path.join(workDir, "dist");
@@ -124,6 +130,27 @@ test.describe("pathBase 정식 지원", () => {
       expect(nestedBuild.status, nestedBuild.output).toBe(0);
       const nestedNotFoundHtml = fs.readFileSync(path.join(outDir, "404.html"), "utf8");
       expect(nestedNotFoundHtml).toContain('<a href="/docs/guides/" class="not-found-link">');
+
+      fs.writeFileSync(
+        configPath,
+        'export default { seo: { siteUrl: "https://example.com", pathBase: " docs guides/한글/ " } };',
+        "utf8",
+      );
+      const encodedBuild = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
+      expect(encodedBuild.status, encodedBuild.output).toBe(0);
+      const encodedIndexHtml = fs.readFileSync(path.join(outDir, "index.html"), "utf8");
+      expect(encodedIndexHtml).toContain(
+        '\"manifestUrl\":\"/docs%20guides/%ED%95%9C%EA%B8%80/manifest.json\"',
+      );
+
+      const encodedServer = await startStaticServer(outDir, "/docs guides/한글");
+      try {
+        await page.goto(`${encodedServer.baseUrl}/docs%20guides/%ED%95%9C%EA%B8%80/BC-VO-00/`);
+        await expect(page.locator("#viewer-title")).toHaveText("About");
+        await expect(page.locator("html")).toHaveAttribute("data-app-ready", "ready");
+      } finally {
+        await encodedServer.close();
+      }
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

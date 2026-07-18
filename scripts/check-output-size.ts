@@ -202,19 +202,17 @@ function checkManifest(manifestPath: string): string[] {
 }
 
 function findRouteHtmlFiles(outDir: string): string[] {
-  const files: string[] = [];
-  const walk = (directory: string) => {
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      const entryPath = path.join(directory, entry.name);
-      if (entry.isDirectory()) {
-        walk(entryPath);
-      } else if (entry.isFile() && entry.name === "index.html") {
-        files.push(entryPath);
-      }
-    }
-  };
-  walk(outDir);
-  return files.sort();
+  const manifest = JSON.parse(fs.readFileSync(path.join(outDir, "manifest.json"), "utf8")) as unknown;
+  if (!isRecord(manifest) || !isRecord(manifest.routeMap)) {
+    return [];
+  }
+
+  const relativePaths = new Set<string>(["index.html", "_app/index.html"]);
+  for (const route of Object.keys(manifest.routeMap)) {
+    const cleanRoute = route.replace(/^\/+/, "").replace(/\/+$/, "");
+    relativePaths.add(cleanRoute ? `${cleanRoute}/index.html` : "index.html");
+  }
+  return Array.from(relativePaths, (relativePath) => path.join(outDir, relativePath)).sort();
 }
 
 function checkRouteHtml(outDir: string): string[] {
@@ -224,6 +222,10 @@ function checkRouteHtml(outDir: string): string[] {
 
   for (const htmlPath of routeHtmlFiles) {
     const relativePath = path.relative(outDir, htmlPath);
+    if (!fs.existsSync(htmlPath)) {
+      failures.push(`${relativePath} is missing for a generated route`);
+      continue;
+    }
     const html = fs.readFileSync(htmlPath, "utf8");
     if (html.includes('id="initial-manifest-data"')) {
       failures.push(`${relativePath} embeds the full initial manifest`);
@@ -257,7 +259,11 @@ function checkRouteHtml(outDir: string): string[] {
       continue;
     }
     const pathBase = typeof payload.pathBase === "string" ? payload.pathBase.replace(/\/+$/, "") : "";
-    const expectedManifestUrl = pathBase ? `${pathBase}/manifest.json` : "/manifest.json";
+    const rawManifestUrl = pathBase ? `${pathBase}/manifest.json` : "/manifest.json";
+    const expectedManifestUrl = rawManifestUrl
+      .split("/")
+      .map((segment, index) => (index === 0 && segment === "" ? "" : encodeURIComponent(segment)))
+      .join("/");
     if (payload.manifestUrl !== expectedManifestUrl) {
       failures.push(`${relativePath} runtime bootstrap has an invalid manifestUrl`);
     }
