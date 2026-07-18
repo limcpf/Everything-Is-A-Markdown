@@ -196,7 +196,8 @@ async function assertSafeOutputRoot(outDir: string, vaultDir: string, cacheRoot:
     outputRoot === filesystemRoot ||
     isSamePathOrAncestor(outputRoot, cwd) ||
     isSamePathOrAncestor(outputRoot, vaultRoot) ||
-    isSamePathOrAncestor(outputRoot, cacheRoot)
+    isSamePathOrAncestor(outputRoot, cacheRoot) ||
+    isSamePathOrAncestor(cacheRoot, outputRoot)
   ) {
     throw new Error(
       `[safety] Refusing dangerous output directory: ${outputRoot}. Choose a dedicated child directory.`,
@@ -1886,10 +1887,10 @@ function buildBacklinksByDocId(
 }
 
 export async function buildSite(options: BuildOptions): Promise<BuildResult> {
-  assertSafeStaticPaths(options);
   const cacheLocation = await resolveCacheLocation(options);
   const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir, cacheLocation.rootDir);
   await removeLegacyCacheIndex();
+  assertSafeStaticPaths(options);
   await assertClaimableOutputDirectory(options, cacheLocation, outputRoot);
 
   const previousCache = await readCache(cacheLocation);

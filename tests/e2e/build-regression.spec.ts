@@ -289,6 +289,7 @@ test.describe("빌드 회귀 가드", () => {
       for (const cacheContainingOutDir of [
         path.join(workDir, ".cache"),
         path.join(workDir, ".cache", "eiam"),
+        path.join(workDir, ".cache", "eiam", "v2-foreign", "site"),
       ]) {
         const buildIntoCacheRoot = runCli(workDir, [
           cliPath,
@@ -462,6 +463,13 @@ test.describe("빌드 회귀 가드", () => {
     const outDir = path.join(workDir, "dist");
     const configPath = path.join(workDir, "blog.config.mjs");
     const sourceMarker = path.join(vaultDir, ".eiam-output.json");
+    const legacyCacheFile = path.join(workDir, ".cache", "build-index.json");
+    const legacyCacheContents = `${JSON.stringify({
+      version: 5,
+      sources: {},
+      docs: {},
+      outputHashes: {},
+    })}\n`;
 
     try {
       writeText(
@@ -479,6 +487,7 @@ STATIC_MARKER_BODY
       writeText(sourceMarker, '{"foreign":"marker"}\n');
 
       for (const staticPath of [".eiam-output.json", "assets/../.eiam-output.json"]) {
+        writeText(legacyCacheFile, legacyCacheContents);
         writeText(configPath, `export default { staticPaths: [${JSON.stringify(staticPath)}] };\n`);
         const rejectedBuild = runCli(workDir, [
           cliPath,
@@ -492,6 +501,7 @@ STATIC_MARKER_BODY
         expect(rejectedBuild.output).toContain("Refusing reserved static output path");
         expect(fs.existsSync(outDir)).toBe(false);
         expect(findCacheIndexPaths(workDir)).toEqual([]);
+        expect(fs.existsSync(legacyCacheFile)).toBe(false);
         expect(fs.readFileSync(sourceMarker, "utf8")).toBe('{"foreign":"marker"}\n');
       }
 
