@@ -1,4 +1,5 @@
 import { FileTree, prepareFileTreeInput } from "@pierre/trees";
+import { getManifestDocs, normalizeManifestPayload } from "./manifest-adapter.js";
 import { buildTreesAdapterInput } from "./tree-adapter.js";
 
 const COMPACT_LAYOUT_QUERY = "(max-width: 1024px)";
@@ -675,19 +676,7 @@ function loadInitialManifestData() {
 
   try {
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") {
-      return null;
-    }
-
-    if (!Array.isArray(parsed.docs) || !Array.isArray(parsed.tree)) {
-      return null;
-    }
-
-    if (!parsed.routeMap || typeof parsed.routeMap !== "object") {
-      return null;
-    }
-
-    return parsed;
+    return normalizeManifestPayload(parsed);
   } catch {
     return null;
   }
@@ -813,7 +802,7 @@ function cloneFilteredTree(nodes, visibleDocIds) {
 }
 
 function buildBranchView(manifest, branch, defaultBranch) {
-  const docs = manifest.docs.filter((doc) => isDocVisibleInBranch(doc, branch, defaultBranch));
+  const docs = getManifestDocs(manifest).filter((doc) => isDocVisibleInBranch(doc, branch, defaultBranch));
   const visibleDocIds = new Set(docs.map((doc) => doc.id));
   const tree = cloneFilteredTree(manifest.tree, visibleDocIds);
   const trees = buildTreesAdapterInput(tree, docs);
@@ -1580,14 +1569,18 @@ async function start() {
     if (!manifestRes.ok) {
       throw new Error(`Failed to load manifest: ${manifestRes.status}`);
     }
-    manifest = await manifestRes.json();
+    manifest = normalizeManifestPayload(await manifestRes.json());
+    if (!manifest) {
+      throw new Error("Failed to load a supported manifest schema");
+    }
   }
   const mermaidConfig = resolveMermaidConfig(manifest);
   const pathBase = normalizePathBase(manifest.pathBase);
   const siteTitle = resolveSiteTitle(manifest);
   const defaultBranch = normalizeBranch(manifest.defaultBranch) || DEFAULT_BRANCH;
   const availableBranchSet = new Set([defaultBranch]);
-  for (const doc of manifest.docs) {
+  const manifestDocs = getManifestDocs(manifest);
+  for (const doc of manifestDocs) {
     const docBranch = normalizeBranch(doc.branch);
     if (docBranch) {
       availableBranchSet.add(docBranch);
@@ -1646,7 +1639,7 @@ async function start() {
   };
   let view = getBranchView(activeBranch);
 
-  const docsById = new Map(manifest.docs.map((doc) => [doc.id, doc]));
+  const docsById = new Map(manifestDocs.map((doc) => [doc.id, doc]));
 
   const updateBranchInfo = () => {
     if (sidebarBranchInfo instanceof HTMLElement) {

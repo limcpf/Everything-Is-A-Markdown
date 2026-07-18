@@ -2,7 +2,17 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
-import type { BuildCache, BuildOptions, DocRecord, FileNode, FolderNode, Manifest, TreeNode, WikiResolver } from "./types";
+import type {
+  BuildCache,
+  BuildOptions,
+  DocRecord,
+  FileNode,
+  FolderNode,
+  Manifest,
+  ManifestDoc,
+  TreeNode,
+  WikiResolver,
+} from "./types";
 import { createMarkdownRenderer } from "./markdown";
 import { buildCanonicalUrl, escapeHtmlAttribute } from "./seo";
 import { render404Html, renderAppShellHtml } from "./template";
@@ -1020,16 +1030,6 @@ function fileNodeFromDoc(doc: DocRecord): FileNode {
     type: "file",
     name: doc.fileName,
     id: doc.id,
-    title: doc.title,
-    prefix: doc.prefix,
-    route: doc.route,
-    contentUrl: doc.contentUrl,
-    isNew: doc.isNew,
-    tags: doc.tags,
-    description: doc.description,
-    date: doc.date,
-    updatedDate: doc.updatedDate,
-    branch: doc.branch,
   };
 }
 
@@ -1200,22 +1200,27 @@ function buildManifest(docs: DocRecord[], tree: TreeNode[], options: BuildOption
   const wikiLookup = createWikiLookup(docs);
   const backlinksByDocId = buildBacklinksByDocId(docs, wikiLookup);
 
-  const docsForManifest = docs.map((doc) => ({
-    id: doc.id,
-    route: doc.route,
-    title: doc.title,
-    prefix: doc.prefix,
-    categoryPath: doc.categoryPath,
-    date: doc.date,
-    updatedDate: doc.updatedDate,
-    tags: doc.tags,
-    description: doc.description,
-    isNew: doc.isNew,
-    contentUrl: doc.contentUrl,
-    branch: doc.branch,
-    wikiTargets: doc.wikiTargets,
-    backlinks: backlinksByDocId.get(doc.id) ?? [],
-  }));
+  const docsById = Object.fromEntries(
+    docs.map((doc) => [
+      doc.id,
+      {
+        id: doc.id,
+        route: doc.route,
+        title: doc.title,
+        prefix: doc.prefix,
+        categoryPath: doc.categoryPath,
+        date: doc.date,
+        updatedDate: doc.updatedDate,
+        tags: doc.tags,
+        description: doc.description,
+        isNew: doc.isNew,
+        contentUrl: doc.contentUrl,
+        branch: doc.branch,
+        wikiTargets: doc.wikiTargets,
+        backlinks: backlinksByDocId.get(doc.id) ?? [],
+      },
+    ]),
+  );
 
   const branchSet = new Set<string>([DEFAULT_BRANCH]);
   for (const doc of docs) {
@@ -1235,6 +1240,7 @@ function buildManifest(docs: DocRecord[], tree: TreeNode[], options: BuildOption
   });
 
   return {
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     siteTitle: resolveSiteTitle(options),
     pathBase: options.seo?.pathBase ?? "",
@@ -1247,7 +1253,8 @@ function buildManifest(docs: DocRecord[], tree: TreeNode[], options: BuildOption
     },
     tree,
     routeMap,
-    docs: docsForManifest,
+    docIds: docs.map((doc) => doc.id),
+    docsById,
   };
 }
 
@@ -1679,7 +1686,7 @@ function renderInitialNav(docs: DocRecord[], currentId: string, pathBase: string
   return html;
 }
 
-function renderInitialBacklinks(backlinks: Manifest["docs"][number]["backlinks"], pathBase: string): string {
+function renderInitialBacklinks(backlinks: ManifestDoc["backlinks"], pathBase: string): string {
   if (backlinks.length === 0) {
     return "";
   }
@@ -1699,7 +1706,7 @@ function buildInitialView(
   doc: DocRecord,
   docs: DocRecord[],
   contentHtml: string,
-  manifestDocById: Map<string, Manifest["docs"][number]>,
+  manifestDocById: Map<string, Manifest["docsById"][string]>,
   pathBase: string,
 ): AppShellInitialView {
   const manifestDoc = manifestDocById.get(doc.id);
@@ -1723,7 +1730,7 @@ async function writeShellPages(
   runtimeAssets: RuntimeAssets,
   contentByDocId: Map<string, string>,
 ): Promise<void> {
-  const manifestDocById = new Map(manifest.docs.map((doc) => [doc.id, doc]));
+  const manifestDocById = new Map(Object.entries(manifest.docsById));
   const pathBase = options.seo?.pathBase ?? "";
   const indexDoc = pickHomeDoc(docs);
   const indexOutputPath = "index.html";
@@ -1878,8 +1885,8 @@ function buildWikiResolutionSignature(doc: DocRecord, lookup: WikiLookup): strin
 function buildBacklinksByDocId(
   docs: DocRecord[],
   lookup: WikiLookup,
-): Map<string, Manifest["docs"][number]["backlinks"]> {
-  const buckets = new Map<string, Map<string, Manifest["docs"][number]["backlinks"][number]>>();
+): Map<string, ManifestDoc["backlinks"]> {
+  const buckets = new Map<string, Map<string, ManifestDoc["backlinks"][number]>>();
 
   for (const doc of docs) {
     for (const target of doc.wikiTargets) {
@@ -1888,7 +1895,7 @@ function buildBacklinksByDocId(
         continue;
       }
 
-      const bucket = buckets.get(targetDoc.id) ?? new Map<string, Manifest["docs"][number]["backlinks"][number]>();
+      const bucket = buckets.get(targetDoc.id) ?? new Map<string, ManifestDoc["backlinks"][number]>();
       bucket.set(doc.id, {
         id: doc.id,
         route: doc.route,
@@ -1899,9 +1906,9 @@ function buildBacklinksByDocId(
     }
   }
 
-  const backlinksByDocId = new Map<string, Manifest["docs"][number]["backlinks"]>();
+  const backlinksByDocId = new Map<string, ManifestDoc["backlinks"]>();
   for (const doc of docs) {
-    const source = buckets.get(doc.id) ?? new Map<string, Manifest["docs"][number]["backlinks"][number]>();
+    const source = buckets.get(doc.id) ?? new Map<string, ManifestDoc["backlinks"][number]>();
     const backlinks = Array.from(source.values()).sort((left, right) =>
       left.route.localeCompare(right.route, "ko-KR"),
     );
