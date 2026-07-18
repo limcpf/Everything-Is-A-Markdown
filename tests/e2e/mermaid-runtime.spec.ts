@@ -111,6 +111,7 @@ async function startStaticServer(outDir: string): Promise<{ baseUrl: string; clo
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
+        server.closeAllConnections();
       }),
   };
 }
@@ -305,8 +306,6 @@ function createFixture(workDir: string, options: MermaidFixtureOptions): { vault
 }
 
 test.describe("Mermaid 런타임 회귀 가드", () => {
-  test.describe.configure({ timeout: 60_000 });
-
   const repoRoot = process.cwd();
   const cliPath = path.join(repoRoot, "src/cli.ts");
 
