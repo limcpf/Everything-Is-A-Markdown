@@ -23,10 +23,11 @@ function extractRuntimeAssetPath(html: string, extension: "js" | "css"): string 
   return match[0];
 }
 
-function runCli(cwd: string, args: string[]): CliResult {
+function runCli(cwd: string, args: string[], timeout?: number): CliResult {
   const result = spawnSync("bun", args, {
     cwd,
     encoding: "utf8",
+    timeout,
   });
 
   return {
@@ -258,6 +259,17 @@ test.describe("빌드 회귀 가드", () => {
       ]);
       expect(buildIntoUnowned.status).not.toBe(0);
       expect(buildIntoUnowned.output).toContain("Refusing non-empty output directory");
+      expect(fs.readFileSync(unownedSentinel, "utf8")).toBe("do not remove");
+      expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
+
+      const devIntoUnowned = runCli(
+        workDir,
+        [cliPath, "dev", "--vault", vaultPath, "--out", unownedOutDir, "--port", "49231"],
+        5_000,
+      );
+      expect(devIntoUnowned.status).not.toBeNull();
+      expect(devIntoUnowned.status).not.toBe(0);
+      expect(devIntoUnowned.output).toContain("Refusing non-empty output directory");
       expect(fs.readFileSync(unownedSentinel, "utf8")).toBe("do not remove");
       expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
 

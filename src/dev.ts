@@ -48,7 +48,7 @@ export async function runDev(options: BuildOptions, devOptions: DevOptions): Pro
   let runningBuild = false;
   let queuedBuild = false;
 
-  const buildOnce = async () => {
+  const buildOnce = async (failFast = false) => {
     if (runningBuild) {
       queuedBuild = true;
       return;
@@ -59,6 +59,9 @@ export async function runDev(options: BuildOptions, devOptions: DevOptions): Pro
       const result = await buildSite(options);
       console.log(`[build] total=${result.totalDocs} rendered=${result.renderedDocs} skipped=${result.skippedDocs}`);
     } catch (error) {
+      if (failFast) {
+        throw error;
+      }
       console.error("[build] failed", error);
     } finally {
       runningBuild = false;
@@ -69,7 +72,7 @@ export async function runDev(options: BuildOptions, devOptions: DevOptions): Pro
     }
   };
 
-  await buildOnce();
+  await buildOnce(true);
 
   const watcher = chokidar.watch(options.vaultDir, {
     ignoreInitial: true,
