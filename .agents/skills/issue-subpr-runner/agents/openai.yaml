@@ -1,0 +1,4 @@
+interface:
+  display_name: "Issue SubPR Runner"
+  short_description: "Issue 기준 subPR 순차 개발과 drain"
+  default_prompt: "Use $issue-subpr-runner to run issue #<number> through sequential sub PR development and final review drain."
