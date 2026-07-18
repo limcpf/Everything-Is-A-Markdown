@@ -470,7 +470,8 @@ The generated site includes a client-side runtime that powers navigation without
 
 Main behaviors:
 
-- searchable sidebar tree rendered by the vanilla `@pierre/trees` runtime
+- searchable sidebar tree rendered by the exact-pinned vanilla `@pierre/trees`
+  runtime with a five-symbol generic icon sprite
 - `Recent` virtual folder
 - optional pinned virtual folder
 - prefix/title file labels without visible `.md` extensions, plus NEW badges when `ui.newWithinDays` matches

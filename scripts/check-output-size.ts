@@ -24,9 +24,16 @@ interface SizeBudget {
 }
 
 const BUDGETS: Record<AssetKind, SizeBudget> = {
-  js: { raw: 300_000, gzip: 90_000 },
+  js: { raw: 260_000, gzip: 75_000 },
   css: { raw: 31_000, gzip: 7_000 },
 };
+const REQUIRED_MINIMAL_TREE_ICONS = [
+  "file-tree-icon-chevron",
+  "file-tree-icon-dot",
+  "file-tree-icon-ellipsis",
+  "file-tree-icon-file",
+  "file-tree-icon-lock",
+] as const;
 const MANIFEST_RATIO_MIN_LEGACY_BYTES = 8_000;
 
 function parseOutDir(argv: string[]): string {
@@ -69,6 +76,17 @@ function checkAsset(assetPath: string, kind: AssetKind): string[] {
   }
   if (gzipBytes > budget.gzip) {
     failures.push(`${fileName} gzip ${gzipBytes} exceeds ${budget.gzip}`);
+  }
+  if (kind === "js") {
+    const source = bytes.toString("utf8");
+    if (source.includes("file-tree-builtin-")) {
+      failures.push(`${fileName} ships the @pierre/trees built-in file icon catalog`);
+    }
+    for (const iconName of REQUIRED_MINIMAL_TREE_ICONS) {
+      if (!source.includes(iconName)) {
+        failures.push(`${fileName} is missing required minimal tree icon ${iconName}`);
+      }
+    }
   }
 
   console.log(
