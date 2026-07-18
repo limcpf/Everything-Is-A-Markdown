@@ -485,8 +485,23 @@ STATIC_MARKER_BODY
 `,
       );
       writeText(sourceMarker, '{"foreign":"marker"}\n');
+      writeText(
+        path.join(vaultDir, "private.md"),
+        `---
+publish: false
+title: Private Static Source
+---
 
-      for (const staticPath of [".eiam-output.json", "assets/../.eiam-output.json"]) {
+PRIVATE_STATIC_SOURCE_SECRET
+`,
+      );
+      fs.mkdirSync(path.join(vaultDir, "assets"), { recursive: true });
+
+      for (const [staticPath, expectedError] of [
+        [".eiam-output.json", "Refusing reserved static output path"],
+        ["assets/../.eiam-output.json", "Refusing reserved static output path"],
+        ["assets/..", "Refusing static path that resolves to the vault root"],
+      ] as const) {
         writeText(legacyCacheFile, legacyCacheContents);
         writeText(configPath, `export default { staticPaths: [${JSON.stringify(staticPath)}] };\n`);
         const rejectedBuild = runCli(workDir, [
@@ -498,11 +513,14 @@ STATIC_MARKER_BODY
           outDir,
         ]);
         expect(rejectedBuild.status).not.toBe(0);
-        expect(rejectedBuild.output).toContain("Refusing reserved static output path");
+        expect(rejectedBuild.output).toContain(expectedError);
         expect(fs.existsSync(outDir)).toBe(false);
         expect(findCacheIndexPaths(workDir)).toEqual([]);
         expect(fs.existsSync(legacyCacheFile)).toBe(false);
         expect(fs.readFileSync(sourceMarker, "utf8")).toBe('{"foreign":"marker"}\n');
+        expect(fs.readFileSync(path.join(vaultDir, "private.md"), "utf8")).toContain(
+          "PRIVATE_STATIC_SOURCE_SECRET",
+        );
       }
 
       writeText(configPath, "export default {};\n");
@@ -912,6 +930,8 @@ title: HTML Policy
     const publicPath = path.join(vaultDir, "public.md");
     const privatePath = path.join(vaultDir, "private.md");
     const draftPath = path.join(vaultDir, "draft.md");
+    const missingPrefixPath = path.join(vaultDir, "missing-prefix.md");
+    const missingCategoryPath = path.join(vaultDir, "missing-category.md");
 
     try {
       writeText(
@@ -947,6 +967,28 @@ title: Draft Cache
 DRAFT_CACHE_SECRET
 `,
       );
+      writeText(
+        missingPrefixPath,
+        `---
+publish: true
+category_path: cache/missing-prefix
+title: Missing Prefix Cache
+---
+
+MISSING_PREFIX_CACHE_SECRET
+`,
+      );
+      writeText(
+        missingCategoryPath,
+        `---
+publish: true
+prefix: CACHE-MISSING-CATEGORY
+title: Missing Category Cache
+---
+
+MISSING_CATEGORY_CACHE_SECRET
+`,
+      );
 
       const firstBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
       expect(firstBuild.status, firstBuild.output).toBe(0);
@@ -955,10 +997,14 @@ DRAFT_CACHE_SECRET
       expect(firstCache).toContain("PUBLIC_CACHE_BODY");
       expect(firstCache).not.toContain("PRIVATE_CACHE_SECRET");
       expect(firstCache).not.toContain("DRAFT_CACHE_SECRET");
+      expect(firstCache).not.toContain("MISSING_PREFIX_CACHE_SECRET");
+      expect(firstCache).not.toContain("MISSING_CATEGORY_CACHE_SECRET");
       const firstSources = (JSON.parse(firstCache) as { sources: Record<string, unknown> }).sources;
       expect(firstSources["public.md"]).toBeDefined();
       expect(firstSources["private.md"]).toBeUndefined();
       expect(firstSources["draft.md"]).toBeUndefined();
+      expect(firstSources["missing-prefix.md"]).toBeUndefined();
+      expect(firstSources["missing-category.md"]).toBeUndefined();
 
       const incrementalBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
       expect(incrementalBuild.status, incrementalBuild.output).toBe(0);
@@ -1011,10 +1057,14 @@ DRAFT_CACHE_SECRET
       expect(nextCache).not.toContain("PUBLIC_CACHE_BODY");
       expect(nextCache).toContain("PRIVATE_CACHE_SECRET");
       expect(nextCache).toContain("DRAFT_CACHE_SECRET");
+      expect(nextCache).not.toContain("MISSING_PREFIX_CACHE_SECRET");
+      expect(nextCache).not.toContain("MISSING_CATEGORY_CACHE_SECRET");
       const nextSources = (JSON.parse(nextCache) as { sources: Record<string, unknown> }).sources;
       expect(nextSources["public.md"]).toBeUndefined();
       expect(nextSources["private.md"]).toBeDefined();
       expect(nextSources["draft.md"]).toBeDefined();
+      expect(nextSources["missing-prefix.md"]).toBeUndefined();
+      expect(nextSources["missing-category.md"]).toBeUndefined();
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

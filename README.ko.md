@@ -106,7 +106,7 @@ export default config;
 - 볼트 기준 상대 경로 배열
 - 폴더와 파일 모두 지정 가능
 - 지정한 경로의 파일들을 `dist`에 같은 상대 경로로 복사
-- output 밖으로 벗어나거나 예약된 `.eiam-output.json` 소유권 마커와 충돌하는 경로는 거부
+- vault root로 정규화되거나 output 밖으로 벗어나거나 예약된 `.eiam-output.json` 소유권 마커와 충돌하는 경로는 거부
 - 예: 볼트 `assets/og.png` -> `dist/assets/og.png`
 
 `pinnedMenu`:

@@ -884,8 +884,6 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
       continue;
     }
 
-    nextSources[relPath] = completeEntry;
-
     if (!completeEntry.prefix) {
       console.warn(`[publish] Skipped published doc without prefix: ${relPath}`);
       continue;
@@ -896,6 +894,7 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
       continue;
     }
 
+    nextSources[relPath] = completeEntry;
     docs.push(toDocRecord(sourcePath, relPath, completeEntry, newThreshold));
   }
 
@@ -1381,6 +1380,9 @@ async function copyOutputFileIfChanged(
 
 function assertSafeStaticOutputPath(relOutputPath: string): void {
   const normalized = path.posix.normalize(toPosixPath(relOutputPath));
+  if (normalized === ".") {
+    throw new Error(`[safety] Refusing static path that resolves to the vault root: ${relOutputPath}`);
+  }
   if (normalized === ".." || normalized.startsWith("../") || path.posix.isAbsolute(normalized)) {
     throw new Error(`[safety] Refusing static output path outside the output directory: ${relOutputPath}`);
   }

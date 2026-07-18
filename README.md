@@ -295,7 +295,7 @@ export default {
 - Must be vault-relative
 - Can point to either a file or a directory
 - Are copied as-is into the output directory
-- Must not escape the output directory or collide with the reserved `.eiam-output.json` ownership marker
+- Must not normalize to the vault root, escape the output directory, or collide with the reserved `.eiam-output.json` ownership marker
 - Invalid or missing paths are skipped with a warning
 
 ### `pinnedMenu`
