@@ -9,6 +9,31 @@ interface CliResult {
   output: string;
 }
 
+interface ManifestDocIndex<T> {
+  schemaVersion: number;
+  docIds: string[];
+  docsById: Record<string, T>;
+}
+
+interface TestTreeNode {
+  type: string;
+  id?: string;
+  name?: string;
+  path?: string;
+  children?: TestTreeNode[];
+}
+
+function getManifestDocs<T>(manifest: ManifestDocIndex<T>): T[] {
+  return manifest.docIds.map((id) => manifest.docsById[id]).filter((doc): doc is T => doc !== undefined);
+}
+
+function getTreeDocTitles(
+  nodes: TestTreeNode[] | undefined,
+  docsById: Record<string, { title: string }>,
+): Array<string | undefined> {
+  return (nodes ?? []).map((node) => (node.id ? docsById[node.id]?.title : undefined));
+}
+
 function writeText(filePath: string, content: string): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, "utf8");
@@ -37,10 +62,8 @@ function runCli(cwd: string, args: string[], timeout?: number): CliResult {
 }
 
 function readDocContentHtml(outDir: string, route: string): string {
-  const manifest = readManifest(outDir) as {
-    docs: Array<{ route: string; contentUrl: string }>;
-  };
-  const doc = manifest.docs.find((entry) => entry.route === route);
+  const manifest = readManifest(outDir) as ManifestDocIndex<{ route: string; contentUrl: string }>;
+  const doc = getManifestDocs(manifest).find((entry) => entry.route === route);
   if (!doc) {
     throw new Error(`route ${route} 문서를 manifest에서 찾지 못했습니다.`);
   }
@@ -73,18 +96,15 @@ function findOnlyCacheIndexPath(workDir: string): string {
 }
 
 function findFolderNodeByPath(
-  nodes: Array<{ type: string; path?: string; children?: Array<{ type: string; path?: string; children?: unknown[] }> }>,
+  nodes: TestTreeNode[],
   targetPath: string,
-): { type: string; path?: string; children?: Array<{ type: string; path?: string; children?: unknown[] }> } | null {
+): TestTreeNode | null {
   for (const node of nodes) {
     if (node.type === "folder" && node.path === targetPath) {
       return node;
     }
     if (node.type === "folder" && Array.isArray(node.children)) {
-      const found = findFolderNodeByPath(
-        node.children as Array<{ type: string; path?: string; children?: Array<{ type: string; path?: string; children?: unknown[] }> }>,
-        targetPath,
-      );
+      const found = findFolderNodeByPath(node.children, targetPath);
       if (found) {
         return found;
       }
@@ -97,7 +117,59 @@ function findFolderNodeByPath(
 test.describe("빌드 회귀 가드", () => {
   const repoRoot = process.cwd();
   const cliPath = path.join(repoRoot, "src/cli.ts");
+  const sizeCheckPath = path.join(repoRoot, "scripts/check-output-size.ts");
   const vaultPath = path.join(repoRoot, "test-vault");
+
+  test("manifest size gate는 tiny vault의 고정 overhead를 허용한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-small-manifest-size-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+
+    try {
+      fs.mkdirSync(vaultDir, { recursive: true });
+      const emptyBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(emptyBuild.status, emptyBuild.output).toBe(0);
+      const emptyCheck = runCli(workDir, [sizeCheckPath, "--out", outDir]);
+      expect(emptyCheck.status, emptyCheck.output).toBe(0);
+      expect(emptyCheck.output).toContain("manifest ratio gate skipped for legacy projection");
+
+      writeText(
+        path.join(vaultDir, "only.md"),
+        `---
+publish: true
+prefix: SMALL-01
+category_path: small
+title: Only document
+---
+`,
+      );
+      const oneDocBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(oneDocBuild.status, oneDocBuild.output).toBe(0);
+      const oneDocCheck = runCli(workDir, [sizeCheckPath, "--out", outDir]);
+      expect(oneDocCheck.status, oneDocCheck.output).toBe(0);
+      expect(oneDocCheck.output).toContain("manifest ratio gate skipped for legacy projection");
+
+      for (let index = 2; index <= 3; index += 1) {
+        writeText(
+          path.join(vaultDir, `doc-${index}.md`),
+          `---
+publish: true
+prefix: SMALL-0${index}
+category_path: small
+title: Document ${index}
+---
+`,
+        );
+        const tinyBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+        expect(tinyBuild.status, tinyBuild.output).toBe(0);
+        const tinyCheck = runCli(workDir, [sizeCheckPath, "--out", outDir]);
+        expect(tinyCheck.status, tinyCheck.output).toBe(0);
+        expect(tinyCheck.output).toContain("manifest ratio gate skipped for legacy projection");
+      }
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
 
   test("증분 빌드에서 누락된 content 파일을 복구한다", async () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-build-regression-"));
@@ -612,8 +684,8 @@ VAULT_B_BODY
       expect(wrongVaultBuild.status).not.toBe(0);
       expect(wrongVaultBuild.output).toContain("matching .eiam-output.json");
       expect(fs.readFileSync(markerAPath, "utf8")).toBe(markerABefore);
-      const manifestAfterWrongBuild = readManifest(outA) as { docs: Array<{ route: string }> };
-      expect(manifestAfterWrongBuild.docs.map((doc) => doc.route)).toEqual(["/NS-CACHE-A/"]);
+      const manifestAfterWrongBuild = readManifest(outA) as ManifestDocIndex<{ route: string }>;
+      expect(getManifestDocs(manifestAfterWrongBuild).map((doc) => doc.route)).toEqual(["/NS-CACHE-A/"]);
 
       const wrongVaultClean = runCli(workDir, [cliPath, "clean", "--vault", vaultB, "--out", outA]);
       expect(wrongVaultClean.status).not.toBe(0);
@@ -633,9 +705,9 @@ VAULT_B_BODY
       expect(wrongCwdBuild.output).toContain("matching .eiam-output.json");
       expect(fs.readFileSync(markerAPath, "utf8")).toBe(markerABefore);
       expect(fs.existsSync(path.join(alternateCwd, ".cache", "eiam"))).toBe(false);
-      expect((readManifest(outA) as { docs: Array<{ route: string }> }).docs.map((doc) => doc.route)).toEqual([
-        "/NS-CACHE-A/",
-      ]);
+      expect(
+        getManifestDocs(readManifest(outA) as ManifestDocIndex<{ route: string }>).map((doc) => doc.route),
+      ).toEqual(["/NS-CACHE-A/"]);
 
       const wrongCwdClean = runCli(alternateCwd, [
         cliPath,
@@ -657,8 +729,8 @@ VAULT_B_BODY
       const cacheB = afterBuildB.find((cachePath) => cachePath !== cacheA);
       expect(cacheB).toBeDefined();
       expect(fs.readFileSync(cacheB!, "utf8")).toContain("VAULT_B_BODY");
-      const manifestB = readManifest(outB) as { docs: Array<{ route: string }> };
-      expect(manifestB.docs.map((doc) => doc.route)).toEqual(["/NS-CACHE-B/"]);
+      const manifestB = readManifest(outB) as ManifestDocIndex<{ route: string }>;
+      expect(getManifestDocs(manifestB).map((doc) => doc.route)).toEqual(["/NS-CACHE-B/"]);
 
       const alternateBuild = runCli(workDir, [
         cliPath,
@@ -679,8 +751,8 @@ VAULT_B_BODY
       const rebuildA = runCli(workDir, [cliPath, "build", "--vault", vaultA, "--out", outA]);
       expect(rebuildA.status, rebuildA.output).toBe(0);
       expect(rebuildA.output).toContain("total=1 rendered=0 skipped=1");
-      const manifestA = readManifest(outA) as { docs: Array<{ route: string }> };
-      expect(manifestA.docs.map((doc) => doc.route)).toEqual(["/NS-CACHE-A/"]);
+      const manifestA = readManifest(outA) as ManifestDocIndex<{ route: string }>;
+      expect(getManifestDocs(manifestA).map((doc) => doc.route)).toEqual(["/NS-CACHE-A/"]);
 
       const unrelatedCacheFile = path.join(workDir, ".cache", "keep.txt");
       writeText(unrelatedCacheFile, "unrelated cache data");
@@ -810,11 +882,13 @@ TARGET_B_BODY
       expect(fs.existsSync(path.join(outDir, "FP-ROUTE-A", "index.html"))).toBe(false);
       expect(fs.existsSync(path.join(outDir, "FP-ROUTE-B", "index.html"))).toBe(true);
 
-      const manifest = readManifest(outDir) as {
-        docs: Array<{ route: string; backlinks: Array<{ route: string }> }>;
-      };
-      const targetA = manifest.docs.find((doc) => doc.route === "/FP-TARGET-A/");
-      const targetB = manifest.docs.find((doc) => doc.route === "/FP-TARGET-B/");
+      const manifest = readManifest(outDir) as ManifestDocIndex<{
+        route: string;
+        backlinks: Array<{ route: string }>;
+      }>;
+      const docs = getManifestDocs(manifest);
+      const targetA = docs.find((doc) => doc.route === "/FP-TARGET-A/");
+      const targetB = docs.find((doc) => doc.route === "/FP-TARGET-B/");
       expect(targetA?.backlinks).toEqual([]);
       expect(targetB?.backlinks.map((backlink) => backlink.route)).toEqual(["/FP-LINKER/"]);
     } finally {
@@ -1055,8 +1129,11 @@ DRAFT_CACHE_SECRET
 
       const stateBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
       expect(stateBuild.status, stateBuild.output).toBe(0);
-      const manifest = readManifest(outDir) as { docs: Array<{ route: string }> };
-      expect(manifest.docs.map((doc) => doc.route).sort()).toEqual(["/CACHE-DRAFT/", "/CACHE-PRIVATE/"]);
+      const manifest = readManifest(outDir) as ManifestDocIndex<{ route: string }>;
+      expect(getManifestDocs(manifest).map((doc) => doc.route).sort()).toEqual([
+        "/CACHE-DRAFT/",
+        "/CACHE-PRIVATE/",
+      ]);
 
       const nextCache = fs.readFileSync(cachePath, "utf8");
       expect(nextCache).not.toContain("PUBLIC_CACHE_BODY");
@@ -1277,34 +1354,31 @@ title: API Detail
       const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
       expect(build.status, build.output).toBe(0);
 
-      const manifest = readManifest(outDir) as {
-        tree: Array<{
-          type: string;
-          path?: string;
-          name?: string;
-          children?: Array<{ type: string; title?: string; path?: string; children?: unknown[] }>;
-        }>;
-        docs: Array<{ route: string; categoryPath: string }>;
-      };
+      const manifest = readManifest(outDir) as ManifestDocIndex<{
+        route: string;
+        categoryPath: string;
+        title: string;
+      }> & { tree: TestTreeNode[] };
+      const docs = getManifestDocs(manifest);
 
       const pinnedFolder = manifest.tree[0];
       expect(pinnedFolder.type).toBe("folder");
       expect(pinnedFolder.path).toBe("__virtual__/pinned/category/engineering/guides");
-      expect(pinnedFolder.children?.map((node) => node.title)).toEqual(["Guide Overview", "API Detail"]);
+      expect(getTreeDocTitles(pinnedFolder.children, manifest.docsById)).toEqual(["Guide Overview", "API Detail"]);
 
       const engineeringFolder = findFolderNodeByPath(manifest.tree, "engineering");
       expect(engineeringFolder).not.toBeNull();
       const guidesFolder = findFolderNodeByPath(manifest.tree, "engineering/guides");
       expect(guidesFolder).not.toBeNull();
-      expect(guidesFolder?.children?.some((node) => node.title === "Guide Overview")).toBe(true);
+      expect(getTreeDocTitles(guidesFolder?.children, manifest.docsById)).toContain("Guide Overview");
       expect(findFolderNodeByPath(manifest.tree, "misc")).toBeNull();
 
       const apiFolder = findFolderNodeByPath(manifest.tree, "engineering/guides/api");
       expect(apiFolder).not.toBeNull();
-      expect(apiFolder?.children?.some((node) => node.title === "API Detail")).toBe(true);
+      expect(getTreeDocTitles(apiFolder?.children, manifest.docsById)).toContain("API Detail");
 
-      expect(manifest.docs.find((doc) => doc.route === "/CAT-02/")?.categoryPath).toBe("engineering/guides");
-      expect(manifest.docs.find((doc) => doc.route === "/CAT-03/")?.categoryPath).toBe("engineering/guides/api");
+      expect(docs.find((doc) => doc.route === "/CAT-02/")?.categoryPath).toBe("engineering/guides");
+      expect(docs.find((doc) => doc.route === "/CAT-03/")?.categoryPath).toBe("engineering/guides/api");
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
@@ -1330,8 +1404,8 @@ title: Missing Category
       expect(build.status, build.output).toBe(0);
       expect(build.output).toContain("[publish] Skipped published doc without category_path: notes/missing-category.md");
 
-      const manifest = readManifest(outDir) as { docs: Array<{ route: string }> };
-      expect(manifest.docs).toEqual([]);
+      const manifest = readManifest(outDir) as ManifestDocIndex<{ route: string }>;
+      expect(getManifestDocs(manifest)).toEqual([]);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
@@ -1388,18 +1462,15 @@ title: Should Not Pin
       const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
       expect(build.status, build.output).toBe(0);
 
-      const manifest = readManifest(outDir) as {
-        tree: Array<{
-          type: string;
-          path?: string;
-          children?: Array<{ title?: string }>;
-        }>;
-      };
+      const manifest = readManifest(outDir) as ManifestDocIndex<{ title: string }> & { tree: TestTreeNode[] };
 
       const pinnedFolder = manifest.tree[0];
       expect(pinnedFolder.type).toBe("folder");
       expect(pinnedFolder.path).toBe("__virtual__/pinned/source/legacy-notice");
-      expect(pinnedFolder.children?.map((node) => node.title)).toEqual(["Legacy Notice One", "Legacy Notice Two"]);
+      expect(getTreeDocTitles(pinnedFolder.children, manifest.docsById)).toEqual([
+        "Legacy Notice One",
+        "Legacy Notice Two",
+      ]);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
@@ -1446,25 +1517,23 @@ title: Normalized API Reference
       const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
       expect(build.status, build.output).toBe(0);
 
-      const manifest = readManifest(outDir) as {
-        tree: Array<{
-          type: string;
-          path?: string;
-          children?: Array<{ title?: string; path?: string; children?: unknown[] }>;
-        }>;
-        docs: Array<{ route: string; categoryPath: string }>;
-      };
+      const manifest = readManifest(outDir) as ManifestDocIndex<{
+        route: string;
+        categoryPath: string;
+        title: string;
+      }> & { tree: TestTreeNode[] };
+      const docs = getManifestDocs(manifest);
 
       expect(manifest.tree[0]?.path).toBe("__virtual__/pinned/category/engineering/guides/api");
-      expect(manifest.tree[0]?.children?.map((node) => node.title)).toEqual([
+      expect(getTreeDocTitles(manifest.tree[0]?.children, manifest.docsById)).toEqual([
         "Normalized API Guide",
         "Normalized API Reference",
       ]);
 
       expect(findFolderNodeByPath(manifest.tree, "engineering/guides/api")).not.toBeNull();
       expect(findFolderNodeByPath(manifest.tree, "engineering/guides/api/reference")).not.toBeNull();
-      expect(manifest.docs.find((doc) => doc.route === "/NORM-01/")?.categoryPath).toBe("engineering/guides/api");
-      expect(manifest.docs.find((doc) => doc.route === "/NORM-02/")?.categoryPath).toBe(
+      expect(docs.find((doc) => doc.route === "/NORM-01/")?.categoryPath).toBe("engineering/guides/api");
+      expect(docs.find((doc) => doc.route === "/NORM-02/")?.categoryPath).toBe(
         "engineering/guides/api/reference",
       );
     } finally {
@@ -1535,19 +1604,12 @@ title: Menu Config Guide
       ]);
       expect(build.status, build.output).toBe(0);
 
-      const manifest = readManifest(outDir) as {
-        tree: Array<{
-          type: string;
-          path?: string;
-          name?: string;
-          children?: Array<{ title?: string }>;
-        }>;
-      };
+      const manifest = readManifest(outDir) as ManifestDocIndex<{ title: string }> & { tree: TestTreeNode[] };
 
       const pinnedFolder = manifest.tree[0];
       expect(pinnedFolder.name).toBe("GUIDES");
       expect(pinnedFolder.path).toBe("__virtual__/pinned/category/engineering/guides");
-      expect(pinnedFolder.children?.map((node) => node.title)).toEqual(["Menu Config Guide"]);
+      expect(getTreeDocTitles(pinnedFolder.children, manifest.docsById)).toEqual(["Menu Config Guide"]);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

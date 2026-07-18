@@ -211,10 +211,11 @@ Key points:
 - Every published route gets its own `index.html` for direct access.
 - Rendered article bodies are stored separately under `dist/content/`.
 - Production JavaScript and CSS are minified, then content-hashed from the final emitted bytes.
+- `manifest.json` uses schema v2: `docIds` preserves order, `docsById` is the canonical metadata index, and tree file nodes carry document references instead of duplicated metadata. The runtime adapter also accepts legacy unversioned/v1 `docs` arrays during migration.
 - Static files declared in config are copied into the same relative paths under `dist/`.
 - Build cache is stored under `.cache/eiam/v1-<namespace>/build-index.json`.
 
-CI enforces raw and gzip budgets for the generated runtime assets. After a sample build, run `bun run check:size` to apply the same limits locally. The current budgets are 300,000 raw / 90,000 gzip bytes for JavaScript and 31,000 raw / 7,000 gzip bytes for CSS.
+CI enforces raw and gzip budgets for the generated runtime assets. After a sample build, run `bun run check:size` to apply the same limits locally. The current budgets are 300,000 raw / 90,000 gzip bytes for JavaScript and 31,000 raw / 7,000 gzip bytes for CSS. The same command always validates manifest schema v2 canonical document references. Once the reconstructed legacy projection reaches 8,000 bytes, it also requires at least 25% raw and 5% gzip reduction versus that duplicated tree/document projection. Smaller manifests skip only this relative ratio because fixed schema/gzip overhead dominates when there is not yet enough duplicated payload to measure reliably.
 
 ## Config File
 

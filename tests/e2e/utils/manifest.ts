@@ -44,17 +44,35 @@ export async function getInitialManifest(page: Page): Promise<ManifestShape> {
     }
   });
 
-  if (!manifest || typeof manifest !== "object" || !Array.isArray((manifest as { docs?: unknown[] }).docs)) {
+  if (!manifest || typeof manifest !== "object") {
     throw new Error("초기 manifest 데이터를 읽지 못했습니다.");
   }
 
-  const defaultBranchRaw = (manifest as { defaultBranch?: unknown }).defaultBranch;
+  const manifestRecord = manifest as {
+    schemaVersion?: unknown;
+    defaultBranch?: unknown;
+    docIds?: unknown;
+    docsById?: unknown;
+  };
+  if (
+    manifestRecord.schemaVersion !== 2 ||
+    !Array.isArray(manifestRecord.docIds) ||
+    !manifestRecord.docsById ||
+    typeof manifestRecord.docsById !== "object"
+  ) {
+    throw new Error("초기 manifest schema v2 데이터를 읽지 못했습니다.");
+  }
+
+  const defaultBranchRaw = manifestRecord.defaultBranch;
   const defaultBranch = normalizeBranch(defaultBranchRaw);
   if (!defaultBranch) {
     throw new Error("manifest.defaultBranch 값이 유효하지 않습니다.");
   }
 
-  const docs = (manifest as { docs: Array<{ route?: unknown; branch?: unknown }> }).docs
+  const docsById = manifestRecord.docsById as Record<string, { route?: unknown; branch?: unknown }>;
+  const docs = manifestRecord.docIds
+    .map((id) => (typeof id === "string" ? docsById[id] : undefined))
+    .filter((doc): doc is { route?: unknown; branch?: unknown } => !!doc)
     .filter((doc) => typeof doc.route === "string" && doc.route.length > 0)
     .map((doc) => ({
       route: String(doc.route),
