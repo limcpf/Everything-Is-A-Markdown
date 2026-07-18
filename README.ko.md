@@ -35,7 +35,7 @@ bun run blog [build|dev|clean] [options]
 - `bun run dev`: 로컬 개발 서버 실행 (기본 `http://localhost:3000`)
 - `bun run clean`: EIAM 소유권 마커가 확인된 `dist`와 일치하는 EIAM cache namespace만 삭제
 
-빌드는 전용 출력 디렉터리에 `.eiam-output.json` 소유권 마커를 기록합니다. 비어 있지 않은 미소유 디렉터리는 출력 경로로 사용하지 않으며, `clean`도 광범위한 경로나 마커가 없는 디렉터리를 삭제하지 않습니다. sibling EIAM cache namespace와 일반 `.cache`의 다른 파일은 보존합니다.
+빌드는 전용 출력 디렉터리에 `.eiam-output.json` 소유권 마커를 기록하고 canonical vault/output cache namespace에 결속합니다. 비어 있지 않은 미소유 또는 namespace 불일치 디렉터리는 출력 경로로 사용하지 않으며, `clean`도 광범위한 경로나 선택한 vault/output pair와 마커가 일치하지 않는 디렉터리를 삭제하지 않습니다. sibling EIAM cache namespace와 일반 `.cache`의 다른 파일은 보존합니다.
 
 자주 쓰는 옵션:
 

@@ -165,7 +165,14 @@ test.describe("빌드 회귀 가드", () => {
     try {
       const build = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
       expect(build.status, build.output).toBe(0);
-      expect(fs.existsSync(path.join(outDir, ".eiam-output.json"))).toBe(true);
+      const markerPath = path.join(outDir, ".eiam-output.json");
+      expect(fs.existsSync(markerPath)).toBe(true);
+      const marker = JSON.parse(fs.readFileSync(markerPath, "utf8")) as {
+        version: number;
+        cacheNamespace: string;
+      };
+      expect(marker.version).toBe(2);
+      expect(marker.cacheNamespace).toMatch(/^v1-[a-f0-9]{40}$/);
       const cachePath = findOnlyCacheIndexPath(workDir);
 
       writeText(unrelatedCacheFile, "unrelated cache data");
@@ -264,6 +271,21 @@ VAULT_B_BODY
       const [cacheA] = findCacheIndexPaths(workDir);
       expect(cacheA).toBeDefined();
       expect(fs.readFileSync(cacheA, "utf8")).toContain("VAULT_A_BODY");
+
+      const markerAPath = path.join(outA, ".eiam-output.json");
+      const markerABefore = fs.readFileSync(markerAPath, "utf8");
+      const wrongVaultBuild = runCli(workDir, [cliPath, "build", "--vault", vaultB, "--out", outA]);
+      expect(wrongVaultBuild.status).not.toBe(0);
+      expect(wrongVaultBuild.output).toContain("matching .eiam-output.json");
+      expect(fs.readFileSync(markerAPath, "utf8")).toBe(markerABefore);
+      const manifestAfterWrongBuild = readManifest(outA) as { docs: Array<{ route: string }> };
+      expect(manifestAfterWrongBuild.docs.map((doc) => doc.route)).toEqual(["/NS-CACHE-A/"]);
+
+      const wrongVaultClean = runCli(workDir, [cliPath, "clean", "--vault", vaultB, "--out", outA]);
+      expect(wrongVaultClean.status).not.toBe(0);
+      expect(wrongVaultClean.output).toContain("matching .eiam-output.json");
+      expect(fs.existsSync(outA)).toBe(true);
+      expect(fs.existsSync(cacheA)).toBe(true);
 
       const buildB = runCli(workDir, [cliPath, "build", "--vault", vaultB, "--out", outB]);
       expect(buildB.status, buildB.output).toBe(0);

@@ -27,7 +27,7 @@ const CACHE_NAMESPACE_VERSION = 1;
 const CACHE_FILE_NAME = "build-index.json";
 const OUTPUT_MARKER_FILE_NAME = ".eiam-output.json";
 const OUTPUT_MARKER_FORMAT = "everything-is-a-markdown-output";
-const OUTPUT_MARKER_VERSION = 1;
+const OUTPUT_MARKER_VERSION = 2;
 const DEFAULT_BRANCH = "dev";
 const DEFAULT_SITE_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
 const DEFAULT_SITE_TITLE = "File-System Blog";
@@ -64,6 +64,7 @@ interface BuildResult {
 }
 
 interface CacheLocation {
+  namespace: string;
   rootDir: string;
   namespaceDir: string;
   cachePath: string;
@@ -114,6 +115,7 @@ async function resolveCacheLocation(options: BuildOptions): Promise<CacheLocatio
   const namespaceDir = path.join(rootDir, namespace);
 
   return {
+    namespace,
     rootDir,
     namespaceDir,
     cachePath: path.join(namespaceDir, CACHE_FILE_NAME),
@@ -139,7 +141,7 @@ async function assertSafeOutputRoot(outDir: string, vaultDir: string): Promise<s
   return outputRoot;
 }
 
-async function hasValidOutputMarker(outputRoot: string): Promise<boolean> {
+async function hasValidOutputMarker(outputRoot: string, cacheNamespace: string): Promise<boolean> {
   const markerPath = path.join(outputRoot, OUTPUT_MARKER_FILE_NAME);
 
   try {
@@ -152,22 +154,24 @@ async function hasValidOutputMarker(outputRoot: string): Promise<boolean> {
     return (
       isRecord(parsed) &&
       parsed.format === OUTPUT_MARKER_FORMAT &&
-      parsed.version === OUTPUT_MARKER_VERSION
+      parsed.version === OUTPUT_MARKER_VERSION &&
+      parsed.cacheNamespace === cacheNamespace
     );
   } catch {
     return false;
   }
 }
 
-async function writeOutputMarker(outputRoot: string): Promise<void> {
+async function writeOutputMarker(outputRoot: string, cacheNamespace: string): Promise<void> {
   const marker = {
     format: OUTPUT_MARKER_FORMAT,
     version: OUTPUT_MARKER_VERSION,
+    cacheNamespace,
   };
   await Bun.write(path.join(outputRoot, OUTPUT_MARKER_FILE_NAME), `${JSON.stringify(marker, null, 2)}\n`);
 }
 
-async function prepareOwnedOutputDirectory(options: BuildOptions): Promise<void> {
+async function prepareOwnedOutputDirectory(options: BuildOptions, cacheNamespace: string): Promise<void> {
   const requestedOutputRoot = path.resolve(options.outDir);
   const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir);
 
@@ -178,9 +182,9 @@ async function prepareOwnedOutputDirectory(options: BuildOptions): Promise<void>
     }
 
     const entries = await fs.readdir(outputRoot);
-    if (entries.length > 0 && !(await hasValidOutputMarker(outputRoot))) {
+    if (entries.length > 0 && !(await hasValidOutputMarker(outputRoot, cacheNamespace))) {
       throw new Error(
-        `[safety] Refusing non-empty output directory without a valid ${OUTPUT_MARKER_FILE_NAME}: ${outputRoot}`,
+        `[safety] Refusing non-empty output directory without a matching ${OUTPUT_MARKER_FILE_NAME} for the requested vault/output pair: ${outputRoot}`,
       );
     }
   } catch (error) {
@@ -190,8 +194,8 @@ async function prepareOwnedOutputDirectory(options: BuildOptions): Promise<void>
     await fs.mkdir(requestedOutputRoot, { recursive: true });
   }
 
-  if (!(await hasValidOutputMarker(outputRoot))) {
-    await writeOutputMarker(outputRoot);
+  if (!(await hasValidOutputMarker(outputRoot, cacheNamespace))) {
+    await writeOutputMarker(outputRoot, cacheNamespace);
   }
 }
 
@@ -1654,9 +1658,9 @@ export async function cleanBuildArtifacts(options: BuildOptions): Promise<void> 
     if (!outputStat.isDirectory() || outputStat.isSymbolicLink()) {
       throw new Error(`[safety] Refusing to clean non-directory output path: ${outputRoot}`);
     }
-    if (!(await hasValidOutputMarker(outputRoot))) {
+    if (!(await hasValidOutputMarker(outputRoot, cacheLocation.namespace))) {
       throw new Error(
-        `[safety] Refusing to clean output directory without a valid ${OUTPUT_MARKER_FILE_NAME}: ${outputRoot}`,
+        `[safety] Refusing to clean output directory without a matching ${OUTPUT_MARKER_FILE_NAME} for the requested vault/output pair: ${outputRoot}`,
       );
     }
     await fs.rm(requestedOutputRoot, { recursive: true, force: true });
@@ -1718,10 +1722,11 @@ function buildBacklinksByDocId(
 }
 
 export async function buildSite(options: BuildOptions): Promise<BuildResult> {
-  await prepareOwnedOutputDirectory(options);
+  const cacheLocation = await resolveCacheLocation(options);
+  await prepareOwnedOutputDirectory(options, cacheLocation.namespace);
   await ensureDir(path.join(options.outDir, "content"));
 
-  const { cachePath } = await resolveCacheLocation(options);
+  const { cachePath } = cacheLocation;
   const previousCache = await readCache(cachePath);
   const canReuseOutputs = await fileExists(path.join(options.outDir, "manifest.json"));
   const previousDocs = canReuseOutputs ? previousCache.docs : {};

@@ -117,7 +117,7 @@ Notes:
 - Unknown CLI options fail fast.
 - Every value-taking option fails with `[cli] Missing value for <option>` when its value is omitted or the next argument is another flag.
 - Invalid numeric options fail fast.
-- Builds mark a dedicated output directory with `.eiam-output.json` and refuse to claim a non-empty unmarked directory.
+- Builds mark a dedicated output directory with `.eiam-output.json`, bind that marker to the canonical vault/output cache namespace, and refuse to claim a non-empty unmarked or mismatched directory.
 - `clean` refuses broad or unmarked output paths. It removes only the marked output directory and its matching EIAM cache namespace, preserving sibling namespaces and unrelated `.cache` data.
 
 ## Frontmatter
