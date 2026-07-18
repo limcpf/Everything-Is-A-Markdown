@@ -21,9 +21,14 @@ import {
   toDocId,
 } from "./utils";
 
-const CACHE_VERSION = 4;
-const CACHE_DIR_NAME = ".cache";
+const CACHE_VERSION = 6;
+const CACHE_ROOT_SEGMENTS = [".cache", "eiam"] as const;
+const CACHE_NAMESPACE_VERSION = 2;
 const CACHE_FILE_NAME = "build-index.json";
+const LEGACY_CACHE_PATH_SEGMENTS = [".cache", CACHE_FILE_NAME] as const;
+const OUTPUT_MARKER_FILE_NAME = ".eiam-output.json";
+const OUTPUT_MARKER_FORMAT = "everything-is-a-markdown-output";
+const OUTPUT_MARKER_VERSION = 2;
 const DEFAULT_BRANCH = "dev";
 const DEFAULT_SITE_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
 const DEFAULT_SITE_TITLE = "File-System Blog";
@@ -59,12 +64,260 @@ interface BuildResult {
   skippedDocs: number;
 }
 
+interface CacheLocation {
+  namespace: string;
+  rootDir: string;
+  namespaceDir: string;
+  cachePath: string;
+}
+
 function toContentFileName(id: string): string {
   return `${makeHash(id)}.html`;
 }
 
-function toCachePath(): string {
-  return path.join(process.cwd(), CACHE_DIR_NAME, CACHE_FILE_NAME);
+function isSamePathOrAncestor(candidate: string, target: string): boolean {
+  const relative = path.relative(candidate, target);
+  return (
+    relative === "" ||
+    (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`))
+  );
+}
+
+async function toCanonicalPath(input: string): Promise<string> {
+  let existingAncestor = path.resolve(input);
+  const missingSegments: string[] = [];
+
+  while (true) {
+    try {
+      const canonicalAncestor = await fs.realpath(existingAncestor);
+      return path.join(canonicalAncestor, ...missingSegments);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+
+      const parent = path.dirname(existingAncestor);
+      if (parent === existingAncestor) {
+        return path.resolve(input);
+      }
+      missingSegments.unshift(path.basename(existingAncestor));
+      existingAncestor = parent;
+    }
+  }
+}
+
+async function resolveCacheRoot(): Promise<string> {
+  const canonicalCwd = await toCanonicalPath(process.cwd());
+  let candidate = canonicalCwd;
+
+  for (const segment of CACHE_ROOT_SEGMENTS) {
+    candidate = path.join(candidate, segment);
+    try {
+      const candidateStat = await fs.lstat(candidate);
+      if (candidateStat.isSymbolicLink()) {
+        throw new Error(`[safety] Refusing symlinked cache path: ${candidate}`);
+      }
+      if (!candidateStat.isDirectory()) {
+        throw new Error(`[safety] Cache path component must be a real directory: ${candidate}`);
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
+  }
+
+  return candidate;
+}
+
+async function assertSafeCacheNamespace(namespaceDir: string): Promise<void> {
+  try {
+    const namespaceStat = await fs.lstat(namespaceDir);
+    if (namespaceStat.isSymbolicLink()) {
+      throw new Error(`[safety] Refusing symlinked cache namespace: ${namespaceDir}`);
+    }
+    if (!namespaceStat.isDirectory()) {
+      throw new Error(`[safety] Cache namespace must be a real directory: ${namespaceDir}`);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function assertSafeCacheIndex(cachePath: string): Promise<void> {
+  try {
+    const cacheStat = await fs.lstat(cachePath);
+    if (cacheStat.isSymbolicLink()) {
+      throw new Error(`[safety] Refusing symlinked cache index: ${cachePath}`);
+    }
+    if (!cacheStat.isFile()) {
+      throw new Error(`[safety] Cache index must be a real file: ${cachePath}`);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function assertSafeCacheLocation(location: CacheLocation): Promise<void> {
+  await assertSafeCacheNamespace(location.namespaceDir);
+  await assertSafeCacheIndex(location.cachePath);
+}
+
+async function resolveCacheLocation(options: BuildOptions): Promise<CacheLocation> {
+  const [vaultRoot, outputRoot, rootDir] = await Promise.all([
+    toCanonicalPath(options.vaultDir),
+    toCanonicalPath(options.outDir),
+    resolveCacheRoot(),
+  ]);
+  const namespace = `v${CACHE_NAMESPACE_VERSION}-${makeHash(`${vaultRoot}\0${outputRoot}\0${rootDir}`)}`;
+  const namespaceDir = path.join(rootDir, namespace);
+  const location = {
+    namespace,
+    rootDir,
+    namespaceDir,
+    cachePath: path.join(namespaceDir, CACHE_FILE_NAME),
+  };
+  await assertSafeCacheLocation(location);
+
+  return location;
+}
+
+async function assertSafeOutputRoot(outDir: string, vaultDir: string, cacheRoot: string): Promise<string> {
+  const outputRoot = await toCanonicalPath(outDir);
+  const filesystemRoot = path.parse(outputRoot).root;
+  const cwd = await toCanonicalPath(process.cwd());
+  const vaultRoot = await toCanonicalPath(vaultDir);
+
+  if (
+    outputRoot === filesystemRoot ||
+    isSamePathOrAncestor(outputRoot, cwd) ||
+    isSamePathOrAncestor(outputRoot, vaultRoot) ||
+    isSamePathOrAncestor(outputRoot, cacheRoot) ||
+    isSamePathOrAncestor(cacheRoot, outputRoot)
+  ) {
+    throw new Error(
+      `[safety] Refusing dangerous output directory: ${outputRoot}. Choose a dedicated child directory.`,
+    );
+  }
+
+  return outputRoot;
+}
+
+async function hasValidOutputMarker(outputRoot: string, cacheNamespace: string): Promise<boolean> {
+  const markerPath = path.join(outputRoot, OUTPUT_MARKER_FILE_NAME);
+
+  try {
+    const markerStat = await fs.lstat(markerPath);
+    if (!markerStat.isFile() || markerStat.isSymbolicLink()) {
+      return false;
+    }
+
+    const parsed = (await Bun.file(markerPath).json()) as unknown;
+    return (
+      isRecord(parsed) &&
+      parsed.format === OUTPUT_MARKER_FORMAT &&
+      parsed.version === OUTPUT_MARKER_VERSION &&
+      parsed.cacheNamespace === cacheNamespace
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function writeOutputMarker(outputRoot: string, cacheNamespace: string): Promise<void> {
+  const marker = {
+    format: OUTPUT_MARKER_FORMAT,
+    version: OUTPUT_MARKER_VERSION,
+    cacheNamespace,
+  };
+  await Bun.write(path.join(outputRoot, OUTPUT_MARKER_FILE_NAME), `${JSON.stringify(marker, null, 2)}\n`);
+}
+
+async function prepareOwnedOutputDirectory(
+  options: BuildOptions,
+  cacheLocation: CacheLocation,
+  outputRoot: string,
+): Promise<void> {
+  await assertClaimableOutputDirectory(options, cacheLocation, outputRoot);
+
+  const requestedOutputRoot = path.resolve(options.outDir);
+  await fs.mkdir(requestedOutputRoot, { recursive: true });
+
+  if (!(await hasValidOutputMarker(outputRoot, cacheLocation.namespace))) {
+    await writeOutputMarker(outputRoot, cacheLocation.namespace);
+  }
+}
+
+async function assertClaimableOutputDirectory(
+  options: BuildOptions,
+  cacheLocation: CacheLocation,
+  outputRoot: string,
+): Promise<void> {
+  const requestedOutputRoot = path.resolve(options.outDir);
+
+  try {
+    const outputStat = await fs.lstat(requestedOutputRoot);
+    if (!outputStat.isDirectory() || outputStat.isSymbolicLink()) {
+      throw new Error(`[safety] Output path must be a real directory: ${outputRoot}`);
+    }
+
+    const entries = await fs.readdir(outputRoot);
+    if (entries.length > 0 && !(await hasValidOutputMarker(outputRoot, cacheLocation.namespace))) {
+      throw new Error(
+        `[safety] Refusing non-empty output directory without a matching ${OUTPUT_MARKER_FILE_NAME} for the requested vault/output/cache-root context: ${outputRoot}`,
+      );
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function removeLegacyCacheIndex(): Promise<void> {
+  const legacyCachePath = path.join(process.cwd(), ...LEGACY_CACHE_PATH_SEGMENTS);
+
+  try {
+    const legacyCacheStat = await fs.lstat(legacyCachePath);
+    if (!legacyCacheStat.isFile() || legacyCacheStat.isSymbolicLink()) {
+      return;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await fs.readFile(legacyCachePath, "utf8")) as unknown;
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        return;
+      }
+      throw error;
+    }
+
+    if (isLegacyEiamCacheIndex(parsed)) {
+      await fs.rm(legacyCachePath, { force: true });
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function removeCacheNamespace(location: CacheLocation): Promise<void> {
+  await assertSafeCacheLocation(location);
+  await fs.rm(location.namespaceDir, { recursive: true, force: true });
+  try {
+    await fs.rmdir(location.rootDir);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT" && code !== "ENOTEMPTY") {
+      throw error;
+    }
+  }
 }
 
 function createEmptyCache(): BuildCache {
@@ -73,6 +326,37 @@ function createEmptyCache(): BuildCache {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function hasExactRecordKeys(value: Record<string, unknown>, expectedKeys: string[]): boolean {
+  const actualKeys = Object.keys(value).sort();
+  return (
+    actualKeys.length === expectedKeys.length && actualKeys.every((key, index) => key === expectedKeys[index])
+  );
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return isRecord(value) && !Array.isArray(value);
+}
+
+function isLegacyEiamCacheIndex(value: unknown): boolean {
+  if (!isPlainRecord(value) || !Number.isInteger(value.version)) {
+    return false;
+  }
+
+  if (value.version === 1) {
+    return hasExactRecordKeys(value, ["docs", "version"]) && isPlainRecord(value.docs);
+  }
+
+  return (
+    typeof value.version === "number" &&
+    value.version >= 2 &&
+    value.version <= 5 &&
+    hasExactRecordKeys(value, ["docs", "outputHashes", "sources", "version"]) &&
+    isPlainRecord(value.sources) &&
+    isPlainRecord(value.docs) &&
+    isPlainRecord(value.outputHashes)
+  );
 }
 
 function normalizeCachedDocIndex(value: unknown): BuildCache["docs"] {
@@ -175,8 +459,9 @@ function normalizeCachedSources(value: unknown): BuildCache["sources"] {
   return normalized;
 }
 
-async function readCache(cachePath: string): Promise<BuildCache> {
-  const file = Bun.file(cachePath);
+async function readCache(location: CacheLocation): Promise<BuildCache> {
+  await assertSafeCacheLocation(location);
+  const file = Bun.file(location.cachePath);
   if (!(await file.exists())) {
     return createEmptyCache();
   }
@@ -198,9 +483,11 @@ async function readCache(cachePath: string): Promise<BuildCache> {
   }
 }
 
-async function writeCache(cachePath: string, cache: BuildCache): Promise<void> {
-  await ensureDir(path.dirname(cachePath));
-  await Bun.write(cachePath, `${JSON.stringify(cache, null, 2)}\n`);
+async function writeCache(location: CacheLocation, cache: BuildCache): Promise<void> {
+  await assertSafeCacheLocation(location);
+  await ensureDir(location.namespaceDir);
+  await assertSafeCacheLocation(location);
+  await Bun.write(location.cachePath, `${JSON.stringify(cache, null, 2)}\n`);
 }
 
 async function walkMarkdownFiles(
@@ -490,11 +777,19 @@ function extractWikiTargets(markdown: string): string[] {
   return Array.from(targets).sort((left, right) => left.localeCompare(right, "ko-KR"));
 }
 
-function toCachedSourceEntry(raw: string, parsed: matter.GrayMatterFile<string>): CachedSourceEntry {
+function makeSourceFingerprint(raw: string): string {
+  return crypto.createHash("sha256").update(raw).digest("hex");
+}
+
+function toCachedSourceEntry(
+  raw: string,
+  rawHash: string,
+  parsed: matter.GrayMatterFile<string>,
+): CachedSourceEntry {
   return {
     mtimeMs: 0,
     size: 0,
-    rawHash: makeHash(raw),
+    rawHash,
     publish: parsed.data.publish === true,
     draft: parsed.data.draft === true,
     title: typeof parsed.data.title === "string" && parsed.data.title.trim().length > 0 ? parsed.data.title.trim() : undefined,
@@ -562,14 +857,14 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
 
   for (const { sourcePath, relPath, stat } of fileEntries) {
     const prev = previousSources[relPath];
+    const raw = await Bun.file(sourcePath).text();
+    const rawHash = makeSourceFingerprint(raw);
 
     let entry: CachedSourceEntry;
-    const canReuse = !!prev && prev.mtimeMs === stat.mtimeMs && prev.size === stat.size;
+    const canReuse = !!prev && prev.rawHash === rawHash;
     if (canReuse) {
       entry = prev;
     } else {
-      const raw = await Bun.file(sourcePath).text();
-
       let parsed: matter.GrayMatterFile<string>;
       try {
         parsed = matter(raw);
@@ -577,7 +872,7 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
         throw new Error(`Frontmatter parse failed: ${relPath}\n${(error as Error).message}`);
       }
 
-      entry = toCachedSourceEntry(raw, parsed);
+      entry = toCachedSourceEntry(raw, rawHash, parsed);
     }
 
     const completeEntry: CachedSourceEntry = {
@@ -585,8 +880,6 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
       mtimeMs: stat.mtimeMs,
       size: stat.size,
     };
-    nextSources[relPath] = completeEntry;
-
     if (!completeEntry.publish || completeEntry.draft) {
       continue;
     }
@@ -601,6 +894,7 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
       continue;
     }
 
+    nextSources[relPath] = completeEntry;
     docs.push(toDocRecord(sourcePath, relPath, completeEntry, newThreshold));
   }
 
@@ -1069,6 +1363,7 @@ async function copyOutputFileIfChanged(
   relOutputPath: string,
   sourcePath: string,
 ): Promise<void> {
+  assertSafeStaticOutputPath(relOutputPath);
   const bytes = new Uint8Array(await Bun.file(sourcePath).arrayBuffer());
   const outputHash = crypto.createHash("sha1").update(bytes).digest("hex");
   context.nextHashes[relOutputPath] = outputHash;
@@ -1081,6 +1376,25 @@ async function copyOutputFileIfChanged(
 
   await ensureDir(path.dirname(outputPath));
   await Bun.write(outputPath, bytes);
+}
+
+function assertSafeStaticOutputPath(relOutputPath: string): void {
+  const normalized = path.posix.normalize(toPosixPath(relOutputPath));
+  if (normalized === ".") {
+    throw new Error(`[safety] Refusing static path that resolves to the vault root: ${relOutputPath}`);
+  }
+  if (normalized === ".." || normalized.startsWith("../") || path.posix.isAbsolute(normalized)) {
+    throw new Error(`[safety] Refusing static output path outside the output directory: ${relOutputPath}`);
+  }
+  if (normalized === OUTPUT_MARKER_FILE_NAME || normalized.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`)) {
+    throw new Error(`[safety] Refusing reserved static output path: ${relOutputPath}`);
+  }
+}
+
+function assertSafeStaticPaths(options: BuildOptions): void {
+  for (const staticPath of options.staticPaths) {
+    assertSafeStaticOutputPath(staticPath);
+  }
 }
 
 async function listFilesRecursively(baseDir: string): Promise<string[]> {
@@ -1405,7 +1719,7 @@ async function writeShellPages(
   await writeOutputIfChanged(
     context,
     "404.html",
-    render404Html(buildAppShellAssetsForOutput("404.html", runtimeAssets)),
+    render404Html(buildAppShellAssetsForOutput("404.html", runtimeAssets), toPathWithBase("/", pathBase)),
   );
 
   for (const doc of docs) {
@@ -1496,10 +1810,34 @@ async function cleanRemovedOutputs(outDir: string, oldCache: BuildCache, current
   }
 }
 
-export async function cleanBuildArtifacts(outDir: string): Promise<void> {
-  const cachePath = toCachePath();
-  await fs.rm(outDir, { recursive: true, force: true });
-  await fs.rm(path.dirname(cachePath), { recursive: true, force: true });
+export async function cleanBuildArtifacts(options: BuildOptions): Promise<void> {
+  const cacheLocation = await resolveCacheLocation(options);
+  const requestedOutputRoot = path.resolve(options.outDir);
+  const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir, cacheLocation.rootDir);
+  await removeLegacyCacheIndex();
+  let hasOwnedOutput = false;
+
+  try {
+    const outputStat = await fs.lstat(requestedOutputRoot);
+    if (!outputStat.isDirectory() || outputStat.isSymbolicLink()) {
+      throw new Error(`[safety] Refusing to clean non-directory output path: ${outputRoot}`);
+    }
+    if (!(await hasValidOutputMarker(outputRoot, cacheLocation.namespace))) {
+      throw new Error(
+        `[safety] Refusing to clean output directory without a matching ${OUTPUT_MARKER_FILE_NAME} for the requested vault/output/cache-root context: ${outputRoot}`,
+      );
+    }
+    hasOwnedOutput = true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  if (hasOwnedOutput) {
+    await fs.rm(requestedOutputRoot, { recursive: true, force: true });
+  }
+  await removeCacheNamespace(cacheLocation);
 }
 
 function buildWikiResolutionSignature(doc: DocRecord, lookup: WikiLookup): string {
@@ -1551,16 +1889,21 @@ function buildBacklinksByDocId(
 }
 
 export async function buildSite(options: BuildOptions): Promise<BuildResult> {
-  await ensureDir(options.outDir);
-  await ensureDir(path.join(options.outDir, "content"));
+  const cacheLocation = await resolveCacheLocation(options);
+  const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir, cacheLocation.rootDir);
+  await removeLegacyCacheIndex();
+  assertSafeStaticPaths(options);
+  await assertClaimableOutputDirectory(options, cacheLocation, outputRoot);
 
-  const cachePath = toCachePath();
-  const previousCache = await readCache(cachePath);
+  const previousCache = await readCache(cacheLocation);
   const canReuseOutputs = await fileExists(path.join(options.outDir, "manifest.json"));
   const previousDocs = canReuseOutputs ? previousCache.docs : {};
   const previousOutputHashes = canReuseOutputs ? previousCache.outputHashes : {};
   const { docs, nextSources } = await readPublishedDocs(options, previousCache.sources);
   docs.sort((a, b) => a.relNoExt.localeCompare(b.relNoExt, "ko-KR"));
+
+  await prepareOwnedOutputDirectory(options, cacheLocation, outputRoot);
+  await ensureDir(path.join(options.outDir, "content"));
 
   await cleanRemovedOutputs(options.outDir, previousCache, docs);
   const outputContext: OutputWriteContext = {
@@ -1598,6 +1941,7 @@ export async function buildSite(options: BuildOptions): Promise<BuildResult> {
         options.shikiTheme,
         options.imagePolicy,
         options.wikilinks ? "wikilinks-on" : "wikilinks-off",
+        options.allowUnsafeHtml ? "unsafe-html-v1" : "safe-html-v1",
         wikiSignature,
       ].join("::"),
     );
@@ -1639,7 +1983,7 @@ export async function buildSite(options: BuildOptions): Promise<BuildResult> {
   await writeSeoArtifacts(outputContext, docs, options);
   await removeStaleOutputs(outputContext);
 
-  await writeCache(cachePath, nextCache);
+  await writeCache(cacheLocation, nextCache);
 
   return {
     totalDocs: docs.length,

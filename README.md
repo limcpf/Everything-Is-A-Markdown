@@ -115,8 +115,11 @@ Options:
 Notes:
 
 - Unknown CLI options fail fast.
+- Every value-taking option fails with `[cli] Missing value for <option>` when its value is omitted or the next argument is another flag.
 - Invalid numeric options fail fast.
-- `clean` removes both the output directory and `.cache`.
+- Builds validate and read the vault before marking a dedicated output directory with `.eiam-output.json`, bind that marker to a cache namespace derived from the canonical vault, output, and cache-root paths, and refuse to claim a non-empty unmarked or mismatched directory.
+- `dev` aborts before starting its watcher or server when the initial build cannot claim the output safely; later rebuild failures are logged without stopping an already-safe server.
+- Build migration and `clean` remove `.cache/build-index.json` only when it matches a historical EIAM cache schema, including when either command must reject a pre-marker output directory or reserved static path. Outputs that contain or sit inside the cache root, symlinked cache components/namespaces/indexes, and static paths that collide with the reserved `.eiam-output.json` marker are rejected; `clean` otherwise removes only the marked output directory and its matching EIAM cache namespace, preserving sibling namespaces and unrelated `.cache` data.
 
 ## Frontmatter
 
@@ -209,7 +212,7 @@ Key points:
 - Rendered article bodies are stored separately under `dist/content/`.
 - Runtime assets are content-hashed.
 - Static files declared in config are copied into the same relative paths under `dist/`.
-- Build cache is stored under `.cache/build-index.json`.
+- Build cache is stored under `.cache/eiam/v1-<namespace>/build-index.json`.
 
 ## Config File
 
@@ -240,6 +243,7 @@ export default {
     wikilinks: true,
     images: "omit-local",
     gfm: true,
+    allowUnsafeHtml: false,
     highlight: {
       engine: "shiki",
       theme: "github-dark",
@@ -281,6 +285,7 @@ export default {
 - `markdown.wikilinks`: enable or disable wikilink resolution.
 - `markdown.images`: `"keep"` or `"omit-local"`.
 - `markdown.gfm`: enable or disable GFM table/strikethrough support.
+- `markdown.allowUnsafeHtml`: disables rendered HTML sanitization only when explicitly set to `true`; default `false`.
 - `markdown.highlight.theme`: Shiki theme.
 - `markdown.mermaid.*`: Mermaid runtime settings.
 - `seo.*`: canonical URL, social metadata, sitemap, robots, and path-base behavior.
@@ -290,6 +295,7 @@ export default {
 - Must be vault-relative
 - Can point to either a file or a directory
 - Are copied as-is into the output directory
+- Must not normalize to the vault root, escape the output directory, or collide with the reserved `.eiam-output.json` ownership marker
 - Invalid or missing paths are skipped with a warning
 
 ### `pinnedMenu`
@@ -369,6 +375,22 @@ Remote URLs are kept even when `"omit-local"` is used.
 
 This rule also applies to Obsidian-style image embeds such as `![[image.png]]`.
 
+### Raw HTML safety
+
+Rendered HTML is sanitized by default before it is written to fetched content files or embedded in direct route pages. The allowlist keeps standard Markdown formatting, tables, images, figures, details, and EIAM/Shiki code markup. It permits classes, safe link/image URLs (`http`, `https`, `mailto`, and relative paths), and Shiki's hex `color`/`background-color` styles. Scripts, event-handler attributes, `javascript:` URLs, iframes, SVG, and arbitrary inline styles are removed.
+
+Trusted vaults can opt out explicitly:
+
+```ts
+export default {
+  markdown: {
+    allowUnsafeHtml: true,
+  },
+};
+```
+
+This setting allows arbitrary authored HTML and can execute client-side code. Do not enable it for content that is untrusted or may be published accidentally.
+
 ### Code Blocks
 
 Regular fenced code blocks are rendered with:
@@ -413,7 +435,7 @@ Body images now use orientation-aware sizing inside the viewer:
 - Near-square images get an intermediate width.
 
 When local Markdown images are enabled with `markdown.images: "keep"`, standalone image paragraphs are promoted into a dedicated `figure.content-image` wrapper automatically.
-Raw HTML remains available for manual framing when you want a fixed ratio or a specific crop mode.
+Allowlisted raw HTML remains available for manual framing when you want a fixed ratio or a specific crop mode.
 
 Example frame utilities:
 
@@ -474,6 +496,7 @@ With SEO enabled, the build writes:
 - `sitemap.xml`
 
 `seo.pathBase` is supported for subpath deployments such as `/blog`.
+The generated `404.html` Home action uses the same normalized base, so `/blog` returns to `/blog/` while root deployments continue to use `/`.
 
 Example:
 
@@ -484,7 +507,11 @@ Example:
 
 ## Incremental Build and Caching
 
-The build caches source metadata and output hashes in `.cache/build-index.json`.
+The build caches source metadata and output hashes in `.cache/eiam/v1-<namespace>/build-index.json`, relative to the process working directory. The namespace is a stable hash of the canonical, resolved `vaultDir` and `outDir` pair.
+
+Config values are resolved first, with CLI `--vault` and `--out` values taking precedence. Changing either resolved path selects a different namespace; it does not reuse or overwrite the previous pair's cache. The cache root itself has no separate override. `clean` removes only the namespace for the selected pair, never sibling EIAM namespaces or general-purpose `.cache` files.
+
+Only published, non-draft Markdown source bodies are persisted. Unpublished and draft entries are omitted from the cache, so their content is re-evaluated when needed but never written to persistent build state.
 
 This allows it to:
 
@@ -492,6 +519,8 @@ This allows it to:
 - restore missing generated content files on a later build
 - restore missing hashed runtime assets on a later build
 - remove stale route pages and content files when documents are removed or routes change
+
+Every Markdown source is read and SHA-256 fingerprinted before a cache entry is reused. This catches content replacement even when file size and mtime are preserved. When the fingerprint is unchanged, frontmatter parsing and Markdown rendering are still skipped. The regression suite measures a 40-document no-op build and requires `rendered=0`, `skipped=40`, and under 10 seconds of wall-clock time; run it with `bunx playwright test tests/e2e/build-regression.spec.ts --grep "ordinary no-op"`.
 
 ## Markdown Lint for Published Docs
 

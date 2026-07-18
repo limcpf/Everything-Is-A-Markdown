@@ -23,10 +23,11 @@ function extractRuntimeAssetPath(html: string, extension: "js" | "css"): string 
   return match[0];
 }
 
-function runCli(cwd: string, args: string[]): CliResult {
+function runCli(cwd: string, args: string[], timeout?: number): CliResult {
   const result = spawnSync("bun", args, {
     cwd,
     encoding: "utf8",
+    timeout,
   });
 
   return {
@@ -49,6 +50,26 @@ function readDocContentHtml(outDir: string, route: string): string {
 
 function readManifest(outDir: string): unknown {
   return JSON.parse(fs.readFileSync(path.join(outDir, "manifest.json"), "utf8")) as unknown;
+}
+
+function findCacheIndexPaths(workDir: string): string[] {
+  const cacheRoot = path.join(workDir, ".cache", "eiam");
+  if (!fs.existsSync(cacheRoot)) {
+    return [];
+  }
+
+  return fs
+    .readdirSync(cacheRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(cacheRoot, entry.name, "build-index.json"))
+    .filter((cachePath) => fs.existsSync(cachePath))
+    .sort();
+}
+
+function findOnlyCacheIndexPath(workDir: string): string {
+  const cachePaths = findCacheIndexPaths(workDir);
+  expect(cachePaths).toHaveLength(1);
+  return cachePaths[0];
 }
 
 function findFolderNodeByPath(
@@ -137,6 +158,923 @@ test.describe("빌드 회귀 가드", () => {
     }
   });
 
+  test("clean은 EIAM 소유 출력과 matching cache namespace만 제거한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-safe-clean-"));
+    const outDir = path.join(workDir, "dist");
+    const legacyCacheFile = path.join(workDir, ".cache", "build-index.json");
+    const unrelatedCacheFile = path.join(workDir, ".cache", "keep.txt");
+    const legacyCacheContents = `${JSON.stringify({
+      version: 4,
+      sources: {},
+      docs: {},
+      outputHashes: {},
+    })}\n`;
+
+    try {
+      writeText(legacyCacheFile, legacyCacheContents);
+      writeText(unrelatedCacheFile, "unrelated cache data");
+      const build = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
+      expect(build.status, build.output).toBe(0);
+      expect(fs.existsSync(legacyCacheFile)).toBe(false);
+      expect(fs.readFileSync(unrelatedCacheFile, "utf8")).toBe("unrelated cache data");
+      const markerPath = path.join(outDir, ".eiam-output.json");
+      expect(fs.existsSync(markerPath)).toBe(true);
+      const marker = JSON.parse(fs.readFileSync(markerPath, "utf8")) as {
+        version: number;
+        cacheNamespace: string;
+      };
+      expect(marker.version).toBe(2);
+      expect(marker.cacheNamespace).toMatch(/^v2-[a-f0-9]{40}$/);
+      const cachePath = findOnlyCacheIndexPath(workDir);
+
+      writeText(legacyCacheFile, legacyCacheContents);
+      const clean = runCli(workDir, [cliPath, "clean", "--vault", vaultPath, "--out", outDir]);
+      expect(clean.status, clean.output).toBe(0);
+      expect(fs.existsSync(outDir)).toBe(false);
+      expect(fs.existsSync(cachePath)).toBe(false);
+      expect(fs.existsSync(legacyCacheFile)).toBe(false);
+      expect(fs.readFileSync(unrelatedCacheFile, "utf8")).toBe("unrelated cache data");
+
+      const foreignLegacyNamedContents = `${JSON.stringify({ tool: "another-cache", entries: ["keep"] })}\n`;
+      writeText(legacyCacheFile, foreignLegacyNamedContents);
+      const repeatedClean = runCli(workDir, [cliPath, "clean", "--vault", vaultPath, "--out", outDir]);
+      expect(repeatedClean.status, repeatedClean.output).toBe(0);
+      expect(fs.readFileSync(legacyCacheFile, "utf8")).toBe(foreignLegacyNamedContents);
+
+      const preMarkerOutDir = path.join(workDir, "pre-marker-dist");
+      const preMarkerSentinel = path.join(preMarkerOutDir, "keep.txt");
+      writeText(preMarkerSentinel, "keep legacy output");
+      writeText(legacyCacheFile, legacyCacheContents);
+      const preMarkerClean = runCli(workDir, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultPath,
+        "--out",
+        preMarkerOutDir,
+      ]);
+      expect(preMarkerClean.status).not.toBe(0);
+      expect(preMarkerClean.output).toContain("matching .eiam-output.json");
+      expect(fs.existsSync(legacyCacheFile)).toBe(false);
+      expect(fs.readFileSync(preMarkerSentinel, "utf8")).toBe("keep legacy output");
+
+      writeText(legacyCacheFile, legacyCacheContents);
+      const preMarkerBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        preMarkerOutDir,
+      ]);
+      expect(preMarkerBuild.status).not.toBe(0);
+      expect(preMarkerBuild.output).toContain("matching .eiam-output.json");
+      expect(fs.existsSync(legacyCacheFile)).toBe(false);
+      expect(fs.readFileSync(preMarkerSentinel, "utf8")).toBe("keep legacy output");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("build와 clean은 broad 또는 미소유 출력 디렉터리를 거부한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-safe-output-"));
+    const unownedOutDir = path.join(workDir, "unowned");
+    const unownedSentinel = path.join(unownedOutDir, "keep.txt");
+    const cwdSentinel = path.join(workDir, "cwd-keep.txt");
+    const foreignLegacyNamedCache = path.join(workDir, ".cache", "build-index.json");
+    const foreignLegacyNamedContents = `${JSON.stringify({ tool: "another-cache", entries: ["keep"] })}\n`;
+
+    try {
+      writeText(unownedSentinel, "do not remove");
+      writeText(cwdSentinel, "keep cwd");
+      writeText(foreignLegacyNamedCache, foreignLegacyNamedContents);
+
+      const buildIntoUnowned = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        unownedOutDir,
+      ]);
+      expect(buildIntoUnowned.status).not.toBe(0);
+      expect(buildIntoUnowned.output).toContain("Refusing non-empty output directory");
+      expect(fs.readFileSync(unownedSentinel, "utf8")).toBe("do not remove");
+      expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
+
+      const devIntoUnowned = runCli(
+        workDir,
+        [cliPath, "dev", "--vault", vaultPath, "--out", unownedOutDir, "--port", "49231"],
+        5_000,
+      );
+      expect(devIntoUnowned.status).not.toBeNull();
+      expect(devIntoUnowned.status).not.toBe(0);
+      expect(devIntoUnowned.output).toContain("Refusing non-empty output directory");
+      expect(fs.readFileSync(unownedSentinel, "utf8")).toBe("do not remove");
+      expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
+
+      const cleanUnowned = runCli(workDir, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultPath,
+        "--out",
+        unownedOutDir,
+      ]);
+      expect(cleanUnowned.status).not.toBe(0);
+      expect(cleanUnowned.output).toContain("Refusing to clean output directory");
+      expect(fs.readFileSync(unownedSentinel, "utf8")).toBe("do not remove");
+      expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
+
+      for (const cacheContainingOutDir of [
+        path.join(workDir, ".cache"),
+        path.join(workDir, ".cache", "eiam"),
+        path.join(workDir, ".cache", "eiam", "v2-foreign", "site"),
+      ]) {
+        const buildIntoCacheRoot = runCli(workDir, [
+          cliPath,
+          "build",
+          "--vault",
+          vaultPath,
+          "--out",
+          cacheContainingOutDir,
+        ]);
+        expect(buildIntoCacheRoot.status).not.toBe(0);
+        expect(buildIntoCacheRoot.output).toContain("Refusing dangerous output directory");
+
+        const cleanCacheRoot = runCli(workDir, [
+          cliPath,
+          "clean",
+          "--vault",
+          vaultPath,
+          "--out",
+          cacheContainingOutDir,
+        ]);
+        expect(cleanCacheRoot.status).not.toBe(0);
+        expect(cleanCacheRoot.output).toContain("Refusing dangerous output directory");
+        expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
+      }
+
+      const cleanCwd = runCli(workDir, [cliPath, "clean", "--vault", vaultPath, "--out", workDir]);
+      expect(cleanCwd.status).not.toBe(0);
+      expect(cleanCwd.output).toContain("Refusing dangerous output directory");
+      expect(fs.readFileSync(cwdSentinel, "utf8")).toBe("keep cwd");
+      expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
+
+      const namespaceGuardOutDir = path.join(workDir, "namespace-guard-dist");
+      const namespaceSeedBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        namespaceGuardOutDir,
+      ]);
+      expect(namespaceSeedBuild.status, namespaceSeedBuild.output).toBe(0);
+      const namespaceMarker = JSON.parse(
+        fs.readFileSync(path.join(namespaceGuardOutDir, ".eiam-output.json"), "utf8"),
+      ) as { cacheNamespace: string };
+      expect(namespaceMarker.cacheNamespace).toMatch(/^v2-[a-f0-9]{40}$/);
+
+      const namespaceSeedClean = runCli(workDir, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultPath,
+        "--out",
+        namespaceGuardOutDir,
+      ]);
+      expect(namespaceSeedClean.status, namespaceSeedClean.output).toBe(0);
+      expect(fs.existsSync(namespaceGuardOutDir)).toBe(false);
+
+      const cacheRoot = path.join(workDir, ".cache", "eiam");
+      const externalNamespaceTarget = path.join(workDir, "external-namespace-target");
+      const externalNamespaceSentinel = path.join(externalNamespaceTarget, "keep.txt");
+      const symlinkedNamespace = path.join(cacheRoot, namespaceMarker.cacheNamespace);
+      writeText(externalNamespaceSentinel, "keep external namespace data");
+      fs.mkdirSync(cacheRoot, { recursive: true });
+      fs.symlinkSync(externalNamespaceTarget, symlinkedNamespace, "dir");
+
+      const buildWithSymlinkedNamespace = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        namespaceGuardOutDir,
+      ]);
+      expect(buildWithSymlinkedNamespace.status).not.toBe(0);
+      expect(buildWithSymlinkedNamespace.output).toContain("Refusing symlinked cache namespace");
+      expect(fs.existsSync(namespaceGuardOutDir)).toBe(false);
+      expect(fs.lstatSync(symlinkedNamespace).isSymbolicLink()).toBe(true);
+      expect(fs.readFileSync(externalNamespaceSentinel, "utf8")).toBe("keep external namespace data");
+
+      const cleanWithSymlinkedNamespace = runCli(workDir, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultPath,
+        "--out",
+        namespaceGuardOutDir,
+      ]);
+      expect(cleanWithSymlinkedNamespace.status).not.toBe(0);
+      expect(cleanWithSymlinkedNamespace.output).toContain("Refusing symlinked cache namespace");
+      expect(fs.lstatSync(symlinkedNamespace).isSymbolicLink()).toBe(true);
+      expect(fs.readFileSync(externalNamespaceSentinel, "utf8")).toBe("keep external namespace data");
+
+      fs.unlinkSync(symlinkedNamespace);
+
+      const externalCacheIndex = path.join(workDir, "external-cache-index.json");
+      const symlinkedCacheIndex = path.join(symlinkedNamespace, "build-index.json");
+      writeText(externalCacheIndex, "keep external cache index data");
+      fs.mkdirSync(symlinkedNamespace, { recursive: true });
+      fs.symlinkSync(externalCacheIndex, symlinkedCacheIndex, "file");
+
+      const buildWithSymlinkedCacheIndex = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        namespaceGuardOutDir,
+      ]);
+      expect(buildWithSymlinkedCacheIndex.status).not.toBe(0);
+      expect(buildWithSymlinkedCacheIndex.output).toContain("Refusing symlinked cache index");
+      expect(fs.existsSync(namespaceGuardOutDir)).toBe(false);
+      expect(fs.lstatSync(symlinkedCacheIndex).isSymbolicLink()).toBe(true);
+      expect(fs.readFileSync(externalCacheIndex, "utf8")).toBe("keep external cache index data");
+
+      const cleanWithSymlinkedCacheIndex = runCli(workDir, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultPath,
+        "--out",
+        namespaceGuardOutDir,
+      ]);
+      expect(cleanWithSymlinkedCacheIndex.status).not.toBe(0);
+      expect(cleanWithSymlinkedCacheIndex.output).toContain("Refusing symlinked cache index");
+      expect(fs.lstatSync(symlinkedCacheIndex).isSymbolicLink()).toBe(true);
+      expect(fs.readFileSync(externalCacheIndex, "utf8")).toBe("keep external cache index data");
+
+      fs.unlinkSync(symlinkedCacheIndex);
+      fs.rmdirSync(symlinkedNamespace);
+      fs.rmdirSync(cacheRoot);
+
+      const externalCacheTarget = path.join(workDir, "external-cache-target");
+      const symlinkedCacheRoot = path.join(workDir, ".cache", "eiam");
+      const symlinkGuardOutDir = path.join(workDir, "symlink-guard-dist");
+      fs.mkdirSync(externalCacheTarget, { recursive: true });
+      fs.symlinkSync(externalCacheTarget, symlinkedCacheRoot, "dir");
+
+      const buildWithSymlinkedCache = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        symlinkGuardOutDir,
+      ]);
+      expect(buildWithSymlinkedCache.status).not.toBe(0);
+      expect(buildWithSymlinkedCache.output).toContain("Refusing symlinked cache path");
+      expect(fs.existsSync(symlinkGuardOutDir)).toBe(false);
+      expect(fs.readdirSync(externalCacheTarget)).toEqual([]);
+
+      const cleanWithSymlinkedCache = runCli(workDir, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultPath,
+        "--out",
+        symlinkGuardOutDir,
+      ]);
+      expect(cleanWithSymlinkedCache.status).not.toBe(0);
+      expect(cleanWithSymlinkedCache.output).toContain("Refusing symlinked cache path");
+      expect(fs.readdirSync(externalCacheTarget)).toEqual([]);
+      expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("staticPaths는 output 소유권 marker를 덮어쓸 수 없다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-static-marker-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+    const configPath = path.join(workDir, "blog.config.mjs");
+    const sourceMarker = path.join(vaultDir, ".eiam-output.json");
+    const legacyCacheFile = path.join(workDir, ".cache", "build-index.json");
+    const legacyCacheContents = `${JSON.stringify({
+      version: 5,
+      sources: {},
+      docs: {},
+      outputHashes: {},
+    })}\n`;
+
+    try {
+      writeText(
+        path.join(vaultDir, "post.md"),
+        `---
+publish: true
+prefix: STATIC-MARKER
+category_path: safety/static
+title: Static Marker
+---
+
+STATIC_MARKER_BODY
+`,
+      );
+      writeText(sourceMarker, '{"foreign":"marker"}\n');
+      writeText(
+        path.join(vaultDir, "private.md"),
+        `---
+publish: false
+title: Private Static Source
+---
+
+PRIVATE_STATIC_SOURCE_SECRET
+`,
+      );
+      fs.mkdirSync(path.join(vaultDir, "assets"), { recursive: true });
+
+      for (const [staticPath, expectedError] of [
+        [".eiam-output.json", "Refusing reserved static output path"],
+        ["assets/../.eiam-output.json", "Refusing reserved static output path"],
+        ["assets/..", "Refusing static path that resolves to the vault root"],
+      ] as const) {
+        writeText(legacyCacheFile, legacyCacheContents);
+        writeText(configPath, `export default { staticPaths: [${JSON.stringify(staticPath)}] };\n`);
+        const rejectedBuild = runCli(workDir, [
+          cliPath,
+          "build",
+          "--vault",
+          vaultDir,
+          "--out",
+          outDir,
+        ]);
+        expect(rejectedBuild.status).not.toBe(0);
+        expect(rejectedBuild.output).toContain(expectedError);
+        expect(fs.existsSync(outDir)).toBe(false);
+        expect(findCacheIndexPaths(workDir)).toEqual([]);
+        expect(fs.existsSync(legacyCacheFile)).toBe(false);
+        expect(fs.readFileSync(sourceMarker, "utf8")).toBe('{"foreign":"marker"}\n');
+        expect(fs.readFileSync(path.join(vaultDir, "private.md"), "utf8")).toContain(
+          "PRIVATE_STATIC_SOURCE_SECRET",
+        );
+      }
+
+      writeText(configPath, "export default {};\n");
+      const correctedBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(correctedBuild.status, correctedBuild.output).toBe(0);
+      const outputMarker = JSON.parse(fs.readFileSync(path.join(outDir, ".eiam-output.json"), "utf8")) as {
+        format: string;
+      };
+      expect(outputMarker.format).toBe("everything-is-a-markdown-output");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("실패한 첫 build는 vault 검증 전에 output을 claim하지 않는다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-invalid-vault-output-"));
+    const missingVaultDir = path.join(workDir, "missing-vault");
+    const outDir = path.join(workDir, "dist");
+
+    try {
+      const failedBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        missingVaultDir,
+        "--out",
+        outDir,
+      ]);
+      expect(failedBuild.status).not.toBe(0);
+      expect(fs.existsSync(outDir)).toBe(false);
+      expect(findCacheIndexPaths(workDir)).toEqual([]);
+
+      const correctedBuild = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
+      expect(correctedBuild.status, correctedBuild.output).toBe(0);
+      expect(fs.existsSync(path.join(outDir, ".eiam-output.json"))).toBe(true);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("vault와 output 경로 쌍마다 cache namespace를 분리하고 clean은 선택한 namespace만 제거한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-cache-namespace-"));
+    const vaultA = path.join(workDir, "vault-a");
+    const vaultB = path.join(workDir, "vault-b");
+    const outA = path.join(workDir, "dist-a");
+    const outB = path.join(workDir, "dist-b");
+    const outAAlternate = path.join(workDir, "dist-a-alternate");
+    const alternateCwd = path.join(workDir, "alternate-cwd");
+    const sourceA = path.join(vaultA, "same.md");
+    const sourceB = path.join(vaultB, "same.md");
+    const fixedTime = new Date("2024-01-02T03:04:05.000Z");
+
+    try {
+      const bodyA = `---
+publish: true
+prefix: NS-CACHE-A
+category_path: cache/namespace
+title: Vault A
+---
+
+VAULT_A_BODY
+`;
+      const bodyB = `---
+publish: true
+prefix: NS-CACHE-B
+category_path: cache/namespace
+title: Vault B
+---
+
+VAULT_B_BODY
+`;
+      expect(Buffer.byteLength(bodyA)).toBe(Buffer.byteLength(bodyB));
+      writeText(sourceA, bodyA);
+      writeText(sourceB, bodyB);
+      fs.mkdirSync(alternateCwd, { recursive: true });
+      fs.utimesSync(sourceA, fixedTime, fixedTime);
+      fs.utimesSync(sourceB, fixedTime, fixedTime);
+
+      const buildA = runCli(workDir, [cliPath, "build", "--vault", vaultA, "--out", outA]);
+      expect(buildA.status, buildA.output).toBe(0);
+      expect(buildA.output).toContain("total=1 rendered=1 skipped=0");
+      const [cacheA] = findCacheIndexPaths(workDir);
+      expect(cacheA).toBeDefined();
+      expect(fs.readFileSync(cacheA, "utf8")).toContain("VAULT_A_BODY");
+
+      const markerAPath = path.join(outA, ".eiam-output.json");
+      const markerABefore = fs.readFileSync(markerAPath, "utf8");
+      const wrongVaultBuild = runCli(workDir, [cliPath, "build", "--vault", vaultB, "--out", outA]);
+      expect(wrongVaultBuild.status).not.toBe(0);
+      expect(wrongVaultBuild.output).toContain("matching .eiam-output.json");
+      expect(fs.readFileSync(markerAPath, "utf8")).toBe(markerABefore);
+      const manifestAfterWrongBuild = readManifest(outA) as { docs: Array<{ route: string }> };
+      expect(manifestAfterWrongBuild.docs.map((doc) => doc.route)).toEqual(["/NS-CACHE-A/"]);
+
+      const wrongVaultClean = runCli(workDir, [cliPath, "clean", "--vault", vaultB, "--out", outA]);
+      expect(wrongVaultClean.status).not.toBe(0);
+      expect(wrongVaultClean.output).toContain("matching .eiam-output.json");
+      expect(fs.existsSync(outA)).toBe(true);
+      expect(fs.existsSync(cacheA)).toBe(true);
+
+      const wrongCwdBuild = runCli(alternateCwd, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultA,
+        "--out",
+        outA,
+      ]);
+      expect(wrongCwdBuild.status).not.toBe(0);
+      expect(wrongCwdBuild.output).toContain("matching .eiam-output.json");
+      expect(fs.readFileSync(markerAPath, "utf8")).toBe(markerABefore);
+      expect(fs.existsSync(path.join(alternateCwd, ".cache", "eiam"))).toBe(false);
+      expect((readManifest(outA) as { docs: Array<{ route: string }> }).docs.map((doc) => doc.route)).toEqual([
+        "/NS-CACHE-A/",
+      ]);
+
+      const wrongCwdClean = runCli(alternateCwd, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultA,
+        "--out",
+        outA,
+      ]);
+      expect(wrongCwdClean.status).not.toBe(0);
+      expect(wrongCwdClean.output).toContain("matching .eiam-output.json");
+      expect(fs.existsSync(outA)).toBe(true);
+      expect(fs.existsSync(cacheA)).toBe(true);
+
+      const buildB = runCli(workDir, [cliPath, "build", "--vault", vaultB, "--out", outB]);
+      expect(buildB.status, buildB.output).toBe(0);
+      const afterBuildB = findCacheIndexPaths(workDir);
+      expect(afterBuildB).toHaveLength(2);
+      const cacheB = afterBuildB.find((cachePath) => cachePath !== cacheA);
+      expect(cacheB).toBeDefined();
+      expect(fs.readFileSync(cacheB!, "utf8")).toContain("VAULT_B_BODY");
+      const manifestB = readManifest(outB) as { docs: Array<{ route: string }> };
+      expect(manifestB.docs.map((doc) => doc.route)).toEqual(["/NS-CACHE-B/"]);
+
+      const alternateBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultA,
+        "--out",
+        outAAlternate,
+      ]);
+      expect(alternateBuild.status, alternateBuild.output).toBe(0);
+      const afterAlternate = findCacheIndexPaths(workDir);
+      expect(afterAlternate).toHaveLength(3);
+      const cacheAAlternate = afterAlternate.find(
+        (cachePath) => cachePath !== cacheA && cachePath !== cacheB,
+      );
+      expect(cacheAAlternate).toBeDefined();
+
+      const rebuildA = runCli(workDir, [cliPath, "build", "--vault", vaultA, "--out", outA]);
+      expect(rebuildA.status, rebuildA.output).toBe(0);
+      expect(rebuildA.output).toContain("total=1 rendered=0 skipped=1");
+      const manifestA = readManifest(outA) as { docs: Array<{ route: string }> };
+      expect(manifestA.docs.map((doc) => doc.route)).toEqual(["/NS-CACHE-A/"]);
+
+      const unrelatedCacheFile = path.join(workDir, ".cache", "keep.txt");
+      writeText(unrelatedCacheFile, "unrelated cache data");
+      const cleanA = runCli(workDir, [cliPath, "clean", "--vault", vaultA, "--out", outA]);
+      expect(cleanA.status, cleanA.output).toBe(0);
+      expect(fs.existsSync(outA)).toBe(false);
+      expect(fs.existsSync(cacheA)).toBe(false);
+      expect(fs.existsSync(cacheB!)).toBe(true);
+      expect(fs.existsSync(cacheAAlternate!)).toBe(true);
+      expect(fs.existsSync(outB)).toBe(true);
+      expect(fs.existsSync(outAAlternate)).toBe(true);
+      expect(fs.readFileSync(unrelatedCacheFile, "utf8")).toBe("unrelated cache data");
+
+      const rebuildB = runCli(workDir, [cliPath, "build", "--vault", vaultB, "--out", outB]);
+      expect(rebuildB.status, rebuildB.output).toBe(0);
+      expect(rebuildB.output).toContain("total=1 rendered=0 skipped=1");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("같은 size와 mtime을 유지한 body, wikilink, frontmatter 변경도 다시 빌드한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-content-fingerprint-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+    const fixedTime = new Date("2024-02-03T04:05:06.000Z");
+    const mutablePath = path.join(vaultDir, "mutable.md");
+    const linkerPath = path.join(vaultDir, "linker.md");
+    const frontmatterPath = path.join(vaultDir, "frontmatter.md");
+
+    const mutableBefore = `---
+publish: true
+prefix: FP-MUTABLE
+category_path: cache/fingerprint
+title: Mutable
+---
+
+ALPHA
+`;
+    const mutableAfter = mutableBefore.replace("ALPHA", "BRAVO");
+    const linkerBefore = `---
+publish: true
+prefix: FP-LINKER
+category_path: cache/fingerprint
+title: Linker
+---
+
+[[Target A]]
+`;
+    const linkerAfter = linkerBefore.replace("Target A", "Target B");
+    const frontmatterBefore = `---
+publish: true
+prefix: FP-ROUTE-A
+category_path: cache/fingerprint
+title: Frontmatter
+---
+
+UNCHANGED_BODY
+`;
+    const frontmatterAfter = frontmatterBefore.replace("FP-ROUTE-A", "FP-ROUTE-B");
+
+    try {
+      writeText(
+        path.join(vaultDir, "target-a.md"),
+        `---
+publish: true
+prefix: FP-TARGET-A
+category_path: cache/fingerprint
+title: Target A
+---
+
+TARGET_A_BODY
+`,
+      );
+      writeText(
+        path.join(vaultDir, "target-b.md"),
+        `---
+publish: true
+prefix: FP-TARGET-B
+category_path: cache/fingerprint
+title: Target B
+---
+
+TARGET_B_BODY
+`,
+      );
+
+      for (const [sourcePath, before, after] of [
+        [mutablePath, mutableBefore, mutableAfter],
+        [linkerPath, linkerBefore, linkerAfter],
+        [frontmatterPath, frontmatterBefore, frontmatterAfter],
+      ] as const) {
+        expect(Buffer.byteLength(before)).toBe(Buffer.byteLength(after));
+        writeText(sourcePath, before);
+        fs.utimesSync(sourcePath, fixedTime, fixedTime);
+      }
+
+      const initialStats = new Map(
+        [mutablePath, linkerPath, frontmatterPath].map((sourcePath) => [sourcePath, fs.statSync(sourcePath)]),
+      );
+      const firstBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(firstBuild.status, firstBuild.output).toBe(0);
+      expect(readDocContentHtml(outDir, "/FP-MUTABLE/")).toContain("ALPHA");
+      expect(readDocContentHtml(outDir, "/FP-LINKER/")).toContain('href="/FP-TARGET-A/"');
+      expect(fs.existsSync(path.join(outDir, "FP-ROUTE-A", "index.html"))).toBe(true);
+
+      for (const [sourcePath, replacement] of [
+        [mutablePath, mutableAfter],
+        [linkerPath, linkerAfter],
+        [frontmatterPath, frontmatterAfter],
+      ] as const) {
+        writeText(sourcePath, replacement);
+        fs.utimesSync(sourcePath, fixedTime, fixedTime);
+        const previous = initialStats.get(sourcePath)!;
+        const current = fs.statSync(sourcePath);
+        expect(current.size).toBe(previous.size);
+        expect(current.mtimeMs).toBe(previous.mtimeMs);
+      }
+
+      const changedBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(changedBuild.status, changedBuild.output).toBe(0);
+      expect(changedBuild.output).toContain("total=5 rendered=3 skipped=2");
+      expect(readDocContentHtml(outDir, "/FP-MUTABLE/")).toContain("BRAVO");
+      const linkerHtml = readDocContentHtml(outDir, "/FP-LINKER/");
+      expect(linkerHtml).toContain('href="/FP-TARGET-B/"');
+      expect(linkerHtml).not.toContain('href="/FP-TARGET-A/"');
+      expect(fs.existsSync(path.join(outDir, "FP-ROUTE-A", "index.html"))).toBe(false);
+      expect(fs.existsSync(path.join(outDir, "FP-ROUTE-B", "index.html"))).toBe(true);
+
+      const manifest = readManifest(outDir) as {
+        docs: Array<{ route: string; backlinks: Array<{ route: string }> }>;
+      };
+      const targetA = manifest.docs.find((doc) => doc.route === "/FP-TARGET-A/");
+      const targetB = manifest.docs.find((doc) => doc.route === "/FP-TARGET-B/");
+      expect(targetA?.backlinks).toEqual([]);
+      expect(targetB?.backlinks.map((backlink) => backlink.route)).toEqual(["/FP-LINKER/"]);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("ordinary no-op 빌드는 fingerprint 후 parse와 render를 건너뛴다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-noop-performance-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+    const docCount = 40;
+
+    try {
+      for (let index = 0; index < docCount; index += 1) {
+        const id = String(index).padStart(2, "0");
+        writeText(
+          path.join(vaultDir, `doc-${id}.md`),
+          `---
+publish: true
+prefix: PERF-${id}
+category_path: cache/performance
+title: Performance ${id}
+---
+
+PERFORMANCE_BODY_${id}
+`,
+        );
+      }
+
+      const firstBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(firstBuild.status, firstBuild.output).toBe(0);
+
+      const startedAt = performance.now();
+      const noOpBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      const elapsedMs = performance.now() - startedAt;
+      console.info(`[perf] no-op incremental docs=${docCount} elapsedMs=${elapsedMs.toFixed(1)}`);
+
+      expect(noOpBuild.status, noOpBuild.output).toBe(0);
+      expect(noOpBuild.output).toContain(`total=${docCount} rendered=0 skipped=${docCount}`);
+      expect(elapsedMs).toBeLessThan(10_000);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("raw HTML은 기본 sanitize되고 명시적 unsafe 설정에서만 유지된다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-html-sanitize-"));
+    const vaultDir = path.join(workDir, "vault");
+    const safeWorkDir = path.join(workDir, "safe");
+    const unsafeWorkDir = path.join(workDir, "unsafe");
+    const rawPayload = `---
+publish: true
+prefix: SAFE-HTML-01
+category_path: security/html
+title: HTML Policy
+---
+
+<div class="safe-format"><strong>Allowed formatting</strong></div>
+<script>window.__script_payload = 1</script>
+<img src="https://example.com/safe.png" alt="safe" onerror="window.__event_payload = 1" />
+<a href="javascript:window.__url_payload = 1">Unsafe URL</a>
+<iframe src="https://example.com/unsafe"></iframe>
+<xmp><img src=x onerror="window.__xmp_payload = 1">XMP_RAW_TEXT_SECRET</xmp>
+`;
+
+    try {
+      writeText(path.join(vaultDir, "unsafe.md"), rawPayload);
+      fs.mkdirSync(safeWorkDir, { recursive: true });
+      fs.mkdirSync(unsafeWorkDir, { recursive: true });
+
+      const safeOutDir = path.join(safeWorkDir, "dist");
+      const safeBuild = runCli(safeWorkDir, [cliPath, "build", "--vault", vaultDir, "--out", safeOutDir]);
+      expect(safeBuild.status, safeBuild.output).toBe(0);
+      const safeContent = readDocContentHtml(safeOutDir, "/SAFE-HTML-01/");
+      const safeRoute = fs.readFileSync(path.join(safeOutDir, "SAFE-HTML-01", "index.html"), "utf8");
+      for (const rendered of [safeContent, safeRoute]) {
+        expect(rendered).toContain('<div class="safe-format"><strong>Allowed formatting</strong></div>');
+        expect(rendered).not.toContain("window.__script_payload");
+        expect(rendered).not.toContain("window.__event_payload");
+        expect(rendered).not.toContain("javascript:window.__url_payload");
+        expect(rendered).not.toContain("https://example.com/unsafe");
+        expect(rendered).not.toContain("window.__xmp_payload");
+        expect(rendered).not.toContain("XMP_RAW_TEXT_SECRET");
+      }
+
+      writeText(
+        path.join(unsafeWorkDir, "blog.config.mjs"),
+        "export default { markdown: { allowUnsafeHtml: true } };\n",
+      );
+      const unsafeOutDir = path.join(unsafeWorkDir, "dist");
+      const unsafeBuild = runCli(unsafeWorkDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultDir,
+        "--out",
+        unsafeOutDir,
+      ]);
+      expect(unsafeBuild.status, unsafeBuild.output).toBe(0);
+      expect(unsafeBuild.output).toContain("allowUnsafeHtml=true disables rendered HTML sanitization");
+      const unsafeContent = readDocContentHtml(unsafeOutDir, "/SAFE-HTML-01/");
+      expect(unsafeContent).toContain("<script>window.__script_payload = 1</script>");
+      expect(unsafeContent).toContain('onerror="window.__event_payload = 1"');
+      expect(unsafeContent).toContain('href="javascript:window.__url_payload = 1"');
+      expect(unsafeContent).toContain('<iframe src="https://example.com/unsafe"></iframe>');
+      expect(unsafeContent).toContain('onerror="window.__xmp_payload = 1"');
+      expect(unsafeContent).toContain("XMP_RAW_TEXT_SECRET");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("cache에는 unpublished와 draft Markdown 본문을 저장하지 않는다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-private-cache-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+    const publicPath = path.join(vaultDir, "public.md");
+    const privatePath = path.join(vaultDir, "private.md");
+    const draftPath = path.join(vaultDir, "draft.md");
+    const missingPrefixPath = path.join(vaultDir, "missing-prefix.md");
+    const missingCategoryPath = path.join(vaultDir, "missing-category.md");
+
+    try {
+      writeText(
+        publicPath,
+        `---
+publish: true
+prefix: CACHE-PUBLIC
+category_path: cache/public
+title: Public Cache
+---
+
+PUBLIC_CACHE_BODY
+`,
+      );
+      writeText(
+        privatePath,
+        `---
+publish: false
+title: Private Cache
+---
+
+PRIVATE_CACHE_SECRET
+`,
+      );
+      writeText(
+        draftPath,
+        `---
+publish: true
+draft: true
+title: Draft Cache
+---
+
+DRAFT_CACHE_SECRET
+`,
+      );
+      writeText(
+        missingPrefixPath,
+        `---
+publish: true
+category_path: cache/missing-prefix
+title: Missing Prefix Cache
+---
+
+MISSING_PREFIX_CACHE_SECRET
+`,
+      );
+      writeText(
+        missingCategoryPath,
+        `---
+publish: true
+prefix: CACHE-MISSING-CATEGORY
+title: Missing Category Cache
+---
+
+MISSING_CATEGORY_CACHE_SECRET
+`,
+      );
+
+      const firstBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(firstBuild.status, firstBuild.output).toBe(0);
+      const cachePath = findOnlyCacheIndexPath(workDir);
+      const firstCache = fs.readFileSync(cachePath, "utf8");
+      expect(firstCache).toContain("PUBLIC_CACHE_BODY");
+      expect(firstCache).not.toContain("PRIVATE_CACHE_SECRET");
+      expect(firstCache).not.toContain("DRAFT_CACHE_SECRET");
+      expect(firstCache).not.toContain("MISSING_PREFIX_CACHE_SECRET");
+      expect(firstCache).not.toContain("MISSING_CATEGORY_CACHE_SECRET");
+      const firstSources = (JSON.parse(firstCache) as { sources: Record<string, unknown> }).sources;
+      expect(firstSources["public.md"]).toBeDefined();
+      expect(firstSources["private.md"]).toBeUndefined();
+      expect(firstSources["draft.md"]).toBeUndefined();
+      expect(firstSources["missing-prefix.md"]).toBeUndefined();
+      expect(firstSources["missing-category.md"]).toBeUndefined();
+
+      const incrementalBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(incrementalBuild.status, incrementalBuild.output).toBe(0);
+      expect(incrementalBuild.output).toContain("total=1 rendered=0 skipped=1");
+
+      writeText(
+        privatePath,
+        `---
+publish: true
+prefix: CACHE-PRIVATE
+category_path: cache/private
+title: Published Private Cache
+---
+
+PRIVATE_CACHE_SECRET
+`,
+      );
+      writeText(
+        publicPath,
+        `---
+publish: false
+prefix: CACHE-PUBLIC
+category_path: cache/public
+title: Private Public Cache
+---
+
+PUBLIC_CACHE_BODY
+`,
+      );
+      writeText(
+        draftPath,
+        `---
+publish: true
+draft: false
+prefix: CACHE-DRAFT
+category_path: cache/draft
+title: Published Draft Cache
+---
+
+DRAFT_CACHE_SECRET
+`,
+      );
+
+      const stateBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(stateBuild.status, stateBuild.output).toBe(0);
+      const manifest = readManifest(outDir) as { docs: Array<{ route: string }> };
+      expect(manifest.docs.map((doc) => doc.route).sort()).toEqual(["/CACHE-DRAFT/", "/CACHE-PRIVATE/"]);
+
+      const nextCache = fs.readFileSync(cachePath, "utf8");
+      expect(nextCache).not.toContain("PUBLIC_CACHE_BODY");
+      expect(nextCache).toContain("PRIVATE_CACHE_SECRET");
+      expect(nextCache).toContain("DRAFT_CACHE_SECRET");
+      expect(nextCache).not.toContain("MISSING_PREFIX_CACHE_SECRET");
+      expect(nextCache).not.toContain("MISSING_CATEGORY_CACHE_SECRET");
+      const nextSources = (JSON.parse(nextCache) as { sources: Record<string, unknown> }).sources;
+      expect(nextSources["public.md"]).toBeUndefined();
+      expect(nextSources["private.md"]).toBeDefined();
+      expect(nextSources["draft.md"]).toBeDefined();
+      expect(nextSources["missing-prefix.md"]).toBeUndefined();
+      expect(nextSources["missing-category.md"]).toBeUndefined();
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
   test("CLI 숫자 옵션은 잘못된 값을 거부한다", async () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-cli-validation-"));
 
@@ -153,6 +1091,7 @@ test.describe("빌드 회귀 가드", () => {
       ]);
       expect(invalidRecent.status).not.toBe(0);
       expect(invalidRecent.output).toContain("--recent-limit");
+      expect(invalidRecent.output).not.toContain("[cli] Missing value");
 
       const invalidNewWithinDays = runCli(workDir, [
         cliPath,
@@ -166,6 +1105,35 @@ test.describe("빌드 회귀 가드", () => {
       ]);
       expect(invalidNewWithinDays.status).not.toBe(0);
       expect(invalidNewWithinDays.output).toContain("--new-within-days");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("build, dev, clean의 모든 값 옵션은 누락되거나 다음 flag인 값을 거부한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-cli-missing-values-"));
+    const cases = [
+      { command: "build", option: "--vault" },
+      { command: "dev", option: "--out" },
+      { command: "clean", option: "--exclude" },
+      { command: "build", option: "--new-within-days" },
+      { command: "dev", option: "--recent-limit" },
+      { command: "clean", option: "--menu-config" },
+      { command: "dev", option: "--port" },
+    ] as const;
+
+    try {
+      for (const { command, option } of cases) {
+        const expectedError = `[cli] Missing value for ${option}`;
+
+        const omitted = runCli(workDir, [cliPath, command, option]);
+        expect(omitted.status, `${command} ${option}\n${omitted.output}`).not.toBe(0);
+        expect(omitted.output).toContain(expectedError);
+
+        const followedByFlag = runCli(workDir, [cliPath, command, option, "--help"]);
+        expect(followedByFlag.status, `${command} ${option} --help\n${followedByFlag.output}`).not.toBe(0);
+        expect(followedByFlag.output).toContain(expectedError);
+      }
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

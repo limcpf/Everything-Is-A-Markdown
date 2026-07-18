@@ -16,8 +16,8 @@ async function main(): Promise<void> {
   const buildOptions = resolveBuildOptions(cli, userConfig, pinnedMenu);
 
   if (cli.command === "clean") {
-    await cleanBuildArtifacts(buildOptions.outDir);
-    console.log(`[clean] removed ${buildOptions.outDir} and .cache`);
+    await cleanBuildArtifacts(buildOptions);
+    console.log(`[clean] removed ${buildOptions.outDir} and matching EIAM cache namespace`);
     return;
   }
 

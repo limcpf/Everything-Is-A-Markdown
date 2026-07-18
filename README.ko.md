@@ -33,7 +33,9 @@ bun run blog [build|dev|clean] [options]
 
 - `bun run build`: 정적 파일 빌드
 - `bun run dev`: 로컬 개발 서버 실행 (기본 `http://localhost:3000`)
-- `bun run clean`: `dist`와 `.cache` 삭제
+- `bun run clean`: EIAM 소유권 마커가 확인된 `dist`와 일치하는 EIAM cache namespace만 삭제
+
+빌드는 vault를 검증하고 읽은 뒤 전용 출력 디렉터리에 `.eiam-output.json` 소유권 마커를 기록하고 canonical vault/output/cache-root 경로에서 파생한 cache namespace에 결속합니다. 비어 있지 않은 미소유 또는 namespace 불일치 디렉터리, cache root를 포함하거나 그 안에 놓인 경로는 출력으로 사용하지 않으며, symlink인 cache path component, namespace, index도 거부합니다. `staticPaths`는 output 밖으로 벗어나거나 예약된 `.eiam-output.json` 마커와 충돌할 수 없습니다. `dev`는 초기 build가 이 안전 검사를 통과하지 못하면 watcher와 server를 시작하지 않고 종료하며, 안전하게 시작된 뒤의 rebuild 실패만 로그로 남깁니다. `clean`도 광범위한 경로나 선택한 실행 context와 마커가 일치하지 않는 디렉터리를 삭제하지 않습니다. build migration과 `clean`은 과거 EIAM cache schema로 확인된 `.cache/build-index.json`만 제거하며, pre-marker output과 예약 static path를 거부하는 경로에서도 이 migration을 수행합니다. sibling EIAM cache namespace와 일반 `.cache`의 다른 파일은 보존합니다.
 
 자주 쓰는 옵션:
 
@@ -43,6 +45,8 @@ bun run blog [build|dev|clean] [options]
 - `--new-within-days <n>`: NEW 배지 기준 일수 (정수 `>= 0`, 기본 `7`)
 - `--recent-limit <n>`: Recent 폴더 문서 수 제한 (정수 `>= 1`, 기본 `5`)
 - `--port <n>`: 개발 서버 포트 (기본 `3000`)
+
+값을 받는 옵션에서 값을 생략하거나 다음 CLI flag를 값 자리에 두면 `[cli] Missing value for <option>` 오류로 즉시 종료합니다. 음수 등 실제 숫자 형태는 값으로 읽은 뒤 기존 숫자 범위 검증을 적용합니다.
 
 ## Markdown Lint (publish 전용)
 
@@ -85,6 +89,7 @@ const config = {
     defaultOgImage: "/assets/og.png",
   },
   markdown: {
+    allowUnsafeHtml: false,
     mermaid: {
       enabled: true,
       cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
@@ -101,6 +106,7 @@ export default config;
 - 볼트 기준 상대 경로 배열
 - 폴더와 파일 모두 지정 가능
 - 지정한 경로의 파일들을 `dist`에 같은 상대 경로로 복사
+- vault root로 정규화되거나 output 밖으로 벗어나거나 예약된 `.eiam-output.json` 소유권 마커와 충돌하는 경로는 거부
 - 예: 볼트 `assets/og.png` -> `dist/assets/og.png`
 
 `pinnedMenu`:
@@ -113,7 +119,15 @@ export default config;
 
 - 서브패스 배포(예: `/blog`)를 정식 지원합니다.
 - 내부 라우팅/본문 fetch 링크에 동일한 base path가 적용됩니다.
+- 생성된 `404.html`의 Home 링크도 정규화된 base path를 사용합니다. 예를 들어 `/blog` 배포에서는 `/blog/`로 돌아갑니다.
 - 루트 배포는 빈 문자열(`""`)을 사용합니다.
+
+`markdown.allowUnsafeHtml`:
+
+- 기본값은 `false`이며, 렌더된 HTML을 직접 route와 client navigation용 본문 모두에서 sanitize합니다.
+- 일반 Markdown 서식, 표, 이미지, figure/details, EIAM/Shiki 코드 마크업, 안전한 URL과 Shiki 색상 스타일은 유지합니다.
+- script, 이벤트 핸들러, `javascript:` URL, iframe, SVG, 임의 style은 제거합니다.
+- 신뢰할 수 있는 볼트에서만 `true`로 명시할 수 있으며, 이 경우 임의의 client-side 코드가 실행될 수 있습니다.
 
 예시:
 
@@ -195,6 +209,14 @@ title: Work In Progress
 ---
 ```
 
+## 캐시와 비공개 문서
+
+빌드 cache는 실행 작업 디렉터리 기준 `.cache/eiam/v1-<namespace>/build-index.json`에 저장됩니다. namespace는 canonical `vaultDir`와 `outDir` 경로 쌍의 안정적인 hash입니다. config를 먼저 해석한 다음 CLI의 `--vault`와 `--out`이 이를 덮어쓰며, 어느 경로든 달라지면 별도 namespace를 선택합니다. cache root 자체를 별도로 재지정하는 옵션은 없습니다. `clean`은 선택된 경로 쌍의 namespace만 삭제합니다.
+
+증분 빌드 cache에는 `publish: true`이면서 draft가 아닌 Markdown 본문만 저장됩니다. 비공개 문서와 draft 문서는 persistent cache entry에서 완전히 제외되며, publish/draft 상태가 바뀌면 다음 빌드에서 다시 평가됩니다.
+
+cache entry를 재사용하기 전에 모든 Markdown 원문을 읽어 SHA-256 fingerprint를 계산합니다. 파일 크기와 mtime을 유지한 채 본문을 교체해도 변경을 감지하며, fingerprint가 같으면 frontmatter parse와 Markdown render는 계속 건너뜁니다. 회귀 테스트는 40개 문서 no-op 빌드에서 `rendered=0`, `skipped=40`, wall-clock 10초 미만을 측정합니다. `bunx playwright test tests/e2e/build-regression.spec.ts --grep "ordinary no-op"`로 실행할 수 있습니다.
+
 ## 위키링크 지원
 
 위키링크는 아래 순서로 해석됩니다.
@@ -263,6 +285,7 @@ Mermaid fence는 일반 코드 블록 UI와 분리된 전용 컨테이너(`.merm
 
 ```ts
 markdown: {
+  allowUnsafeHtml: false, // true면 렌더 HTML sanitize를 비활성화하므로 신뢰된 볼트에서만 사용
   mermaid: {
     enabled: true, // false면 코드 블록만 표시
     cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js", // http/https 또는 /, ./, ../ 경로

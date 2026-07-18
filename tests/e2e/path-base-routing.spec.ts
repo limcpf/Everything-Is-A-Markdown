@@ -103,7 +103,34 @@ test.describe("pathBase 정식 지원", () => {
   const cliPath = path.join(repoRoot, "src/cli.ts");
   const vaultPath = path.join(repoRoot, "test-vault");
 
+  test("생성된 404 Home 링크는 root와 정규화된 nested pathBase를 따른다", async () => {
+    test.setTimeout(60_000);
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-404-home-"));
+    const outDir = path.join(workDir, "dist");
+    const configPath = path.join(workDir, "blog.config.mjs");
+
+    try {
+      const rootBuild = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
+      expect(rootBuild.status, rootBuild.output).toBe(0);
+      const rootNotFoundHtml = fs.readFileSync(path.join(outDir, "404.html"), "utf8");
+      expect(rootNotFoundHtml).toContain('<a href="/" class="not-found-link">');
+
+      fs.writeFileSync(
+        configPath,
+        'export default { seo: { siteUrl: "https://example.com", pathBase: " docs/guides/ " } };',
+        "utf8",
+      );
+      const nestedBuild = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
+      expect(nestedBuild.status, nestedBuild.output).toBe(0);
+      const nestedNotFoundHtml = fs.readFileSync(path.join(outDir, "404.html"), "utf8");
+      expect(nestedNotFoundHtml).toContain('<a href="/docs/guides/" class="not-found-link">');
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
   test("서브패스(/blog)에서 라우팅/내부 링크/본문 fetch가 정상 동작한다", async ({ page }) => {
+    test.setTimeout(60_000);
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-path-base-"));
     const outDir = path.join(workDir, "dist");
     const configPath = path.join(workDir, "blog.config.mjs");
@@ -126,6 +153,8 @@ test.describe("pathBase 정식 지원", () => {
       "9999",
     ]);
     expect(build.status, build.output).toBe(0);
+    const notFoundHtml = fs.readFileSync(path.join(outDir, "404.html"), "utf8");
+    expect(notFoundHtml).toContain('<a href="/blog/" class="not-found-link">');
 
     const server = await startStaticServer(outDir, pathBase);
     try {
@@ -145,6 +174,20 @@ test.describe("pathBase 정식 지원", () => {
       await expect(page).toHaveURL(/\/blog\/BC-VO-02\/$/);
       await expect(page.locator("#viewer-title")).toHaveText("Setup Guide");
       await expect(page.locator("#viewer-nav .nav-link-next")).toHaveAttribute("href", "/blog/BC-XSS-01/");
+
+      const notFoundResponse = await page.goto(`${server.baseUrl}/blog/missing-document/`);
+      expect(notFoundResponse?.status()).toBe(404);
+      await expect(page).toHaveURL(`${server.baseUrl}/blog/missing-document/`);
+      const homeLink = page.locator(".not-found-link");
+      await expect(homeLink).toHaveAttribute("href", "/blog/");
+      const homeRequestPromise = page.waitForRequest(
+        (request) => request.isNavigationRequest() && request.url() === `${server.baseUrl}/blog/`,
+      );
+      await homeLink.click();
+      const homeRequest = await homeRequestPromise;
+      expect(homeRequest.url()).toBe(`${server.baseUrl}/blog/`);
+      await expect(page.locator(".app-root")).toBeVisible();
+      expect(new URL(page.url()).pathname).toMatch(/^\/blog\//);
     } finally {
       await server.close();
       fs.rmSync(workDir, { recursive: true, force: true });

@@ -32,4 +32,61 @@ test.describe("런타임 렌더링 XSS 가드", () => {
     const xssFlag = await page.evaluate(() => (window as Window & { __xss_title?: number }).__xss_title ?? 0);
     expect(xssFlag).toBe(0);
   });
+
+  test("raw HTML은 직접 route와 client navigation에서 같은 정책으로 sanitize된다", async ({ page }) => {
+    await page.addInitScript(() => {
+      const target = window as Window & {
+        __raw_script?: number;
+        __raw_event?: number;
+        __raw_url?: number;
+        __raw_xmp?: number;
+      };
+      target.__raw_script = 0;
+      target.__raw_event = 0;
+      target.__raw_url = 0;
+      target.__raw_xmp = 0;
+    });
+
+    const assertSanitizedContent = async () => {
+      await expect(page.locator("#viewer-content .raw-html-safe strong")).toHaveText("Allowed raw formatting");
+      await expect(page.locator("#viewer-content script")).toHaveCount(0);
+      await expect(page.locator("#viewer-content iframe")).toHaveCount(0);
+      await expect(page.locator("#viewer-content [onerror]")).toHaveCount(0);
+      await expect(page.locator("#viewer-content .raw-html-url")).not.toHaveAttribute("href", /javascript:/i);
+      await expect(page.locator("#viewer-content .raw-html-xmp")).toHaveCount(0);
+      await expect(page.locator("#viewer-content")).not.toContainText("XMP_RAW_TEXT_SECRET");
+
+      const flags = await page.evaluate(() => {
+        const target = window as Window & {
+          __raw_script?: number;
+          __raw_event?: number;
+          __raw_url?: number;
+          __raw_xmp?: number;
+        };
+        return [
+          target.__raw_script ?? 0,
+          target.__raw_event ?? 0,
+          target.__raw_url ?? 0,
+          target.__raw_xmp ?? 0,
+        ];
+      });
+      expect(flags).toEqual([0, 0, 0, 0]);
+    };
+
+    await page.goto("/BC-XSS-01/");
+    await waitForAppReady(page);
+    await assertSanitizedContent();
+
+    await page.goto("/BC-VO-02/");
+    await waitForAppReady(page);
+    const xssRow = page
+      .locator('#tree-root [data-type="item"][data-item-type="file"]')
+      .filter({ hasText: "Unsafe" })
+      .first();
+    await expect(xssRow).toBeVisible();
+    await xssRow.click();
+    await expect(page).toHaveURL(/\/BC-XSS-01\/$/);
+    await expect(page.locator("#viewer-title")).toContainText("Unsafe");
+    await assertSanitizedContent();
+  });
 });

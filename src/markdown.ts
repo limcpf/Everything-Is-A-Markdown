@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import sanitizeHtml from "sanitize-html";
 import { createBundledHighlighter, type HighlighterGeneric } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import { bundledLanguages } from "shiki/langs";
@@ -17,6 +18,102 @@ export interface MarkdownRenderer {
 
 const FENCE_LANG_RE = /^```([\w-+#.]+)/gm;
 const MERMAID_LANG = "mermaid";
+const SAFE_COLOR_VALUE = /^#[0-9a-f]{3,8}$/i;
+const SAFE_HTML_OPTIONS: sanitizeHtml.IOptions = {
+  allowedTags: [
+    "p",
+    "br",
+    "hr",
+    "blockquote",
+    "pre",
+    "code",
+    "strong",
+    "em",
+    "s",
+    "del",
+    "a",
+    "ul",
+    "ol",
+    "li",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
+    "img",
+    "figure",
+    "figcaption",
+    "div",
+    "span",
+    "button",
+    "details",
+    "summary",
+    "kbd",
+    "mark",
+    "sub",
+    "sup",
+    "dl",
+    "dt",
+    "dd",
+    "abbr",
+    "time",
+  ],
+  allowedAttributes: {
+    "*": ["class"],
+    a: ["href", "title", "target", "rel"],
+    abbr: ["title"],
+    button: ["type", "title", "data-code", "aria-label"],
+    details: ["open"],
+    img: ["src", "alt", "title", "width", "height", "loading"],
+    li: ["value"],
+    ol: ["start"],
+    pre: ["tabindex", "style"],
+    span: ["style"],
+    td: ["colspan", "rowspan"],
+    th: ["colspan", "rowspan", "scope"],
+    time: ["datetime"],
+  },
+  allowedStyles: {
+    pre: {
+      "background-color": [SAFE_COLOR_VALUE],
+      color: [SAFE_COLOR_VALUE],
+    },
+    span: {
+      color: [SAFE_COLOR_VALUE],
+    },
+  },
+  allowedSchemes: ["http", "https", "mailto"],
+  allowedSchemesByTag: {
+    a: ["http", "https", "mailto"],
+    img: ["http", "https"],
+  },
+  allowProtocolRelative: false,
+  disallowedTagsMode: "discard",
+  enforceHtmlBoundary: false,
+  nestingLimit: 100,
+  nonTextTags: ["script", "style", "textarea", "option", "noscript", "xmp"],
+  transformTags: {
+    a(tagName, attributes) {
+      const attribs = { ...attributes };
+      if (attribs.target === "_blank") {
+        const rel = new Set((attribs.rel ?? "").split(/\s+/).filter(Boolean));
+        rel.add("noopener");
+        rel.add("noreferrer");
+        attribs.rel = Array.from(rel).join(" ");
+      } else {
+        delete attribs.target;
+      }
+      return { tagName, attribs };
+    },
+  },
+};
 type RenderRule = NonNullable<MarkdownIt["renderer"]["rules"]["fence"]>;
 type RenderRuleArgs = Parameters<RenderRule>;
 type RuleTokens = RenderRuleArgs[0];
@@ -165,7 +262,7 @@ function createMarkdownIt<L extends string, T extends string>(
   gfm: boolean,
 ): MarkdownIt {
   const md = new MarkdownIt({
-    // Allow raw HTML in markdown (e.g. <img ... />).
+    // Parse raw HTML so the configured sanitizer can apply one policy to generated and authored markup.
     html: true,
     linkify: true,
     typographer: false,
@@ -311,12 +408,18 @@ export async function createMarkdownRenderer(options: BuildOptions): Promise<Mar
   const loadedLanguages = new Set(highlighter.getLoadedLanguages().map(String));
 
   const md = createMarkdownIt(highlighter, options.shikiTheme, options.gfm);
+  if (options.allowUnsafeHtml) {
+    console.warn(
+      "[security] markdown.allowUnsafeHtml=true disables rendered HTML sanitization. Only use trusted vault content.",
+    );
+  }
 
   return {
     async render(markdown: string, resolver: WikiResolver): Promise<RenderResult> {
       const { markdown: preprocessed, warnings } = preprocessMarkdown(markdown, resolver, options.imagePolicy, options.wikilinks);
       await loadFenceLanguages(highlighter, loadedLanguages, preprocessed);
-      const html = md.render(preprocessed);
+      const renderedHtml = md.render(preprocessed);
+      const html = options.allowUnsafeHtml ? renderedHtml : sanitizeHtml(renderedHtml, SAFE_HTML_OPTIONS);
       return { html, warnings };
     },
   };
