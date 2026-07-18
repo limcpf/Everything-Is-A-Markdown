@@ -162,9 +162,15 @@ test.describe("빌드 회귀 가드", () => {
     const outDir = path.join(workDir, "dist");
     const legacyCacheFile = path.join(workDir, ".cache", "build-index.json");
     const unrelatedCacheFile = path.join(workDir, ".cache", "keep.txt");
+    const legacyCacheContents = `${JSON.stringify({
+      version: 4,
+      sources: {},
+      docs: {},
+      outputHashes: {},
+    })}\n`;
 
     try {
-      writeText(legacyCacheFile, "legacy private cache body");
+      writeText(legacyCacheFile, legacyCacheContents);
       writeText(unrelatedCacheFile, "unrelated cache data");
       const build = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
       expect(build.status, build.output).toBe(0);
@@ -180,13 +186,19 @@ test.describe("빌드 회귀 가드", () => {
       expect(marker.cacheNamespace).toMatch(/^v2-[a-f0-9]{40}$/);
       const cachePath = findOnlyCacheIndexPath(workDir);
 
-      writeText(legacyCacheFile, "legacy private cache body recreated before clean");
+      writeText(legacyCacheFile, legacyCacheContents);
       const clean = runCli(workDir, [cliPath, "clean", "--vault", vaultPath, "--out", outDir]);
       expect(clean.status, clean.output).toBe(0);
       expect(fs.existsSync(outDir)).toBe(false);
       expect(fs.existsSync(cachePath)).toBe(false);
       expect(fs.existsSync(legacyCacheFile)).toBe(false);
       expect(fs.readFileSync(unrelatedCacheFile, "utf8")).toBe("unrelated cache data");
+
+      const foreignLegacyNamedContents = `${JSON.stringify({ tool: "another-cache", entries: ["keep"] })}\n`;
+      writeText(legacyCacheFile, foreignLegacyNamedContents);
+      const repeatedClean = runCli(workDir, [cliPath, "clean", "--vault", vaultPath, "--out", outDir]);
+      expect(repeatedClean.status, repeatedClean.output).toBe(0);
+      expect(fs.readFileSync(legacyCacheFile, "utf8")).toBe(foreignLegacyNamedContents);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
@@ -197,10 +209,13 @@ test.describe("빌드 회귀 가드", () => {
     const unownedOutDir = path.join(workDir, "unowned");
     const unownedSentinel = path.join(unownedOutDir, "keep.txt");
     const cwdSentinel = path.join(workDir, "cwd-keep.txt");
+    const foreignLegacyNamedCache = path.join(workDir, ".cache", "build-index.json");
+    const foreignLegacyNamedContents = `${JSON.stringify({ tool: "another-cache", entries: ["keep"] })}\n`;
 
     try {
       writeText(unownedSentinel, "do not remove");
       writeText(cwdSentinel, "keep cwd");
+      writeText(foreignLegacyNamedCache, foreignLegacyNamedContents);
 
       const buildIntoUnowned = runCli(workDir, [
         cliPath,
@@ -213,6 +228,7 @@ test.describe("빌드 회귀 가드", () => {
       expect(buildIntoUnowned.status).not.toBe(0);
       expect(buildIntoUnowned.output).toContain("Refusing non-empty output directory");
       expect(fs.readFileSync(unownedSentinel, "utf8")).toBe("do not remove");
+      expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
 
       const cleanUnowned = runCli(workDir, [
         cliPath,
@@ -225,11 +241,41 @@ test.describe("빌드 회귀 가드", () => {
       expect(cleanUnowned.status).not.toBe(0);
       expect(cleanUnowned.output).toContain("Refusing to clean output directory");
       expect(fs.readFileSync(unownedSentinel, "utf8")).toBe("do not remove");
+      expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
+
+      for (const cacheContainingOutDir of [
+        path.join(workDir, ".cache"),
+        path.join(workDir, ".cache", "eiam"),
+      ]) {
+        const buildIntoCacheRoot = runCli(workDir, [
+          cliPath,
+          "build",
+          "--vault",
+          vaultPath,
+          "--out",
+          cacheContainingOutDir,
+        ]);
+        expect(buildIntoCacheRoot.status).not.toBe(0);
+        expect(buildIntoCacheRoot.output).toContain("Refusing dangerous output directory");
+
+        const cleanCacheRoot = runCli(workDir, [
+          cliPath,
+          "clean",
+          "--vault",
+          vaultPath,
+          "--out",
+          cacheContainingOutDir,
+        ]);
+        expect(cleanCacheRoot.status).not.toBe(0);
+        expect(cleanCacheRoot.output).toContain("Refusing dangerous output directory");
+        expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
+      }
 
       const cleanCwd = runCli(workDir, [cliPath, "clean", "--vault", vaultPath, "--out", workDir]);
       expect(cleanCwd.status).not.toBe(0);
       expect(cleanCwd.output).toContain("Refusing dangerous output directory");
       expect(fs.readFileSync(cwdSentinel, "utf8")).toBe("keep cwd");
+      expect(fs.readFileSync(foreignLegacyNamedCache, "utf8")).toBe(foreignLegacyNamedContents);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

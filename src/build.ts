@@ -123,7 +123,7 @@ async function resolveCacheLocation(options: BuildOptions): Promise<CacheLocatio
   };
 }
 
-async function assertSafeOutputRoot(outDir: string, vaultDir: string): Promise<string> {
+async function assertSafeOutputRoot(outDir: string, vaultDir: string, cacheRoot: string): Promise<string> {
   const outputRoot = await toCanonicalPath(outDir);
   const filesystemRoot = path.parse(outputRoot).root;
   const cwd = await toCanonicalPath(process.cwd());
@@ -132,7 +132,8 @@ async function assertSafeOutputRoot(outDir: string, vaultDir: string): Promise<s
   if (
     outputRoot === filesystemRoot ||
     isSamePathOrAncestor(outputRoot, cwd) ||
-    isSamePathOrAncestor(outputRoot, vaultRoot)
+    isSamePathOrAncestor(outputRoot, vaultRoot) ||
+    isSamePathOrAncestor(outputRoot, cacheRoot)
   ) {
     throw new Error(
       `[safety] Refusing dangerous output directory: ${outputRoot}. Choose a dedicated child directory.`,
@@ -172,9 +173,9 @@ async function writeOutputMarker(outputRoot: string, cacheNamespace: string): Pr
   await Bun.write(path.join(outputRoot, OUTPUT_MARKER_FILE_NAME), `${JSON.stringify(marker, null, 2)}\n`);
 }
 
-async function prepareOwnedOutputDirectory(options: BuildOptions, cacheNamespace: string): Promise<void> {
+async function prepareOwnedOutputDirectory(options: BuildOptions, cacheLocation: CacheLocation): Promise<void> {
   const requestedOutputRoot = path.resolve(options.outDir);
-  const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir);
+  const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir, cacheLocation.rootDir);
 
   try {
     const outputStat = await fs.lstat(requestedOutputRoot);
@@ -183,7 +184,7 @@ async function prepareOwnedOutputDirectory(options: BuildOptions, cacheNamespace
     }
 
     const entries = await fs.readdir(outputRoot);
-    if (entries.length > 0 && !(await hasValidOutputMarker(outputRoot, cacheNamespace))) {
+    if (entries.length > 0 && !(await hasValidOutputMarker(outputRoot, cacheLocation.namespace))) {
       throw new Error(
         `[safety] Refusing non-empty output directory without a matching ${OUTPUT_MARKER_FILE_NAME} for the requested vault/output/cache-root context: ${outputRoot}`,
       );
@@ -195,8 +196,8 @@ async function prepareOwnedOutputDirectory(options: BuildOptions, cacheNamespace
     await fs.mkdir(requestedOutputRoot, { recursive: true });
   }
 
-  if (!(await hasValidOutputMarker(outputRoot, cacheNamespace))) {
-    await writeOutputMarker(outputRoot, cacheNamespace);
+  if (!(await hasValidOutputMarker(outputRoot, cacheLocation.namespace))) {
+    await writeOutputMarker(outputRoot, cacheLocation.namespace);
   }
 }
 
@@ -205,7 +206,21 @@ async function removeLegacyCacheIndex(): Promise<void> {
 
   try {
     const legacyCacheStat = await fs.lstat(legacyCachePath);
-    if (legacyCacheStat.isFile() || legacyCacheStat.isSymbolicLink()) {
+    if (!legacyCacheStat.isFile() || legacyCacheStat.isSymbolicLink()) {
+      return;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await fs.readFile(legacyCachePath, "utf8")) as unknown;
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        return;
+      }
+      throw error;
+    }
+
+    if (isLegacyEiamCacheIndex(parsed)) {
       await fs.rm(legacyCachePath, { force: true });
     }
   } catch (error) {
@@ -233,6 +248,37 @@ function createEmptyCache(): BuildCache {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function hasExactRecordKeys(value: Record<string, unknown>, expectedKeys: string[]): boolean {
+  const actualKeys = Object.keys(value).sort();
+  return (
+    actualKeys.length === expectedKeys.length && actualKeys.every((key, index) => key === expectedKeys[index])
+  );
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return isRecord(value) && !Array.isArray(value);
+}
+
+function isLegacyEiamCacheIndex(value: unknown): boolean {
+  if (!isPlainRecord(value) || !Number.isInteger(value.version)) {
+    return false;
+  }
+
+  if (value.version === 1) {
+    return hasExactRecordKeys(value, ["docs", "version"]) && isPlainRecord(value.docs);
+  }
+
+  return (
+    typeof value.version === "number" &&
+    value.version >= 2 &&
+    value.version <= 5 &&
+    hasExactRecordKeys(value, ["docs", "outputHashes", "sources", "version"]) &&
+    isPlainRecord(value.sources) &&
+    isPlainRecord(value.docs) &&
+    isPlainRecord(value.outputHashes)
+  );
 }
 
 function normalizeCachedDocIndex(value: unknown): BuildCache["docs"] {
@@ -1665,10 +1711,10 @@ async function cleanRemovedOutputs(outDir: string, oldCache: BuildCache, current
 }
 
 export async function cleanBuildArtifacts(options: BuildOptions): Promise<void> {
-  await removeLegacyCacheIndex();
   const cacheLocation = await resolveCacheLocation(options);
   const requestedOutputRoot = path.resolve(options.outDir);
-  const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir);
+  const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir, cacheLocation.rootDir);
+  let hasOwnedOutput = false;
 
   try {
     const outputStat = await fs.lstat(requestedOutputRoot);
@@ -1680,13 +1726,17 @@ export async function cleanBuildArtifacts(options: BuildOptions): Promise<void> 
         `[safety] Refusing to clean output directory without a matching ${OUTPUT_MARKER_FILE_NAME} for the requested vault/output/cache-root context: ${outputRoot}`,
       );
     }
-    await fs.rm(requestedOutputRoot, { recursive: true, force: true });
+    hasOwnedOutput = true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
     }
   }
 
+  await removeLegacyCacheIndex();
+  if (hasOwnedOutput) {
+    await fs.rm(requestedOutputRoot, { recursive: true, force: true });
+  }
   await removeCacheNamespace(cacheLocation);
 }
 
@@ -1739,9 +1789,9 @@ function buildBacklinksByDocId(
 }
 
 export async function buildSite(options: BuildOptions): Promise<BuildResult> {
-  await removeLegacyCacheIndex();
   const cacheLocation = await resolveCacheLocation(options);
-  await prepareOwnedOutputDirectory(options, cacheLocation.namespace);
+  await prepareOwnedOutputDirectory(options, cacheLocation);
+  await removeLegacyCacheIndex();
   await ensureDir(path.join(options.outDir, "content"));
 
   const { cachePath } = cacheLocation;
