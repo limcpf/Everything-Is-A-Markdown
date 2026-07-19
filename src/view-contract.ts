@@ -1,4 +1,5 @@
 import { DEFAULT_BRANCH, DEFAULT_SITE_TITLE } from "./defaults";
+import { renderAppIcon } from "./icons";
 
 export interface ViewBacklinkContract {
   route?: unknown;
@@ -280,7 +281,7 @@ function renderBreadcrumb(model: ViewChromeModel["breadcrumb"]): string {
         ? `<span class="breadcrumb-current" aria-current="page">${escapeViewText(item.label)}</span>`
         : `<span class="breadcrumb-item">${escapeViewText(item.label)}</span>`,
     )
-    .join('<span class="material-symbols-outlined breadcrumb-sep">chevron_right</span>');
+    .join(renderAppIcon("chevron-right", "breadcrumb-sep"));
 }
 
 export function renderViewBreadcrumb(route: unknown): string {
@@ -294,7 +295,7 @@ function renderMeta(model: ViewChromeModel["meta"]): string {
   }
   if (model.createdAt) {
     items.push(
-      `<span class="meta-item"><span class="material-symbols-outlined">calendar_today</span>${escapeViewText(model.createdAt)}</span>`,
+      `<span class="meta-item">${renderAppIcon("calendar")}${escapeViewText(model.createdAt)}</span>`,
     );
   }
   if (model.tags.length > 0) {
@@ -306,9 +307,9 @@ function renderMeta(model: ViewChromeModel["meta"]): string {
 
 function renderNavLink(link: ViewLinkModel, direction: "previous" | "next"): string {
   if (direction === "previous") {
-    return `<a href="${escapeViewAttribute(link.href)}" class="nav-link nav-link-prev" data-route="${escapeViewAttribute(link.route)}"><div class="nav-link-label"><span class="material-symbols-outlined">arrow_back</span>Previous</div><div class="nav-link-title">${escapeViewText(link.title)}</div></a>`;
+    return `<a href="${escapeViewAttribute(link.href)}" class="nav-link nav-link-prev" data-route="${escapeViewAttribute(link.route)}"><div class="nav-link-label">${renderAppIcon("arrow-left")}Previous</div><div class="nav-link-title">${escapeViewText(link.title)}</div></a>`;
   }
-  return `<a href="${escapeViewAttribute(link.href)}" class="nav-link nav-link-next" data-route="${escapeViewAttribute(link.route)}"><div class="nav-link-label">Next<span class="material-symbols-outlined">arrow_forward</span></div><div class="nav-link-title">${escapeViewText(link.title)}</div></a>`;
+  return `<a href="${escapeViewAttribute(link.href)}" class="nav-link nav-link-next" data-route="${escapeViewAttribute(link.route)}"><div class="nav-link-label">Next${renderAppIcon("arrow-right")}</div><div class="nav-link-title">${escapeViewText(link.title)}</div></a>`;
 }
 
 function renderNavigation(model: ViewChromeModel["navigation"]): string {

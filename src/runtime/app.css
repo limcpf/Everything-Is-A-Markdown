@@ -191,26 +191,22 @@ a:hover {
   text-decoration: underline;
 }
 
-.material-symbols-outlined {
-  font-family: "Material Symbols Outlined", "Material Icons", sans-serif;
-  font-style: normal;
-  font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
-  white-space: nowrap;
-  word-wrap: normal;
-  direction: ltr;
-  font-feature-settings: "liga";
-  -webkit-font-feature-settings: "liga";
+.app-icon-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.app-icon {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1em;
-  min-height: 1em;
+  width: 1em;
+  height: 1em;
   flex: 0 0 auto;
   font-size: 20px;
-  line-height: 1;
   vertical-align: middle;
+  pointer-events: none;
 }
 
 /* Layout */
@@ -491,8 +487,8 @@ a:hover {
   opacity: 0.42;
 }
 
-.tree-search-clear .material-symbols-outlined,
-.tree-search-step .material-symbols-outlined {
+.tree-search-clear .app-icon,
+.tree-search-step .app-icon {
   font-size: 18px;
 }
 
@@ -642,7 +638,7 @@ a:hover {
   min-height: 0;
 }
 
-.settings-toggle .material-symbols-outlined {
+.settings-toggle .app-icon {
   font-size: 18px;
 }
 
@@ -789,7 +785,7 @@ a:hover {
   cursor: pointer;
 }
 
-.mobile-menu-toggle .material-symbols-outlined {
+.mobile-menu-toggle .app-icon {
   font-size: 20px;
 }
 
@@ -887,7 +883,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   gap: 4px;
 }
 
-.meta-item .material-symbols-outlined {
+.meta-item .app-icon {
   font-size: 16px;
   color: var(--color-text-subtle);
 }
@@ -903,7 +899,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   color: var(--color-code-accent);
 }
 
-.meta-tags .material-symbols-outlined {
+.meta-tags .app-icon {
   color: var(--color-code-accent);
 }
 
@@ -1088,7 +1084,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   background: rgba(240, 246, 252, 0.14);
 }
 
-.code-copy .material-symbols-outlined {
+.code-copy .app-icon {
   font-size: 16px;
 }
 
@@ -1482,7 +1478,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   color: var(--color-text);
 }
 
-.not-found-icon .material-symbols-outlined {
+.not-found-icon .app-icon {
   font-size: 64px;
   color: var(--color-text-subtle);
 }
@@ -1518,7 +1514,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   text-decoration: none;
 }
 
-.not-found-link .material-symbols-outlined {
+.not-found-link .app-icon {
   font-size: 18px;
 }
 

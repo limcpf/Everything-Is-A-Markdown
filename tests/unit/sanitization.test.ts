@@ -25,4 +25,14 @@ describe("rendered Markdown sanitization", () => {
     const authored = '<span onclick="trusted()">trusted vault</span>';
     expect(sanitizeMarkdownHtml(authored, true)).toBe(authored);
   });
+
+  test("keeps only local application icon references", () => {
+    const safeIcon =
+      '<svg class="app-icon" aria-hidden="true" focusable="false"><use href="#eiam-icon-copy"></use></svg>';
+    const unsafeIcons =
+      '<svg class="app-icon"><use href="https://example.test/icons.svg#copy"></use><use href="#unknown-icon"></use></svg>';
+
+    expect(sanitizeMarkdownHtml(safeIcon)).toBe(safeIcon);
+    expect(sanitizeMarkdownHtml(unsafeIcons)).toBe('<svg class="app-icon"></svg>');
+  });
 });
