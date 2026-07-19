@@ -32,7 +32,10 @@ export {
  * @param {unknown} pathBase
  * @param {unknown} [pathname]
  */
-export function resolveRouteFromLocation(pathBase, pathname = globalThis.location?.pathname ?? "/") {
+export function resolveRouteFromLocation(
+  pathBase,
+  pathname = globalThis.location?.pathname ?? "/",
+) {
   return normalizeRoute(stripPathBase(pathname, pathBase));
 }
 
@@ -139,7 +142,8 @@ export function createNavigationState(manifest, options = {}) {
   const savedBranch = normalizeBranch(options.savedBranch);
   /** @type {Map<string, BranchView>} */
   const branchViewCache = new Map();
-  let activeBranch = savedBranch && availableBranchSet.has(savedBranch) ? savedBranch : defaultBranch;
+  let activeBranch =
+    savedBranch && availableBranchSet.has(savedBranch) ? savedBranch : defaultBranch;
   let currentDocId = typeof options.initialDocId === "string" ? options.initialDocId : "";
 
   /** @param {string} branch */
@@ -194,7 +198,7 @@ export function createNavigationState(manifest, options = {}) {
     return {
       route,
       id: id ?? null,
-      doc: id ? docsById.get(id) ?? null : null,
+      doc: id ? (docsById.get(id) ?? null) : null,
       branchChanged: previousBranch !== activeBranch,
     };
   };

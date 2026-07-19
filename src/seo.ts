@@ -46,7 +46,13 @@ export function normalizeSeoConfig(raw: UserSeoConfig | undefined): BuildSeoOpti
     throw new Error('[config] "seo.siteUrl" must use http:// or https://');
   }
 
-  if (parsed.pathname !== "/" || parsed.search || parsed.hash || parsed.username || parsed.password) {
+  if (
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash ||
+    parsed.username ||
+    parsed.password
+  ) {
     throw new Error(
       '[config] "seo.siteUrl" must be an origin only, without path, query, hash, or credentials (for example: "https://example.com")',
     );
@@ -54,7 +60,9 @@ export function normalizeSeoConfig(raw: UserSeoConfig | undefined): BuildSeoOpti
 
   const pathBaseRaw = raw.pathBase;
   if (pathBaseRaw != null && typeof pathBaseRaw !== "string") {
-    throw new Error('[config] "seo.pathBase" must be a string when provided (for example: "/blog")');
+    throw new Error(
+      '[config] "seo.pathBase" must be a string when provided (for example: "/blog")',
+    );
   }
 
   const normalizeOptionalString = (value: unknown, key: string): string | undefined => {
@@ -69,8 +77,14 @@ export function normalizeSeoConfig(raw: UserSeoConfig | undefined): BuildSeoOpti
   };
 
   const twitterCardRaw = raw.twitterCard;
-  if (twitterCardRaw != null && twitterCardRaw !== "summary" && twitterCardRaw !== "summary_large_image") {
-    throw new Error('[config] "seo.twitterCard" must be "summary" or "summary_large_image" when provided');
+  if (
+    twitterCardRaw != null &&
+    twitterCardRaw !== "summary" &&
+    twitterCardRaw !== "summary_large_image"
+  ) {
+    throw new Error(
+      '[config] "seo.twitterCard" must be "summary" or "summary_large_image" when provided',
+    );
   }
 
   return {
@@ -89,7 +103,10 @@ export function normalizeSeoConfig(raw: UserSeoConfig | undefined): BuildSeoOpti
   };
 }
 
-export function buildCanonicalUrl(route: string, seo: Pick<BuildSeoOptions, "siteUrl" | "pathBase">): string {
+export function buildCanonicalUrl(
+  route: string,
+  seo: Pick<BuildSeoOptions, "siteUrl" | "pathBase">,
+): string {
   const normalizedRoute = normalizeRoute(route);
   const pathname = `${seo.pathBase}${normalizedRoute}`.replace(/\/+/g, "/") || "/";
   return new URL(pathname, `${seo.siteUrl}/`).toString();

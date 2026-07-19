@@ -4,7 +4,9 @@ import { waitForAppReady, waitForTreeReady } from "./utils/app-ready";
 const TREE_MODULE_PATTERN = /\/assets\/tree\.[a-f0-9]{12}\.js(?:\?.*)?$/;
 
 test.describe("deferred tree runtime", () => {
-  test("tree chunk 실패가 SSR content를 막지 않고 fallback 탐색과 재시도를 제공한다", async ({ page }) => {
+  test("tree chunk 실패가 SSR content를 막지 않고 fallback 탐색과 재시도를 제공한다", async ({
+    page,
+  }) => {
     let treeRequestCount = 0;
     await page.route(TREE_MODULE_PATTERN, async (route) => {
       treeRequestCount += 1;
@@ -29,8 +31,9 @@ test.describe("deferred tree runtime", () => {
         appReady: mark("eiam-app-ready"),
         firstPaintOpportunity: mark("eiam-first-content-paint-opportunity"),
         firstContentfulPaint:
-          performance.getEntriesByType("paint").find((entry) => entry.name === "first-contentful-paint")
-            ?.startTime ?? -1,
+          performance
+            .getEntriesByType("paint")
+            .find((entry) => entry.name === "first-contentful-paint")?.startTime ?? -1,
         treeLoadStart: mark("eiam-tree-load-start"),
       };
     });
@@ -56,7 +59,9 @@ test.describe("deferred tree runtime", () => {
     await expect(page.locator("#tree-root file-tree-container")).toBeVisible();
   });
 
-  test("compact layout은 sidebar interaction 전에는 tree chunk를 요청하지 않는다", async ({ page }) => {
+  test("compact layout은 sidebar interaction 전에는 tree chunk를 요청하지 않는다", async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     let treeRequestCount = 0;
     page.on("request", (request) => {

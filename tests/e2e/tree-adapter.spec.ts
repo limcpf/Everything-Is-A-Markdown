@@ -87,7 +87,9 @@ test.describe("Trees sidebar adapter", () => {
       "engineering/guides/BC-VO-02 Setup Guide",
     ]);
     expect(adapter.treePathToDocId.get("Recent/BC-VO-02 Setup Guide")).toBe("doc-a");
-    expect(adapter.treePathToRoute.get("engineering/guides/BC-VO-02 Setup Guide")).toBe("/BC-VO-02/");
+    expect(adapter.treePathToRoute.get("engineering/guides/BC-VO-02 Setup Guide")).toBe(
+      "/BC-VO-02/",
+    );
     expect(adapter.docIdToTreePaths.get("doc-a")).toEqual([
       "PINNED/BC-VO-02 Setup Guide",
       "Recent/BC-VO-02 Setup Guide",

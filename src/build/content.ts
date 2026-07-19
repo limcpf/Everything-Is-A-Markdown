@@ -35,7 +35,8 @@ export async function renderDocuments(
     const previous = previousDocs[doc.id];
     const contentRelPath = `content/${toContentFileName(doc.id)}`;
     const outputPath = path.join(options.outDir, "content", toContentFileName(doc.id));
-    const unchanged = previous?.hash === sourceHash && outputContext.previousHashes[contentRelPath] === sourceHash;
+    const unchanged =
+      previous?.hash === sourceHash && outputContext.previousHashes[contentRelPath] === sourceHash;
 
     nextDocs[doc.id] = { hash: sourceHash, route: doc.route, relPath: doc.relPath };
     outputContext.nextHashes[contentRelPath] = sourceHash;

@@ -127,7 +127,14 @@ test.describe("pathBase 정식 지원", () => {
         'export default { seo: { siteUrl: "https://example.com", pathBase: " docs/guides/ " } };',
         "utf8",
       );
-      const nestedBuild = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
+      const nestedBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        outDir,
+      ]);
       expect(nestedBuild.status, nestedBuild.output).toBe(0);
       const nestedNotFoundHtml = fs.readFileSync(path.join(outDir, "404.html"), "utf8");
       expect(nestedNotFoundHtml).toContain('<a href="/docs/guides/" class="not-found-link">');
@@ -137,7 +144,14 @@ test.describe("pathBase 정식 지원", () => {
         'export default { seo: { siteUrl: "https://example.com", pathBase: " docs guides/한글/ " } };',
         "utf8",
       );
-      const encodedBuild = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
+      const encodedBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        outDir,
+      ]);
       expect(encodedBuild.status, encodedBuild.output).toBe(0);
       const encodedIndexHtml = fs.readFileSync(path.join(outDir, "index.html"), "utf8");
       expect(encodedIndexHtml).toContain(
@@ -194,18 +208,26 @@ test.describe("pathBase 정식 지원", () => {
       await waitForTreeReady(page);
 
       const setupRow = page
-        .locator('#tree-root [data-type="item"][data-item-type="file"][data-item-path="Recent/BC-VO-02 Setup Guide"]')
+        .locator(
+          '#tree-root [data-type="item"][data-item-type="file"][data-item-path="Recent/BC-VO-02 Setup Guide"]',
+        )
         .first();
       await expect(setupRow).toBeVisible();
       await expect(setupRow).toContainText("NEW");
       await setupRow.click({ button: "right" });
-      await expect(page.locator("#tree-root .tree-context-link").first()).toHaveAttribute("href", "/blog/BC-VO-02/");
+      await expect(page.locator("#tree-root .tree-context-link").first()).toHaveAttribute(
+        "href",
+        "/blog/BC-VO-02/",
+      );
       await page.keyboard.press("Escape");
       await setupRow.click();
 
       await expect(page).toHaveURL(/\/blog\/BC-VO-02\/$/);
       await expect(page.locator("#viewer-title")).toHaveText("Setup Guide");
-      await expect(page.locator("#viewer-nav .nav-link-next")).toHaveAttribute("href", "/blog/BC-XSS-01/");
+      await expect(page.locator("#viewer-nav .nav-link-next")).toHaveAttribute(
+        "href",
+        "/blog/BC-XSS-01/",
+      );
 
       const notFoundResponse = await page.goto(`${server.baseUrl}/blog/missing-document/`);
       expect(notFoundResponse?.status()).toBe(404);

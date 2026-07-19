@@ -52,7 +52,9 @@ function normalizeMermaidCdnUrl(value: unknown): string {
   }
 
   if (normalized.length > MERMAID_URL_MAX_LENGTH || !MERMAID_CDN_URL_PATTERN.test(normalized)) {
-    console.warn(`[config] invalid mermaid.cdnUrl: ${JSON.stringify(value)}. fallback to default ${JSON.stringify(DEFAULTS.mermaid.cdnUrl)}.`);
+    console.warn(
+      `[config] invalid mermaid.cdnUrl: ${JSON.stringify(value)}. fallback to default ${JSON.stringify(DEFAULTS.mermaid.cdnUrl)}.`,
+    );
     return DEFAULTS.mermaid.cdnUrl;
   }
 
@@ -66,7 +68,9 @@ function normalizeMermaidTheme(value: unknown): string {
 
   const normalized = value.trim();
   if (!MERMAID_THEME_PATTERN.test(normalized)) {
-    console.warn(`[config] invalid mermaid.theme: ${JSON.stringify(value)}. fallback to default ${JSON.stringify(DEFAULTS.mermaid.theme)}.`);
+    console.warn(
+      `[config] invalid mermaid.theme: ${JSON.stringify(value)}. fallback to default ${JSON.stringify(DEFAULTS.mermaid.theme)}.`,
+    );
     return DEFAULTS.mermaid.theme;
   }
 
@@ -182,7 +186,10 @@ function normalizePinnedMenu(raw: unknown, errorPrefix = "[config]"): PinnedMenu
   const sourceDirRaw = menu.sourceDir;
   const categoryPathRaw = menu.categoryPath;
   const labelRaw = menu.label;
-  const normalizeMenuPath = (value: unknown, fieldName: "sourceDir" | "categoryPath"): string | undefined => {
+  const normalizeMenuPath = (
+    value: unknown,
+    fieldName: "sourceDir" | "categoryPath",
+  ): string | undefined => {
     if (value == null) {
       return undefined;
     }
@@ -215,9 +222,7 @@ function normalizePinnedMenu(raw: unknown, errorPrefix = "[config]"): PinnedMenu
   }
 
   const label =
-    typeof labelRaw === "string" && labelRaw.trim().length > 0
-      ? labelRaw.trim()
-      : "NOTICE";
+    typeof labelRaw === "string" && labelRaw.trim().length > 0 ? labelRaw.trim() : "NOTICE";
 
   return {
     label,
@@ -283,7 +288,9 @@ export async function loadPinnedMenuConfig(
   try {
     parsed = await file.json();
   } catch (error) {
-    throw new Error(`[menu-config] failed to parse JSON: ${(error as Error).message}`);
+    throw new Error(`[menu-config] failed to parse JSON: ${(error as Error).message}`, {
+      cause: error,
+    });
   }
 
   if (typeof parsed !== "object" || parsed == null) {
@@ -294,7 +301,12 @@ export async function loadPinnedMenuConfig(
 }
 
 function ensureIntegerOption(value: unknown, optionLabel: string, min: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value < min) {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    !Number.isInteger(value) ||
+    value < min
+  ) {
     throw new Error(`[config] "${optionLabel}" must be an integer >= ${min}`);
   }
   return value;

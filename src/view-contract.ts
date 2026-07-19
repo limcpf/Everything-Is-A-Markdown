@@ -56,7 +56,7 @@ function toSafeUrlPath(input: string): string {
 }
 
 export function normalizeViewPathname(pathname: unknown): string {
-  let normalized = "/";
+  let normalized: string;
   try {
     normalized = decodeURIComponent(String(pathname || "/"));
   } catch {
@@ -138,8 +138,9 @@ function normalizeViewDateInput(value: unknown): string | null {
   }
   const normalized = value.trim();
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(normalized);
-  const offsetlessDateTime =
-    /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(normalized);
+  const offsetlessDateTime = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(
+    normalized,
+  );
   return dateOnly
     ? `${normalized}T00:00:00Z`
     : offsetlessDateTime
@@ -205,9 +206,7 @@ export function normalizeViewTags(tags: unknown): string[] {
   if (!Array.isArray(tags)) {
     return [];
   }
-  return tags
-    .map((tag) => String(tag).trim().replace(/^#+/, ""))
-    .filter(Boolean);
+  return tags.map((tag) => String(tag).trim().replace(/^#+/, "")).filter(Boolean);
 }
 
 function normalizeText(value: unknown, fallback = ""): string {
@@ -215,7 +214,10 @@ function normalizeText(value: unknown, fallback = ""): string {
   return normalized || fallback;
 }
 
-function createLinkModel(doc: Pick<ViewDocContract, "route" | "title">, pathBase: unknown): ViewLinkModel {
+function createLinkModel(
+  doc: Pick<ViewDocContract, "route" | "title">,
+  pathBase: unknown,
+): ViewLinkModel {
   const route = normalizeViewRoute(doc.route);
   return {
     route,

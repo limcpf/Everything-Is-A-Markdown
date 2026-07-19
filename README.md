@@ -602,11 +602,18 @@ Scripts from `package.json`:
 
 ```bash
 bun install
+bun run lint:source
+bun run format:check
 bun run typecheck
+bun run test:unit
 bun run build -- --vault ./test-vault --out ./dist
 bun run dev -- --vault ./test-vault --out ./dist
 bun run test:e2e
 ```
+
+The fast unit suite in `tests/unit/` covers deterministic transformations and safety contracts: CLI parsing, paths and routes, cache guards, manifest adaptation, and rendered HTML sanitization. Changes or regressions in these areas should add or update a unit test; Playwright remains focused on browser and full-build integration.
+
+CI does not enforce a numeric coverage threshold yet. `bun run test:unit:coverage` provides local visibility using Bun's built-in coverage, so coverage can improve without adding another test framework or turning line count into the goal.
 
 E2E coverage in `tests/e2e/` includes:
 

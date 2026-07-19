@@ -25,7 +25,12 @@ const options: BuildOptions = {
   seo: null,
 };
 
-function createDoc(id: string, title: string, route: string, wikiTargets: string[] = []): DocRecord {
+function createDoc(
+  id: string,
+  title: string,
+  route: string,
+  wikiTargets: string[] = [],
+): DocRecord {
   return {
     sourcePath: `/vault/${id}.md`,
     relPath: `${id}.md`,

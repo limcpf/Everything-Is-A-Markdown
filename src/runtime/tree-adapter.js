@@ -1,5 +1,6 @@
 const DIRECTORY_SUFFIX = "/";
 const FILE_EXTENSION = ".md";
+// eslint-disable-next-line no-control-regex -- Tree path segments must strip ASCII controls.
 const CONTROL_CHARS_RE = /[\u0000-\u001f\u007f]/g;
 const PATH_SEPARATOR_RE = /[\\/]+/g;
 const WHITESPACE_RE = /\s+/g;
@@ -190,15 +191,18 @@ export function buildTreesAdapterInput(treeNodes, docs = []) {
       }
 
       const doc = docById.get(node.id);
-      const treePath = registerPath(joinTreePath(parentPath, formatTreesFileBasename(node, doc), false), {
-        branch: node.branch ?? doc?.branch ?? null,
-        docId: node.id,
-        isNew: (doc?.isNew ?? node.isNew) === true,
-        kind: "file",
-        prefix: node.prefix ?? doc?.prefix ?? "",
-        route: node.route ?? doc?.route ?? "",
-        title: node.title ?? doc?.title ?? "",
-      });
+      const treePath = registerPath(
+        joinTreePath(parentPath, formatTreesFileBasename(node, doc), false),
+        {
+          branch: node.branch ?? doc?.branch ?? null,
+          docId: node.id,
+          isNew: (doc?.isNew ?? node.isNew) === true,
+          kind: "file",
+          prefix: node.prefix ?? doc?.prefix ?? "",
+          route: node.route ?? doc?.route ?? "",
+          title: node.title ?? doc?.title ?? "",
+        },
+      );
       registerDocPath(treePath, node, doc);
     }
   };

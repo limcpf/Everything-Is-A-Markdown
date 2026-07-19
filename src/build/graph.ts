@@ -1,4 +1,3 @@
-import path from "node:path";
 import type { BuildOptions, DocRecord, FileNode, FolderNode, Manifest, TreeNode } from "../types";
 import { filterViewDocsByBranch, pickViewHomeRoute } from "../view-contract";
 import type { DocumentGraphResult, WikiLookup } from "./contracts";

@@ -71,6 +71,21 @@ bun run lint:md:publish -- --out-dir ./reports --strict
 - `--vault <path>`: Markdown 루트 디렉터리 재지정 (선택)
 - `--exclude <glob>`: 제외 패턴 추가 (반복 가능)
 
+## 개발 품질 검사
+
+브라우저 설치나 E2E 실행 전에 빠른 source gate를 로컬에서 그대로 실행할 수 있습니다.
+
+```bash
+bun run lint:source
+bun run format:check
+bun run typecheck
+bun run test:unit
+```
+
+`tests/unit/`은 CLI 파싱, 경로와 라우트, cache 안전 가드, manifest 변환, 렌더된 HTML sanitize처럼 결정적인 변환과 안전 계약을 다룹니다. 이 영역의 동작을 바꾸거나 회귀를 수정할 때는 unit test도 함께 추가하거나 갱신하고, Playwright는 브라우저 및 전체 build 통합 동작에 집중합니다.
+
+현재 CI는 숫자 coverage 임계값을 강제하지 않습니다. 추가 test framework 없이 Bun 내장 coverage를 확인하려면 `bun run test:unit:coverage`를 사용합니다.
+
 ## 설정 파일 (`blog.config.ts`)
 
 SEO/UI/정적 파일 설정은 config 파일에서 관리할 수 있습니다.

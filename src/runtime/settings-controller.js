@@ -161,9 +161,8 @@ export function createSettingsController(options = {}) {
         return;
       }
 
-      const savedTogglePosition = storage.getItem(MENU_TOGGLE_POSITION_KEY) === "left"
-        ? "left"
-        : "right";
+      const savedTogglePosition =
+        storage.getItem(MENU_TOGGLE_POSITION_KEY) === "left" ? "left" : "right";
       themeMode = normalizeThemeMode(storage.getItem(THEME_MODE_KEY));
       applyMenuTogglePosition(savedTogglePosition);
       applyTheme();

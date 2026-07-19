@@ -323,11 +323,7 @@ export function createSidebarLayoutController(options = {}) {
       close();
       return;
     }
-    if (
-      event.key !== "Tab" ||
-      !isCompact() ||
-      !appRoot?.classList?.contains("sidebar-open")
-    ) {
+    if (event.key !== "Tab" || !isCompact() || !appRoot?.classList?.contains("sidebar-open")) {
       return;
     }
 
@@ -339,7 +335,8 @@ export function createSidebarLayoutController(options = {}) {
     const first = focusables[0];
     const last = focusables[focusables.length - 1];
     const activeElement = documentRef.activeElement;
-    const activeInsideSidebar = activeElement instanceof windowRef.Node && sidebar?.contains(activeElement);
+    const activeInsideSidebar =
+      activeElement instanceof windowRef.Node && sidebar?.contains(activeElement);
     if (!activeInsideSidebar) {
       event.preventDefault();
       first.focus();

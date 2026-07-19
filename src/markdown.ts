@@ -132,6 +132,11 @@ const SAFE_HTML_OPTIONS: sanitizeHtml.IOptions = {
     },
   },
 };
+
+export function sanitizeMarkdownHtml(html: string, allowUnsafeHtml = false): string {
+  return allowUnsafeHtml ? html : sanitizeHtml(html, SAFE_HTML_OPTIONS);
+}
+
 type RenderRule = NonNullable<MarkdownIt["renderer"]["rules"]["fence"]>;
 type RenderRuleArgs = Parameters<RenderRule>;
 type RuleTokens = RenderRuleArgs[0];
@@ -143,7 +148,7 @@ type ImageRule = NonNullable<MarkdownIt["renderer"]["rules"]["image"]>;
 type ParagraphRule = NonNullable<MarkdownIt["renderer"]["rules"]["paragraph_open"]>;
 
 function escapeMarkdownLabel(input: string): string {
-  return input.replace(/[\[\]]/g, "");
+  return input.replaceAll("[", "").replaceAll("]", "");
 }
 
 function escapeHtmlText(input: string): string {
@@ -231,7 +236,9 @@ function isMissingShikiModule(error: unknown, specifier: string): boolean {
   const moduleSubpath = `./${specifier.slice(specifier.lastIndexOf("/") + 1)}`;
   const isMissingCode = code === "ERR_MODULE_NOT_FOUND" || code === "ERR_PACKAGE_PATH_NOT_EXPORTED";
   const matchesSpecifier =
-    message.includes(specifier) || message.includes(`'${moduleSubpath}'`) || message.includes(`"${moduleSubpath}"`);
+    message.includes(specifier) ||
+    message.includes(`'${moduleSubpath}'`) ||
+    message.includes(`"${moduleSubpath}"`);
   return isMissingCode && matchesSpecifier;
 }
 
@@ -249,7 +256,9 @@ async function loadShikiTheme(theme: string): Promise<typeof githubDarkTheme> {
     return themeModule.default;
   } catch (error) {
     if (isMissingShikiModule(error, specifier)) {
-      throw new Error(`[markdown] Unknown Shiki theme: ${JSON.stringify(theme)}.`);
+      throw new Error(`[markdown] Unknown Shiki theme: ${JSON.stringify(theme)}.`, {
+        cause: error,
+      });
     }
     throw error;
   }
@@ -321,7 +330,11 @@ function isStandaloneImageParagraph(tokens: RuleTokens, idx: number): boolean {
   const inline = tokens[idx + 1];
   const close = tokens[idx + 2];
 
-  if (open?.type !== "paragraph_open" || inline?.type !== "inline" || close?.type !== "paragraph_close") {
+  if (
+    open?.type !== "paragraph_open" ||
+    inline?.type !== "inline" ||
+    close?.type !== "paragraph_close"
+  ) {
     return false;
   }
 
@@ -332,11 +345,7 @@ function isStandaloneImageParagraph(tokens: RuleTokens, idx: number): boolean {
   return children.length === 1 && children[0]?.type === "image";
 }
 
-function createMarkdownIt(
-  highlighter: HighlighterCore,
-  theme: string,
-  gfm: boolean,
-): MarkdownIt {
+function createMarkdownIt(highlighter: HighlighterCore, theme: string, gfm: boolean): MarkdownIt {
   const md = new MarkdownIt({
     // Parse raw HTML so the configured sanitizer can apply one policy to generated and authored markup.
     html: true,
@@ -349,7 +358,13 @@ function createMarkdownIt(
     md.disable(["table", "strikethrough"]);
   }
 
-  const fenceRule: RenderRule = (tokens: RuleTokens, idx: number, _options: RuleOptions, _env: RuleEnv, _self: RuleSelf) => {
+  const fenceRule: RenderRule = (
+    tokens: RuleTokens,
+    idx: number,
+    _options: RuleOptions,
+    _env: RuleEnv,
+    _self: RuleSelf,
+  ) => {
     const token = tokens[idx];
     const info = token.info.trim();
     const parts = info.split(/\s+/);
@@ -490,14 +505,19 @@ export async function createMarkdownRenderer(options: BuildOptions): Promise<Mar
 
   return {
     async render(markdown: string, resolver: WikiResolver): Promise<RenderResult> {
-      const { markdown: preprocessed, warnings } = preprocessMarkdown(markdown, resolver, options.imagePolicy, options.wikilinks);
+      const { markdown: preprocessed, warnings } = preprocessMarkdown(
+        markdown,
+        resolver,
+        options.imagePolicy,
+        options.wikilinks,
+      );
       const languageLoad = languageLoadQueue.then(() =>
         loadFenceLanguages(highlighter, loadedLanguages, unavailableLanguages, preprocessed),
       );
       languageLoadQueue = languageLoad.catch(() => undefined);
       await languageLoad;
       const renderedHtml = md.render(preprocessed);
-      const html = options.allowUnsafeHtml ? renderedHtml : sanitizeHtml(renderedHtml, SAFE_HTML_OPTIONS);
+      const html = sanitizeMarkdownHtml(renderedHtml, options.allowUnsafeHtml);
       return { html, warnings };
     },
   };

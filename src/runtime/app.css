@@ -142,7 +142,9 @@ body {
 body {
   background: var(--latte-base);
   color: var(--latte-text);
-  font-family: "Pretendard Variable", "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+  font-family:
+    "Pretendard Variable", "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic",
+    "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
@@ -417,7 +419,12 @@ a:hover {
   cursor: pointer;
   white-space: nowrap;
   box-shadow: 0 1px 0 var(--elevated-inset-shadow) inset;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease;
 }
 
 .branch-pill:hover {
@@ -436,7 +443,9 @@ a:hover {
   border-color: rgba(136, 57, 239, 0.45);
   background: rgba(136, 57, 239, 0.14);
   color: var(--accent-strong);
-  box-shadow: 0 1px 0 var(--elevated-inset-shadow) inset, 0 2px 6px rgba(136, 57, 239, 0.22);
+  box-shadow:
+    0 1px 0 var(--elevated-inset-shadow) inset,
+    0 2px 6px rgba(136, 57, 239, 0.22);
 }
 
 /* Tree search */
@@ -458,7 +467,10 @@ a:hover {
   border-radius: 8px;
   background: var(--elevated-surface);
   box-shadow: 0 1px 0 var(--elevated-inset-shadow) inset;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .sidebar-search-box:focus-within {
@@ -650,7 +662,11 @@ a:hover {
   --trees-focus-ring-offset-override: 1px;
   --trees-selected-bg-override: var(--active-surface-bg);
   --trees-selected-fg-override: var(--latte-text);
-  --trees-selected-focused-border-color-override: color-mix(in srgb, var(--latte-mauve) 36%, transparent);
+  --trees-selected-focused-border-color-override: color-mix(
+    in srgb,
+    var(--latte-mauve) 36%,
+    transparent
+  );
   --trees-font-family-override: inherit;
   --trees-font-size-override: 0.9rem;
   --trees-font-weight-regular-override: 450;
@@ -712,12 +728,19 @@ a:hover {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .status-encoding {
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -824,7 +847,10 @@ a:hover {
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .settings-segment-option input:checked + span {
@@ -905,7 +931,9 @@ body.mobile-toggle-left .mobile-menu-toggle {
   align-items: center;
   gap: 4px;
   font-size: 0.85rem;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
   color: var(--latte-overlay0);
   margin-bottom: 24px;
   flex-wrap: nowrap;
@@ -971,7 +999,9 @@ body.mobile-toggle-left .mobile-menu-toggle {
   gap: 16px;
   min-height: 22px;
   font-size: 0.85rem;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
   color: var(--latte-subtext1);
 }
 
@@ -1110,7 +1140,9 @@ body.mobile-toggle-left .mobile-menu-toggle {
   border: 1px solid var(--latte-surface0);
   border-radius: 4px;
   padding: 2px 6px;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
   font-size: 0.88em;
   color: var(--latte-mauve);
 }
@@ -1145,13 +1177,21 @@ body.mobile-toggle-left .mobile-menu-toggle {
   border-radius: 50%;
 }
 
-.dot-red { background: var(--latte-red); }
-.dot-yellow { background: var(--latte-yellow); }
-.dot-green { background: var(--latte-green); }
+.dot-red {
+  background: var(--latte-red);
+}
+.dot-yellow {
+  background: var(--latte-yellow);
+}
+.dot-green {
+  background: var(--latte-green);
+}
 
 .code-filename {
   flex: 1;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
   font-size: 0.75rem;
   color: #aeb7c2;
   text-align: center;
@@ -1196,7 +1236,9 @@ body.mobile-toggle-left .mobile-menu-toggle {
   display: block;
   padding: 18px 20px;
   overflow-x: auto;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
   font-size: 0.95rem;
   font-weight: 500;
   line-height: 1.72;
@@ -1242,7 +1284,9 @@ body.mobile-toggle-left .mobile-menu-toggle {
   box-shadow: none;
   background: transparent !important;
   color: var(--latte-subtext1);
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
   font-size: 0.9rem;
   line-height: 1.6;
   white-space: pre-wrap;
@@ -1302,7 +1346,9 @@ body.mobile-toggle-left .mobile-menu-toggle {
   display: block;
   padding: 16px;
   overflow-x: auto;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
   font-size: 0.875rem;
   line-height: 1.6;
 }
@@ -1470,7 +1516,9 @@ body.mobile-toggle-left .mobile-menu-toggle {
   border: 1px solid var(--latte-surface0);
   border-radius: 8px;
   background: var(--active-surface-bg);
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .backlink-link:hover {
@@ -1622,7 +1670,9 @@ body.mobile-toggle-left .mobile-menu-toggle {
     border-bottom: 0;
     box-shadow: var(--sidebar-mobile-shadow);
     transform: translateX(-102%);
-    transition: transform 0.2s ease, visibility 0.2s step-end;
+    transition:
+      transform 0.2s ease,
+      visibility 0.2s step-end;
     visibility: hidden;
     pointer-events: none;
     z-index: 100;
@@ -1632,7 +1682,9 @@ body.mobile-toggle-left .mobile-menu-toggle {
     transform: translateX(0);
     visibility: visible;
     pointer-events: auto;
-    transition: transform 0.2s ease, visibility 0s;
+    transition:
+      transform 0.2s ease,
+      visibility 0s;
   }
 
   .mobile-menu-toggle {

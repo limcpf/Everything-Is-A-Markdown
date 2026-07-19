@@ -186,7 +186,10 @@ function pickDocPrefix(frontmatter: Record<string, unknown>, raw: string): strin
   return undefined;
 }
 
-function pickDocCategoryPath(frontmatter: Record<string, unknown>, raw: string): string | undefined {
+function pickDocCategoryPath(
+  frontmatter: Record<string, unknown>,
+  raw: string,
+): string | undefined {
   const literal = normalizeCategoryPath(extractFrontmatterScalar(raw, "category_path"));
   if (literal) {
     return literal;
@@ -239,7 +242,9 @@ function ensureUniqueRoutes(docs: DocRecord[]): void {
   }
 
   const used = new Set<string>();
-  const sorted = [...docs].sort((left, right) => left.relNoExt.localeCompare(right.relNoExt, "ko-KR"));
+  const sorted = [...docs].sort((left, right) =>
+    left.relNoExt.localeCompare(right.relNoExt, "ko-KR"),
+  );
 
   for (const doc of sorted) {
     const baseRoute = doc.route;
@@ -318,12 +323,18 @@ function toCachedSourceEntry(
     rawHash,
     publish: parsed.data.publish === true,
     draft: parsed.data.draft === true,
-    title: typeof parsed.data.title === "string" && parsed.data.title.trim().length > 0 ? parsed.data.title.trim() : undefined,
+    title:
+      typeof parsed.data.title === "string" && parsed.data.title.trim().length > 0
+        ? parsed.data.title.trim()
+        : undefined,
     prefix: pickDocPrefix(parsed.data as Record<string, unknown>, raw),
     categoryPath: pickDocCategoryPath(parsed.data as Record<string, unknown>, raw),
     date: pickDocDate(parsed.data as Record<string, unknown>, raw),
     updatedDate: pickDocUpdatedDate(parsed.data as Record<string, unknown>, raw),
-    description: typeof parsed.data.description === "string" ? parsed.data.description.trim() || undefined : undefined,
+    description:
+      typeof parsed.data.description === "string"
+        ? parsed.data.description.trim() || undefined
+        : undefined,
     tags: parseStringArray(parsed.data.tags),
     branch: parseBranch(parsed.data.branch),
     body: parsed.content,
@@ -331,11 +342,7 @@ function toCachedSourceEntry(
   };
 }
 
-function toDocRecord(
-  sourcePath: string,
-  relPath: string,
-  entry: CachedSourceEntry,
-): DocRecord {
+function toDocRecord(sourcePath: string, relPath: string, entry: CachedSourceEntry): DocRecord {
   const relNoExt = stripMdExt(relPath);
   const fileName = path.basename(relPath);
   const id = toDocId(relNoExt);
@@ -363,7 +370,10 @@ function toDocRecord(
   };
 }
 
-export async function readPublishedDocs(options: BuildOptions, previousSources: BuildCache["sources"]): Promise<ReadDocsResult> {
+export async function readPublishedDocs(
+  options: BuildOptions,
+  previousSources: BuildCache["sources"],
+): Promise<ReadDocsResult> {
   const isExcluded = buildExcluder(options.exclude);
   const mdFiles = await walkMarkdownFiles(options.vaultDir, options.vaultDir, isExcluded);
   const fileEntries = await Promise.all(
@@ -390,7 +400,9 @@ export async function readPublishedDocs(options: BuildOptions, previousSources: 
       try {
         parsed = matter(raw);
       } catch (error) {
-        throw new Error(`Frontmatter parse failed: ${relPath}\n${(error as Error).message}`);
+        throw new Error(`Frontmatter parse failed: ${relPath}\n${(error as Error).message}`, {
+          cause: error,
+        });
       }
 
       entry = toCachedSourceEntry(raw, rawHash, parsed);
@@ -562,7 +574,8 @@ export function buildBacklinksByDocId(
         continue;
       }
 
-      const bucket = buckets.get(targetDoc.id) ?? new Map<string, ManifestDoc["backlinks"][number]>();
+      const bucket =
+        buckets.get(targetDoc.id) ?? new Map<string, ManifestDoc["backlinks"][number]>();
       bucket.set(doc.id, {
         id: doc.id,
         route: doc.route,
