@@ -99,10 +99,10 @@ test.describe("local SVG icon system", () => {
     }
 
     const copyButton = page.locator(".code-copy").first();
-    await expect(copyButton).toHaveAccessibleName("Copy code");
+    await expect(copyButton).toHaveAccessibleName("코드 복사");
     await expect(copyButton.locator("use")).toHaveAttribute("href", "#eiam-icon-copy");
     await copyButton.click();
-    await expect(copyButton).toHaveAccessibleName("Copied");
+    await expect(copyButton).toHaveAccessibleName("복사됨");
     await expect(copyButton.locator("use")).toHaveAttribute("href", "#eiam-icon-check");
     await expect(copyButton).toHaveClass(/copied/);
   });

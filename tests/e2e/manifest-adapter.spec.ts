@@ -24,6 +24,7 @@ test.describe("manifest schema adapter", () => {
     });
 
     expect(normalized).not.toBeNull();
+    expect(normalized?.locale).toBe("ko");
     expect(getManifestDocs(normalized).map((doc) => doc.route)).toEqual(["/B/", "/A/"]);
   });
 
@@ -87,5 +88,26 @@ test.describe("manifest schema adapter", () => {
         docsById: {},
       }),
     ).toBeNull();
+  });
+
+  test("locale은 지원값을 유지하고 이전 payload에는 한국어 fallback을 적용한다", () => {
+    expect(
+      normalizeManifestPayload({
+        ...envelope,
+        schemaVersion: 2,
+        locale: "en",
+        docIds: [],
+        docsById: {},
+      })?.locale,
+    ).toBe("en");
+    expect(
+      normalizeManifestPayload({
+        ...envelope,
+        schemaVersion: 2,
+        locale: "fr",
+        docIds: [],
+        docsById: {},
+      })?.locale,
+    ).toBe("ko");
   });
 });

@@ -11,11 +11,11 @@ test.describe("purposeful sidebar chrome", () => {
     await waitForTreeReady(page);
     const manifest = await getInitialManifest(page);
 
-    const branchSelect = page.getByRole("combobox", { name: "Branch" });
+    const branchSelect = page.getByRole("combobox", { name: "브랜치" });
     await expect(branchSelect).toBeVisible();
     await expect(branchSelect).toHaveValue(manifest.defaultBranch);
     await expect(branchSelect.locator("option")).toHaveCount(2);
-    await expect(branchSelect.locator("option").first()).toContainText("(default)");
+    await expect(branchSelect.locator("option").first()).toContainText("(기본값)");
 
     for (const removedChrome of [
       ".icon-terminal",

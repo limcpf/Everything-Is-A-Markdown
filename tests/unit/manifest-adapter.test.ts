@@ -49,6 +49,7 @@ describe("manifest transforms", () => {
     });
 
     expect(manifest).not.toBeNull();
+    expect(manifest?.locale).toBe("ko");
     expect(getManifestDocs(manifest).map((doc) => doc.id)).toEqual(["b", "a"]);
   });
 
@@ -77,6 +78,24 @@ describe("manifest transforms", () => {
     expect(getRuntimeManifestDocs(manifest, Date.parse("2026-07-19T00:00:00Z"))[0]?.isNew).toBe(
       true,
     );
+  });
+
+  test("preserves supported locales and deterministically falls back for legacy values", () => {
+    const current = normalizeManifestPayload({
+      ...envelope,
+      locale: "en",
+      docIds: [],
+      docsById: {},
+    });
+    const unsupported = normalizeManifestPayload({
+      ...envelope,
+      locale: "fr",
+      docIds: [],
+      docsById: {},
+    });
+
+    expect(current?.locale).toBe("en");
+    expect(unsupported?.locale).toBe("ko");
   });
 
   test("rejects dangling, duplicate, and unsupported document indexes", () => {

@@ -1,5 +1,6 @@
 import type { BuildOptions, DocRecord, FileNode, FolderNode, Manifest, TreeNode } from "../types";
 import { DEFAULT_BRANCH } from "../defaults";
+import { getUiMessages } from "../i18n";
 import { filterViewDocsByBranch, pickViewHomeRoute } from "../view-contract";
 import type { DocumentGraphResult, WikiLookup } from "./contracts";
 import { buildBacklinksByDocId, createWikiLookup } from "./source";
@@ -104,6 +105,7 @@ function buildPinnedMenuFolder(docs: DocRecord[], options: BuildOptions): Folder
 }
 
 function buildTree(docs: DocRecord[], options: BuildOptions): TreeNode[] {
+  const messages = getUiMessages(options.locale);
   const root: FolderNode = {
     type: "folder",
     name: "root",
@@ -148,7 +150,7 @@ function buildTree(docs: DocRecord[], options: BuildOptions): TreeNode[] {
 
   const recentFolder: FolderNode = {
     type: "folder",
-    name: "Recent",
+    name: messages.recentFolder,
     path: "__virtual__/recent",
     virtual: true,
     children: recentChildren,
@@ -217,6 +219,7 @@ function buildManifest(
     schemaVersion: 2,
     siteTitle: resolveSiteTitle(options),
     pathBase: options.seo?.pathBase ?? "",
+    locale: options.locale,
     defaultBranch: options.defaultBranch,
     mermaid: options.mermaid,
     layout: options.layout,

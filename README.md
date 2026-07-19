@@ -219,7 +219,7 @@ Key points:
 
 CI enforces raw and gzip budgets for the generated runtime assets. After a
 sample build, run `bun run check:size` to apply the same limits locally. The
-critical app JavaScript is limited to 45,000 raw / 15,000 gzip bytes, the
+critical app JavaScript is limited to 50,000 raw / 17,000 gzip bytes, the
 deferred tree chunk to 220,000 raw / 60,000 gzip bytes, and their combined
 payload to 260,000 raw / 78,000 gzip bytes. CSS is limited to 31,000 raw /
 7,000 gzip bytes.
@@ -259,6 +259,7 @@ export default {
     categoryPath: "announcements",
   },
   ui: {
+    locale: "ko",
     newWithinDays: 7,
     recentLimit: 5,
   },
@@ -305,6 +306,9 @@ export default {
 - `pinnedMenu`: optional virtual folder shown above `Recent`.
 - `pinnedMenu.sourceDir`: optional legacy file-path prefix matcher.
 - `pinnedMenu.categoryPath`: optional category-path prefix matcher for the sidebar virtual folder.
+- `ui.locale`: built-in UI language and emitted HTML `lang`; supports `"ko"` (default) and
+  `"en"`. Unsupported config values fail validation. Runtime payloads or partial catalogs that
+  omit a supported translation fall back to Korean deterministically.
 - `ui.newWithinDays`: threshold for NEW badge.
 - `ui.recentLimit`: number of items in `Recent`.
 - `markdown.wikilinks`: enable or disable wikilink resolution.
@@ -314,6 +318,11 @@ export default {
 - `markdown.highlight.theme`: Shiki theme.
 - `markdown.mermaid.*`: Mermaid runtime settings.
 - `seo.*`: canonical URL, social metadata, sitemap, robots, and path-base behavior.
+
+`ui.locale` controls application copy and accessibility names. `seo.locale` remains an independent
+Open Graph locale such as `"en_US"`; setting one does not implicitly set the other. Published date
+labels use the fixed, locale-neutral `YYYY-MM-DD HH:mm` format in UTC so server-rendered and client
+rendered chrome remain byte-identical.
 
 Config modules are treated as untrusted runtime input. Every supported field is validated and
 normalized before `build`, `dev`, or `clean` can create, modify, or remove output/cache paths. An

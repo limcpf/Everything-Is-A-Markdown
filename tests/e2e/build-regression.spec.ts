@@ -364,6 +364,7 @@ cached code
         cache.sources["icon-cache.md"].rawHash,
         "/CACHE-ICON/",
         "github-dark",
+        "ko",
         "omit-local",
         "wikilinks-on",
         "safe-html-v1",

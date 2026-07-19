@@ -15,6 +15,7 @@ function buildOptions(shikiTheme = "github-dark"): BuildOptions {
     outDir: "dist",
     exclude: [],
     staticPaths: [],
+    locale: "ko",
     newWithinDays: 7,
     recentLimit: 5,
     defaultBranch: "dev",

@@ -1,3 +1,5 @@
+import { DEFAULT_UI_LOCALE } from "./i18n";
+
 export interface RuntimeLayoutConfig {
   compactBreakpointPx: number;
   desktopSidebarDefaultPx: number;
@@ -32,6 +34,7 @@ export const DEFAULT_RUNTIME_LAYOUT: Readonly<RuntimeLayoutConfig> = Object.free
 export const DEFAULT_RUNTIME_CONFIG = Object.freeze({
   defaultBranch: DEFAULT_BRANCH,
   siteTitle: DEFAULT_SITE_TITLE,
+  locale: DEFAULT_UI_LOCALE,
   mermaid: DEFAULT_MERMAID_CONFIG,
   layout: DEFAULT_RUNTIME_LAYOUT,
 });

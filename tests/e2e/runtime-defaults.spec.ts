@@ -9,6 +9,7 @@ import {
   DEFAULT_RUNTIME_LAYOUT,
   DEFAULT_SITE_TITLE,
 } from "../../src/defaults";
+import { DEFAULT_UI_LOCALE } from "../../src/i18n";
 import { resolveMermaidConfig } from "../../src/runtime/mermaid-controller.js";
 import { createNavigationState } from "../../src/runtime/navigation-state.js";
 import { resolveSiteTitle } from "../../src/runtime/runtime-bootstrap.js";
@@ -91,6 +92,7 @@ test("default와 custom config가 emitted runtime defaults를 같은 경로로 �
     repoRoot,
     `export default {
   defaultBranch: " MAIN ",
+  ui: { locale: "en" },
   seo: { siteName: "Custom Notes" },
   markdown: {
     mermaid: {
@@ -105,12 +107,14 @@ test("default와 custom config가 emitted runtime defaults를 같은 경로로 �
 
   expect(defaults.manifest).toMatchObject({
     defaultBranch: DEFAULT_BRANCH,
+    locale: DEFAULT_UI_LOCALE,
     siteTitle: DEFAULT_SITE_TITLE,
     mermaid: DEFAULT_MERMAID_CONFIG,
     layout: DEFAULT_RUNTIME_LAYOUT,
   });
   expect(custom.manifest).toMatchObject({
     defaultBranch: "main",
+    locale: "en",
     siteTitle: "Custom Notes",
     mermaid: {
       enabled: false,
@@ -134,8 +138,11 @@ test("default와 custom config가 emitted runtime defaults를 같은 경로로 �
   expect(clampDesktopSidebarWidth(9999, 1440, custom.manifest.layout)).toBe(750);
 
   expect(custom.indexHtml).toContain("Custom Notes");
+  expect(custom.indexHtml).toContain('<html lang="en">');
+  expect(defaults.indexHtml).toContain('<html lang="ko">');
   expect(custom.indexHtml).toContain('"name":"Custom Notes"');
   expect(custom.notFoundHtml).toContain("<title>404 - Custom Notes</title>");
+  expect(custom.notFoundHtml).toContain("The requested document could not be found.");
   expect(custom.appCss).toBe(defaults.appCss);
   expect(custom.appJs).toBe(defaults.appJs);
   expect(defaults.appCss).toContain("--desktop-sidebar-default:420px");

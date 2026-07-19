@@ -1,3 +1,5 @@
+import { normalizeUiLocale } from "../i18n.ts";
+
 const CURRENT_SCHEMA_VERSION = 2;
 
 /** @typedef {import("./contracts").RuntimeManifest} RuntimeManifest */
@@ -115,6 +117,7 @@ export function normalizeManifestPayload(value) {
     /** @type {unknown} */ ({
       ...manifest,
       schemaVersion: CURRENT_SCHEMA_VERSION,
+      locale: normalizeUiLocale(value.locale),
       ...normalizedDocs,
     })
   );
