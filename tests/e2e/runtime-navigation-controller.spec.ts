@@ -115,7 +115,12 @@ test.describe("runtime navigation contracts", () => {
       content: new ListenerElement(),
       backlinks,
       nav,
-      viewer: { scrollToCalls: 0, scrollTo() { this.scrollToCalls += 1; } },
+      viewer: {
+        scrollToCalls: 0,
+        scrollTo() {
+          this.scrollToCalls += 1;
+        },
+      },
     };
     const pushed: string[] = [];
     const announcements: string[] = [];
@@ -139,12 +144,20 @@ test.describe("runtime navigation contracts", () => {
         documentTitle: (title: string, siteTitle: string) => `${title} - ${siteTitle}`,
       },
       lifecycle: {
-        async enhanceContent() { enhanced += 1; },
-        announce(message: string) { announcements.push(message); },
+        async enhanceContent() {
+          enhanced += 1;
+        },
+        announce(message: string) {
+          announcements.push(message);
+        },
       },
       fetchContent: async (url: string) => ({ ok: true, text: async () => `content:${url}` }),
-      historyApi: { pushState: (_state: unknown, _unused: string, url: string) => pushed.push(url) },
-      setPageTitle: (value: string) => { pageTitle = value; },
+      historyApi: {
+        pushState: (_state: unknown, _unused: string, url: string) => pushed.push(url),
+      },
+      setPageTitle: (value: string) => {
+        pageTitle = value;
+      },
     });
 
     controller.setup();
@@ -168,7 +181,9 @@ test.describe("runtime navigation contracts", () => {
     expect(backlinks.removed).toEqual(["click"]);
   });
 
-  test("browser back/forward는 content controller의 popstate lifecycle을 따른다", async ({ page }) => {
+  test("browser back/forward는 content controller의 popstate lifecycle을 따른다", async ({
+    page,
+  }) => {
     await page.goto("/BC-VO-00/");
     await waitForAppReady(page);
 
@@ -184,13 +199,17 @@ test.describe("runtime navigation contracts", () => {
     });
 
     await nextLink.click();
-    await expect(page).toHaveURL(new RegExp(`${nextRoute.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+    await expect(page).toHaveURL(
+      new RegExp(`${nextRoute.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
+    );
 
     await page.goBack();
     await expect(page).toHaveURL(/\/BC-VO-00\/$/);
     await expect(page.locator("#viewer-title")).toHaveText("About");
 
     await page.goForward();
-    await expect(page).toHaveURL(new RegExp(`${nextRoute.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+    await expect(page).toHaveURL(
+      new RegExp(`${nextRoute.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
+    );
   });
 });

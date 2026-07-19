@@ -16,10 +16,14 @@ function readOption(argv: string[], name: string, fallback: string): string {
 }
 
 function runBuild(vaultDir: string, outDir: string): void {
-  const result = spawnSync("bun", ["run", "src/cli.ts", "build", "--vault", vaultDir, "--out", outDir], {
-    cwd: process.cwd(),
-    encoding: "utf8",
-  });
+  const result = spawnSync(
+    "bun",
+    ["run", "src/cli.ts", "build", "--vault", vaultDir, "--out", outDir],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    },
+  );
   if (result.status !== 0) {
     process.stderr.write(result.stdout ?? "");
     process.stderr.write(result.stderr ?? "");
@@ -30,16 +34,19 @@ function runBuild(vaultDir: string, outDir: string): void {
 function snapshotFiles(rootDir: string): Map<string, string> {
   const hashes = new Map<string, string>();
   const walk = (directory: string) => {
-    const entries = fs.readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
-      left.name.localeCompare(right.name, "en"),
-    );
+    const entries = fs
+      .readdirSync(directory, { withFileTypes: true })
+      .sort((left, right) => left.name.localeCompare(right.name, "en"));
     for (const entry of entries) {
       const absolutePath = path.join(directory, entry.name);
       if (entry.isDirectory()) {
         walk(absolutePath);
       } else if (entry.isFile()) {
         const relativePath = path.relative(rootDir, absolutePath).split(path.sep).join("/");
-        const hash = crypto.createHash("sha256").update(fs.readFileSync(absolutePath)).digest("hex");
+        const hash = crypto
+          .createHash("sha256")
+          .update(fs.readFileSync(absolutePath))
+          .digest("hex");
         hashes.set(relativePath, hash);
       }
     }

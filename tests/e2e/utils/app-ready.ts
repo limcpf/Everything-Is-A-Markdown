@@ -7,7 +7,9 @@ export async function waitForAppReady(page: Page): Promise<void> {
   let lastState: string | null = null;
 
   while (Date.now() < deadline) {
-    const state = await page.evaluate(() => document.documentElement.getAttribute("data-app-ready"));
+    const state = await page.evaluate(() =>
+      document.documentElement.getAttribute("data-app-ready"),
+    );
     lastState = state;
 
     if (state === "ready") {
@@ -15,7 +17,9 @@ export async function waitForAppReady(page: Page): Promise<void> {
     }
 
     if (state === "error") {
-      throw new Error(`앱 초기화 실패 상태를 감지했습니다. data-app-ready=error, url=${page.url()}`);
+      throw new Error(
+        `앱 초기화 실패 상태를 감지했습니다. data-app-ready=error, url=${page.url()}`,
+      );
     }
 
     await page.waitForTimeout(pollIntervalMs);
@@ -34,7 +38,9 @@ export async function waitForTreeReady(page: Page): Promise<void> {
   let lastState: string | null = null;
 
   while (Date.now() < deadline) {
-    const state = await page.evaluate(() => document.documentElement.getAttribute("data-tree-runtime"));
+    const state = await page.evaluate(() =>
+      document.documentElement.getAttribute("data-tree-runtime"),
+    );
     lastState = state;
 
     if (state === "ready") {
@@ -42,7 +48,9 @@ export async function waitForTreeReady(page: Page): Promise<void> {
     }
 
     if (state === "error") {
-      throw new Error(`트리 초기화 실패 상태를 감지했습니다. data-tree-runtime=error, url=${page.url()}`);
+      throw new Error(
+        `트리 초기화 실패 상태를 감지했습니다. data-tree-runtime=error, url=${page.url()}`,
+      );
     }
 
     await page.waitForTimeout(pollIntervalMs);

@@ -128,7 +128,11 @@ async function resolveCacheLocation(options: BuildOptions): Promise<CacheLocatio
   return location;
 }
 
-async function assertSafeOutputRoot(outDir: string, vaultDir: string, cacheRoot: string): Promise<string> {
+async function assertSafeOutputRoot(
+  outDir: string,
+  vaultDir: string,
+  cacheRoot: string,
+): Promise<string> {
   const outputRoot = await toCanonicalPath(outDir);
   const filesystemRoot = path.parse(outputRoot).root;
   const cwd = await toCanonicalPath(process.cwd());
@@ -176,7 +180,10 @@ async function writeOutputMarker(outputRoot: string, cacheNamespace: string): Pr
     version: OUTPUT_MARKER_VERSION,
     cacheNamespace,
   };
-  await Bun.write(path.join(outputRoot, OUTPUT_MARKER_FILE_NAME), `${JSON.stringify(marker, null, 2)}\n`);
+  await Bun.write(
+    path.join(outputRoot, OUTPUT_MARKER_FILE_NAME),
+    `${JSON.stringify(marker, null, 2)}\n`,
+  );
 }
 
 async function prepareOwnedOutputDirectory(
@@ -273,7 +280,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function hasExactRecordKeys(value: Record<string, unknown>, expectedKeys: string[]): boolean {
   const actualKeys = Object.keys(value).sort();
   return (
-    actualKeys.length === expectedKeys.length && actualKeys.every((key, index) => key === expectedKeys[index])
+    actualKeys.length === expectedKeys.length &&
+    actualKeys.every((key, index) => key === expectedKeys[index])
   );
 }
 
@@ -344,19 +352,31 @@ function normalizeCachedSourceEntry(value: unknown): CachedSourceEntry | null {
     return null;
   }
 
-  const mtimeMs = typeof value.mtimeMs === "number" && Number.isFinite(value.mtimeMs) ? value.mtimeMs : null;
+  const mtimeMs =
+    typeof value.mtimeMs === "number" && Number.isFinite(value.mtimeMs) ? value.mtimeMs : null;
   const size = typeof value.size === "number" && Number.isFinite(value.size) ? value.size : null;
   const rawHash = typeof value.rawHash === "string" ? value.rawHash : "";
   const publish = value.publish === true;
   const draft = value.draft === true;
-  const title = typeof value.title === "string" && value.title.trim().length > 0 ? value.title.trim() : undefined;
-  const prefix = typeof value.prefix === "string" && value.prefix.trim().length > 0 ? value.prefix.trim() : undefined;
+  const title =
+    typeof value.title === "string" && value.title.trim().length > 0
+      ? value.title.trim()
+      : undefined;
+  const prefix =
+    typeof value.prefix === "string" && value.prefix.trim().length > 0
+      ? value.prefix.trim()
+      : undefined;
   const categoryPath = normalizeCategoryPath(value.categoryPath);
-  const date = typeof value.date === "string" && value.date.trim().length > 0 ? value.date.trim() : undefined;
+  const date =
+    typeof value.date === "string" && value.date.trim().length > 0 ? value.date.trim() : undefined;
   const updatedDate =
-    typeof value.updatedDate === "string" && value.updatedDate.trim().length > 0 ? value.updatedDate.trim() : undefined;
+    typeof value.updatedDate === "string" && value.updatedDate.trim().length > 0
+      ? value.updatedDate.trim()
+      : undefined;
   const description =
-    typeof value.description === "string" && value.description.trim().length > 0 ? value.description.trim() : undefined;
+    typeof value.description === "string" && value.description.trim().length > 0
+      ? value.description.trim()
+      : undefined;
   const tags = parseStringArray(value.tags);
   const branch = parseBranch(value.branch);
   const body = typeof value.body === "string" ? value.body : null;
@@ -432,7 +452,11 @@ async function writeCache(location: CacheLocation, cache: BuildCache): Promise<v
   await Bun.write(location.cachePath, `${JSON.stringify(cache, null, 2)}\n`);
 }
 
-async function cleanRemovedOutputs(outDir: string, oldCache: BuildCache, currentDocs: DocRecord[]): Promise<void> {
+async function cleanRemovedOutputs(
+  outDir: string,
+  oldCache: BuildCache,
+  currentDocs: DocRecord[],
+): Promise<void> {
   const currentIds = new Set(currentDocs.map((doc) => doc.id));
   const currentRouteById = new Map(currentDocs.map((doc) => [doc.id, doc.route]));
 
@@ -440,7 +464,10 @@ async function cleanRemovedOutputs(outDir: string, oldCache: BuildCache, current
     if (currentIds.has(id)) {
       const currentRoute = currentRouteById.get(id);
       if (currentRoute && currentRoute !== entry.route) {
-        const previousRouteDir = path.join(outDir, entry.route.replace(/^\//, "").replace(/\/$/, ""));
+        const previousRouteDir = path.join(
+          outDir,
+          entry.route.replace(/^\//, "").replace(/\/$/, ""),
+        );
         const previousRouteIndex = path.join(previousRouteDir, "index.html");
         await removeFileIfExists(previousRouteIndex);
         await removeEmptyParents(previousRouteDir, outDir);
@@ -463,7 +490,11 @@ async function cleanRemovedOutputs(outDir: string, oldCache: BuildCache, current
 export async function cleanBuildArtifacts(options: BuildOptions): Promise<void> {
   const cacheLocation = await resolveCacheLocation(options);
   const requestedOutputRoot = path.resolve(options.outDir);
-  const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir, cacheLocation.rootDir);
+  const outputRoot = await assertSafeOutputRoot(
+    options.outDir,
+    options.vaultDir,
+    cacheLocation.rootDir,
+  );
   await removeLegacyCacheIndex();
   let hasOwnedOutput = false;
 
@@ -492,7 +523,11 @@ export async function cleanBuildArtifacts(options: BuildOptions): Promise<void> 
 
 export async function inspectBuildStorage(options: BuildOptions): Promise<BuildStorageState> {
   const cacheLocation = await resolveCacheLocation(options);
-  const outputRoot = await assertSafeOutputRoot(options.outDir, options.vaultDir, cacheLocation.rootDir);
+  const outputRoot = await assertSafeOutputRoot(
+    options.outDir,
+    options.vaultDir,
+    cacheLocation.rootDir,
+  );
   await removeLegacyCacheIndex();
   await assertClaimableOutputDirectory(options, cacheLocation, outputRoot);
 

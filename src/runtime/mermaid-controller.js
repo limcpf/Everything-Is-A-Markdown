@@ -39,8 +39,7 @@ export function resolveMermaidConfig(manifest) {
         ? mermaid.cdnUrl.trim()
         : MERMAID_CDN,
     theme:
-      typeof mermaid?.theme === "string" &&
-      MERMAID_THEME_VALIDATION_RE.test(mermaid.theme.trim())
+      typeof mermaid?.theme === "string" && MERMAID_THEME_VALIDATION_RE.test(mermaid.theme.trim())
         ? mermaid.theme.trim()
         : MERMAID_DEFAULT_THEME,
   };

@@ -78,12 +78,8 @@ test.describe("shared SSR/client view contract", () => {
       createdAt: "2026-07-19 01:30",
       tags: ["alpha", "<beta>"],
     });
-    expect(model.navigation.previous?.href).toBe(
-      "/docs%20%ED%95%9C%EA%B8%80/Previous/",
-    );
-    expect(model.backlinks[0].href).toBe(
-      "/docs%20%ED%95%9C%EA%B8%80/Back%20link/",
-    );
+    expect(model.navigation.previous?.href).toBe("/docs%20%ED%95%9C%EA%B8%80/Previous/");
+    expect(model.backlinks[0].href).toBe("/docs%20%ED%95%9C%EA%B8%80/Back%20link/");
     expect(rendered.breadcrumbHtml).toContain("Unsafe &lt;route&gt;");
     expect(rendered.metaHtml).toContain("P&lt;1&gt;");
     expect(rendered.backlinksHtml).toContain('&lt;img src=x onerror="alert(1)"&gt;');
@@ -91,9 +87,7 @@ test.describe("shared SSR/client view contract", () => {
     expect(formatViewDateTime("invalid")).toBeNull();
     expect(formatViewDateTime("2024-09-20T09:30:00")).toBe("2024-09-20 09:30");
     expect(normalizeViewTags("not-an-array")).toEqual([]);
-    expect(toViewPathWithBase("/A B/", "/docs 한글")).toBe(
-      "/docs%20%ED%95%9C%EA%B8%80/A%20B/",
-    );
+    expect(toViewPathWithBase("/A B/", "/docs 한글")).toBe("/docs%20%ED%95%9C%EA%B8%80/A%20B/");
     expect(composeViewDocumentTitle("Current", "Site")).toBe("Current - Site");
   });
 
@@ -156,9 +150,7 @@ test.describe("shared SSR/client view contract", () => {
       "base",
       "dev",
     ]);
-    expect(filterViewDocsByBranch(docs, "main", "dev").map((doc) => doc.id)).toEqual([
-      "main",
-    ]);
+    expect(filterViewDocsByBranch(docs, "main", "dev").map((doc) => doc.id)).toEqual(["main"]);
     expect(pickViewHomeRoute(filterViewDocsByBranch(docs, "dev", "dev"))).toBe("/DEV/");
 
     const mainDoc = {
@@ -257,9 +249,7 @@ Main-only content.
         docId: "main-only",
         title: "Main Only",
       });
-      expect(indexHtml).toContain(
-        '<h1 id="viewer-title" class="viewer-title">Main Only</h1>',
-      );
+      expect(indexHtml).toContain('<h1 id="viewer-title" class="viewer-title">Main Only</h1>');
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
@@ -298,7 +288,10 @@ Main-only content.
     }
   });
 
-  test("direct-load와 client-navigation의 chrome snapshot이 동일하다", async ({ page, context }) => {
+  test("direct-load와 client-navigation의 chrome snapshot이 동일하다", async ({
+    page,
+    context,
+  }) => {
     await page.goto("/BC-VO-00/");
     await waitForAppReady(page);
 
@@ -314,7 +307,9 @@ Main-only content.
     const directSnapshot = await readChromeSnapshot(directPage);
 
     await link.click();
-    await expect(page).toHaveURL(new RegExp(`${targetRoute.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+    await expect(page).toHaveURL(
+      new RegExp(`${targetRoute.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
+    );
     await expect(page.locator("#viewer-title")).toHaveText(directSnapshot.title ?? "");
     const clientSnapshot = await readChromeSnapshot(page);
 

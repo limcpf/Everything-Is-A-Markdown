@@ -10,7 +10,8 @@ export function toContentFileName(id: string): string {
 }
 
 export function resolveSiteTitle(options: BuildOptions): string {
-  const value = options.siteTitle ?? options.seo?.siteName ?? options.seo?.defaultTitle ?? DEFAULT_SITE_TITLE;
+  const value =
+    options.siteTitle ?? options.seo?.siteName ?? options.seo?.defaultTitle ?? DEFAULT_SITE_TITLE;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : DEFAULT_SITE_TITLE;
 }

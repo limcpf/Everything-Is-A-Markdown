@@ -129,7 +129,10 @@ async function walkMarkdownFiles(
   }
 }
 
-async function collectPublishedDocs(vaultDir: string, excludePatterns: string[]): Promise<TargetScanResult> {
+async function collectPublishedDocs(
+  vaultDir: string,
+  excludePatterns: string[],
+): Promise<TargetScanResult> {
   const files: string[] = [];
   const issues: LintIssue[] = [];
   const skippedWithoutPrefix: string[] = [];
@@ -160,7 +163,8 @@ async function collectPublishedDocs(vaultDir: string, excludePatterns: string[])
     if (parsed.data.publish !== true || parsed.data.draft === true) {
       continue;
     }
-    const hasPrefix = typeof parsed.data.prefix === "string" && parsed.data.prefix.trim().length > 0;
+    const hasPrefix =
+      typeof parsed.data.prefix === "string" && parsed.data.prefix.trim().length > 0;
     if (!hasPrefix) {
       skippedWithoutPrefix.push(relPath);
       continue;
@@ -240,7 +244,9 @@ function collectBodyH1Issues(doc: TargetDoc): LintIssue[] {
   return issues;
 }
 
-function mapMarkdownlintIssues(results: Record<string, Array<Record<string, unknown>>>): LintIssue[] {
+function mapMarkdownlintIssues(
+  results: Record<string, Array<Record<string, unknown>>>,
+): LintIssue[] {
   const issues: LintIssue[] = [];
   for (const [file, fileIssues] of Object.entries(results)) {
     for (const issue of fileIssues) {
@@ -249,8 +255,14 @@ function mapMarkdownlintIssues(results: Record<string, Array<Record<string, unkn
       const line = typeof issue.lineNumber === "number" ? issue.lineNumber : 1;
       const errorRange = Array.isArray(issue.errorRange) ? issue.errorRange : [];
       const column = typeof errorRange[0] === "number" ? errorRange[0] : 1;
-      const description = typeof issue.ruleDescription === "string" ? issue.ruleDescription : "Markdown lint violation";
-      const detail = typeof issue.errorDetail === "string" && issue.errorDetail.length > 0 ? `: ${issue.errorDetail}` : "";
+      const description =
+        typeof issue.ruleDescription === "string"
+          ? issue.ruleDescription
+          : "Markdown lint violation";
+      const detail =
+        typeof issue.errorDetail === "string" && issue.errorDetail.length > 0
+          ? `: ${issue.errorDetail}`
+          : "";
 
       issues.push({
         file,
@@ -285,7 +297,7 @@ async function main(): Promise<void> {
     return;
   }
   if (!cli.outDir || cli.outDir.trim().length === 0) {
-    throw new Error('Missing required option: --out-dir <path>');
+    throw new Error("Missing required option: --out-dir <path>");
   }
 
   const userConfig = await loadUserConfig();
@@ -328,9 +340,13 @@ async function main(): Promise<void> {
   };
   await Bun.write(reportPath, `${JSON.stringify(report, null, 2)}\n`);
 
-  console.log(`[lint:md:publish] targets=${scanResult.docs.length} issues=${allIssues.length} out=${reportPath}`);
+  console.log(
+    `[lint:md:publish] targets=${scanResult.docs.length} issues=${allIssues.length} out=${reportPath}`,
+  );
   if (scanResult.skippedWithoutPrefix.length > 0) {
-    console.warn(`[lint:md:publish] skipped without prefix: ${scanResult.skippedWithoutPrefix.length}`);
+    console.warn(
+      `[lint:md:publish] skipped without prefix: ${scanResult.skippedWithoutPrefix.length}`,
+    );
   }
 
   if (cli.strict && allIssues.length > 0) {

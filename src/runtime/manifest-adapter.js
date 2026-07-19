@@ -34,7 +34,12 @@ function collectLegacyDocs(docs) {
   /** @type {Record<string, Record<string, unknown> & { id: string }>} */
   const docsById = Object.create(null);
   for (const doc of docs) {
-    if (!isRecord(doc) || typeof doc.id !== "string" || !doc.id || Object.hasOwn(docsById, doc.id)) {
+    if (
+      !isRecord(doc) ||
+      typeof doc.id !== "string" ||
+      !doc.id ||
+      Object.hasOwn(docsById, doc.id)
+    ) {
       return null;
     }
     docIds.push(doc.id);

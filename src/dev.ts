@@ -57,7 +57,9 @@ export async function runDev(options: BuildOptions, devOptions: DevOptions): Pro
     runningBuild = true;
     try {
       const result = await buildSite(options);
-      console.log(`[build] total=${result.totalDocs} rendered=${result.renderedDocs} skipped=${result.skippedDocs}`);
+      console.log(
+        `[build] total=${result.totalDocs} rendered=${result.renderedDocs} skipped=${result.skippedDocs}`,
+      );
     } catch (error) {
       if (failFast) {
         throw error;
@@ -102,7 +104,9 @@ export async function runDev(options: BuildOptions, devOptions: DevOptions): Pro
     }
 
     const isMarkdownChange = /\.md$/i.test(changedPath);
-    const isStaticChange = options.staticPaths.some((staticPath) => isStaticPathMatch(relPath, staticPath));
+    const isStaticChange = options.staticPaths.some((staticPath) =>
+      isStaticPathMatch(relPath, staticPath),
+    );
     if (!isMarkdownChange && !isStaticChange) {
       return;
     }

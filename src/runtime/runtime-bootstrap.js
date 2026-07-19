@@ -106,7 +106,8 @@ export function resolveSiteTitle(manifest) {
 export async function loadRuntimeBootstrap(options = {}) {
   const documentRef = options.documentRef ?? globalThis.document;
   const windowRef = options.windowRef ?? globalThis.window;
-  const fetchManifest = options.fetchManifest ?? ((/** @type {string} */ url) => globalThis.fetch(url));
+  const fetchManifest =
+    options.fetchManifest ?? ((/** @type {string} */ url) => globalThis.fetch(url));
   const initialViewData = loadInitialViewData(documentRef);
   const initialRuntimeData = loadInitialRuntimeData({ documentRef, windowRef });
   const initialPathBase = normalizePathBase(initialRuntimeData?.pathBase);

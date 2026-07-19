@@ -43,7 +43,7 @@ test.describe("fine-grained Shiki loading", () => {
 
     const selectedThemeRenderer = await createMarkdownRenderer(buildOptions("nord"));
     const selectedThemeResult = await selectedThemeRenderer.render(
-      "```json\n{\"answer\": 42}\n```",
+      '```json\n{"answer": 42}\n```',
       resolver,
     );
     expect(selectedThemeResult.html).toContain('class="shiki nord"');

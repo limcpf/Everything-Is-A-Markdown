@@ -529,9 +529,7 @@ export function createTreeController(options) {
     syncActiveSelection(navigation.currentDocId || "");
     applyTreeSearch(treeSearchValue);
     setupTreeLabelDecorations(
-      /** @type {TreeLabelHost | null} */ (
-        treeRoot.querySelector("file-tree-container")
-      ),
+      /** @type {TreeLabelHost | null} */ (treeRoot.querySelector("file-tree-container")),
       navigation.view.trees.metadataByTreePath,
       documentRef,
       windowRef,
@@ -560,8 +558,7 @@ export function createTreeController(options) {
     const message = documentRef.createElement("p");
     message.className = "tree-load-fallback-message";
     message.setAttribute("role", "alert");
-    message.textContent =
-      "문서 트리를 불러오지 못했습니다. 아래 링크로 계속 탐색할 수 있습니다.";
+    message.textContent = "문서 트리를 불러오지 못했습니다. 아래 링크로 계속 탐색할 수 있습니다.";
     const retry = documentRef.createElement("button");
     retry.className = "tree-load-retry";
     retry.type = "button";
