@@ -1926,4 +1926,32 @@ title: Menu Config Guide
       fs.rmSync(workDir, { recursive: true, force: true });
     }
   });
+
+  test("사용자 config 전체를 output/cache 변경 전에 검증한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-invalid-user-config-"));
+    const outDir = path.join(workDir, "dist");
+    const cacheDir = path.join(workDir, ".cache");
+
+    try {
+      writeText(
+        path.join(workDir, "blog.config.mjs"),
+        `export default {
+  exclude: ["private/**", 42],
+  markdown: {
+    wikilinks: "yes",
+  },
+};
+`,
+      );
+
+      const build = runCli(workDir, [cliPath, "build", "--vault", "./vault", "--out", "./dist"]);
+
+      expect(build.status).not.toBe(0);
+      expect(build.output).toContain('"exclude[1]" must be a string; received number (42)');
+      expect(fs.existsSync(outDir)).toBe(false);
+      expect(fs.existsSync(cacheDir)).toBe(false);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
 });

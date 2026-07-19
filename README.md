@@ -312,13 +312,20 @@ export default {
 - `markdown.mermaid.*`: Mermaid runtime settings.
 - `seo.*`: canonical URL, social metadata, sitemap, robots, and path-base behavior.
 
+Config modules are treated as untrusted runtime input. Every supported field is validated and
+normalized before `build`, `dev`, or `clean` can create, modify, or remove output/cache paths. An
+invalid value stops the command with its exact dotted field path and received runtime type.
+Unknown fields are ignored after a warning so spelling mistakes remain visible without breaking
+forward-compatible configs. Unsafe Mermaid URL/theme strings keep their documented safe-default
+fallback; values with the wrong runtime type are rejected.
+
 ### `staticPaths`
 
 - Must be vault-relative
 - Can point to either a file or a directory
 - Are copied as-is into the output directory
 - Must not normalize to the vault root, escape the output directory, or collide with the reserved `.eiam-output.json` ownership marker
-- Invalid or missing paths are skipped with a warning
+- Invalid configured path values fail config validation; valid paths that are missing from the vault are skipped with a warning
 
 ### `pinnedMenu`
 
