@@ -43,7 +43,7 @@ python3 -m http.server 4173 --bind 127.0.0.1 --directory ./dist
 로컬 확인 URL 예시:
 
 - `http://127.0.0.1:4173/`
-- `http://127.0.0.1:4173/posts/2024/setup-guide/`
+- `http://127.0.0.1:4173/BC-VO-02/` (`test-vault/posts/2024/setup-guide.md`의 `prefix` route)
 
 ## 5) Lighthouse CLI 예시 (권장)
 
