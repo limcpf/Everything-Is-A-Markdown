@@ -21,6 +21,8 @@ Issue #29 makes browser navigation state explicit before the remaining UI contro
 - content enhancement and accessibility callbacks;
 - setup and cleanup of its event listeners.
 
+The app destroys controller listeners on `pagehide` and calls `setup()` again when a persisted `pageshow` restores the page from the back-forward cache.
+
 The controller receives renderers and lifecycle callbacks instead of importing tree, sidebar, Mermaid, or presentation implementations. This keeps those concerns replaceable in the following sub PRs.
 
 ## State transition

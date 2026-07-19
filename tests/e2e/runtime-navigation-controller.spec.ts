@@ -175,6 +175,11 @@ test.describe("runtime navigation contracts", () => {
       throw new Error("다음 문서 route를 찾지 못했습니다.");
     }
 
+    await page.evaluate(() => {
+      window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+      window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    });
+
     await nextLink.click();
     await expect(page).toHaveURL(new RegExp(`${nextRoute.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
 

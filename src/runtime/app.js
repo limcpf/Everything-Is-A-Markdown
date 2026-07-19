@@ -2008,7 +2008,12 @@ async function start() {
   window.performance?.mark?.("eiam-app-ready");
   scheduleTreeLoadAfterFirstContentPaint();
 
-  window.addEventListener("pagehide", () => contentController?.destroy(), { once: true });
+  window.addEventListener("pagehide", () => contentController?.destroy());
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) {
+      contentController?.setup();
+    }
+  });
 }
 
 start().catch((error) => {
