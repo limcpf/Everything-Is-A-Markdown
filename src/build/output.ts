@@ -1,29 +1,24 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { BuildOptions, DocRecord, Manifest, ManifestDoc } from "../types";
+import type { BuildOptions, DocRecord, Manifest } from "../types";
 import { buildCanonicalUrl, escapeHtmlAttribute } from "../seo";
 import { render404Html, renderAppShellHtml } from "../template";
 import type { AppShellAssets, AppShellInitialView, AppShellMeta } from "../template";
 import { ensureDir, makeHash, removeEmptyParents, removeFileIfExists, toPosixPath } from "../utils";
+import {
+  composeViewDocumentTitle,
+  filterViewDocsByBranch,
+  normalizeViewBranch,
+  pickViewHomeRoute,
+  renderViewChrome,
+  toViewPathWithBase,
+} from "../view-contract";
 import type { OutputPhaseState, OutputWriteContext, RuntimeAssets } from "./contracts";
-import { pickHomeDoc } from "./graph";
 import { OUTPUT_MARKER_FILE_NAME, resolveSiteTitle } from "./shared";
 
 const DEFAULT_SITE_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
 const DEFAULT_SITE_TITLE = "File-System Blog";
-
-function composeDocumentTitle(pageTitle: string, siteTitle: string): string {
-  const left = pageTitle.trim();
-  const right = siteTitle.trim();
-  if (!left) {
-    return right || DEFAULT_SITE_TITLE;
-  }
-  if (!right || left === right) {
-    return left;
-  }
-  return `${left} - ${right}`;
-}
 
 function pickSeoImageDefaults(
   seo: BuildOptions["seo"],
@@ -362,7 +357,7 @@ function buildShellMeta(route: string, doc: DocRecord | null, options: BuildOpti
   const description = typeof doc?.description === "string" && doc.description.trim().length > 0 ? doc.description.trim() : undefined;
   const canonicalUrl = options.seo ? buildCanonicalUrl(route, options.seo) : undefined;
   const baseTitle = doc?.title ?? defaultTitle;
-  const title = composeDocumentTitle(baseTitle, siteTitle);
+  const title = composeViewDocumentTitle(baseTitle, siteTitle);
   const imageDefaults = pickSeoImageDefaults(options.seo);
   const ogImage = imageDefaults.og ?? imageDefaults.social ?? undefined;
   const twitterImage = imageDefaults.twitter ?? imageDefaults.social ?? undefined;
@@ -388,135 +383,29 @@ function buildShellMeta(route: string, doc: DocRecord | null, options: BuildOpti
   };
 }
 
-function renderInitialBreadcrumb(route: string): string {
-  const parts = route.split("/").filter(Boolean);
-  const allItems = ["~", ...parts];
-  return allItems
-    .map((part, index) => {
-      const isCurrent = index === allItems.length - 1 && allItems.length > 1;
-      const escapedPart = escapeHtmlAttribute(part);
-      if (isCurrent) {
-        return `<span class="breadcrumb-current" aria-current="page">${escapedPart}</span>`;
-      }
-      return `<span class="breadcrumb-item">${escapedPart}</span>`;
-    })
-    .join('<span class="material-symbols-outlined breadcrumb-sep">chevron_right</span>');
-}
-
-function formatMetaDateTime(value: string | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const parsed = new Date(value);
-  if (!Number.isFinite(parsed.getTime())) {
-    return null;
-  }
-
-  const yyyy = parsed.getFullYear();
-  const mm = String(parsed.getMonth() + 1).padStart(2, "0");
-  const dd = String(parsed.getDate()).padStart(2, "0");
-  const hh = String(parsed.getHours()).padStart(2, "0");
-  const mi = String(parsed.getMinutes()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
-}
-
-function normalizeTags(tags: string[]): string[] {
-  return tags.map((tag) => String(tag).trim().replace(/^#+/, "")).filter(Boolean);
-}
-
-function renderInitialMeta(doc: DocRecord): string {
-  const items: string[] = [];
-
-  if (doc.prefix) {
-    items.push(`<span class="meta-item meta-prefix">${escapeHtmlAttribute(doc.prefix)}</span>`);
-  }
-
-  const createdAt = formatMetaDateTime(doc.date);
-  if (createdAt) {
-    items.push(
-      `<span class="meta-item"><span class="material-symbols-outlined">calendar_today</span>${escapeHtmlAttribute(createdAt)}</span>`,
-    );
-  }
-
-  const tags = normalizeTags(doc.tags);
-  if (tags.length > 0) {
-    const tagsStr = tags.map((tag) => `#${escapeHtmlAttribute(tag)}`).join(" ");
-    items.push(`<span class="meta-item meta-tags">${tagsStr}</span>`);
-  }
-
-  return items.join("");
-}
-
-function toPathWithBase(pathname: string, pathBase: string): string {
-  const cleanBase = pathBase.trim().replace(/\\/g, "/");
-  const normalizedBase = !cleanBase || cleanBase === "/"
-    ? ""
-    : `/${cleanBase.replace(/^\/+/, "").replace(/\/+$/, "")}`;
-  if (!normalizedBase) {
-    return pathname;
-  }
-
-  if (pathname === "/") {
-    return `${normalizedBase}/`;
-  }
-  const normalizedPathname = pathname.startsWith("/") ? pathname : `/${pathname}`;
-  return `${normalizedBase}${normalizedPathname}`;
-}
-
-function renderInitialNav(docs: DocRecord[], currentId: string, pathBase: string): string {
-  const currentIndex = docs.findIndex((doc) => doc.id === currentId);
-  if (currentIndex === -1) {
-    return "";
-  }
-
-  const prev = currentIndex > 0 ? docs[currentIndex - 1] : null;
-  const next = currentIndex < docs.length - 1 ? docs[currentIndex + 1] : null;
-
-  let html = "";
-  if (prev) {
-    html += `<a href="${escapeHtmlAttribute(toPathWithBase(prev.route, pathBase))}" class="nav-link nav-link-prev" data-route="${escapeHtmlAttribute(prev.route)}"><div class="nav-link-label"><span class="material-symbols-outlined">arrow_back</span>Previous</div><div class="nav-link-title">${escapeHtmlAttribute(prev.title)}</div></a>`;
-  }
-  if (next) {
-    html += `<a href="${escapeHtmlAttribute(toPathWithBase(next.route, pathBase))}" class="nav-link nav-link-next" data-route="${escapeHtmlAttribute(next.route)}"><div class="nav-link-label">Next<span class="material-symbols-outlined">arrow_forward</span></div><div class="nav-link-title">${escapeHtmlAttribute(next.title)}</div></a>`;
-  }
-
-  return html;
-}
-
-function renderInitialBacklinks(backlinks: ManifestDoc["backlinks"], pathBase: string): string {
-  if (backlinks.length === 0) {
-    return "";
-  }
-
-  let html = '<h2 class="backlinks-title">Backlinks</h2><ul class="backlinks-list">';
-  for (const backlink of backlinks) {
-    const prefixHtml = backlink.prefix
-      ? `<span class="backlink-prefix">${escapeHtmlAttribute(backlink.prefix)}</span>`
-      : "";
-    html += `<li class="backlinks-item"><a href="${escapeHtmlAttribute(toPathWithBase(backlink.route, pathBase))}" class="backlink-link" data-route="${escapeHtmlAttribute(backlink.route)}">${prefixHtml}<span class="backlink-text">${escapeHtmlAttribute(backlink.title)}</span></a></li>`;
-  }
-  html += "</ul>";
-  return html;
-}
-
 function buildInitialView(
   doc: DocRecord,
   docs: DocRecord[],
   contentHtml: string,
   manifestDocById: Map<string, Manifest["docsById"][string]>,
   pathBase: string,
+  defaultBranch: string,
 ): AppShellInitialView {
   const manifestDoc = manifestDocById.get(doc.id);
+  const activeBranch = normalizeViewBranch(doc.branch) ?? normalizeViewBranch(defaultBranch) ?? "dev";
+  const visibleDocs = filterViewDocsByBranch(docs, activeBranch, defaultBranch);
+  const chrome = renderViewChrome({
+    route: doc.route,
+    doc: { ...doc, backlinks: manifestDoc?.backlinks ?? [] },
+    docs: visibleDocs,
+    pathBase,
+  });
   return {
     route: doc.route,
     docId: doc.id,
     title: doc.title,
-    breadcrumbHtml: renderInitialBreadcrumb(doc.route),
-    metaHtml: renderInitialMeta(doc),
     contentHtml,
-    backlinksHtml: renderInitialBacklinks(manifestDoc?.backlinks ?? [], pathBase),
-    navHtml: renderInitialNav(docs, doc.id, pathBase),
+    ...chrome,
   };
 }
 
@@ -530,10 +419,23 @@ async function writeShellPages(
 ): Promise<void> {
   const manifestDocById = new Map(Object.entries(manifest.docsById));
   const pathBase = options.seo?.pathBase ?? "";
-  const indexDoc = pickHomeDoc(docs);
+  const defaultViewDocs = filterViewDocsByBranch(
+    docs,
+    manifest.defaultBranch,
+    manifest.defaultBranch,
+  );
+  const indexRoute = pickViewHomeRoute(defaultViewDocs);
+  const indexDoc = docs.find((doc) => doc.route === indexRoute) ?? null;
   const indexOutputPath = "index.html";
   const indexInitialView = indexDoc
-    ? buildInitialView(indexDoc, docs, contentByDocId.get(indexDoc.id) ?? "", manifestDocById, pathBase)
+    ? buildInitialView(
+        indexDoc,
+        docs,
+        contentByDocId.get(indexDoc.id) ?? "",
+        manifestDocById,
+        pathBase,
+        manifest.defaultBranch,
+      )
     : null;
   const shell = renderAppShellHtml(
     buildShellMeta("/", null, options),
@@ -546,12 +448,22 @@ async function writeShellPages(
   await writeOutputIfChanged(
     context,
     "404.html",
-    render404Html(buildAppShellAssetsForOutput("404.html", runtimeAssets), toPathWithBase("/", pathBase)),
+    render404Html(
+      buildAppShellAssetsForOutput("404.html", runtimeAssets),
+      toViewPathWithBase("/", pathBase),
+    ),
   );
 
   for (const doc of docs) {
     const routeOutputPath = toRouteOutputPath(doc.route);
-    const initialView = buildInitialView(doc, docs, contentByDocId.get(doc.id) ?? "", manifestDocById, pathBase);
+    const initialView = buildInitialView(
+      doc,
+      docs,
+      contentByDocId.get(doc.id) ?? "",
+      manifestDocById,
+      pathBase,
+      manifest.defaultBranch,
+    );
     await writeOutputIfChanged(
       context,
       routeOutputPath,

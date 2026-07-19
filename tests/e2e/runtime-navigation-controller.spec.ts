@@ -129,10 +129,13 @@ test.describe("runtime navigation contracts", () => {
       pathBase: "/blog",
       siteTitle: "Site",
       renderers: {
+        chrome: ({ route, doc }: { route: string; doc: { id: string } }) => ({
+          breadcrumbHtml: `crumb:${route}`,
+          metaHtml: `meta:${doc.id}`,
+          backlinksHtml: `backlinks:${doc.id}`,
+          navHtml: `nav:${doc.id}`,
+        }),
         breadcrumb: (route: string) => `crumb:${route}`,
-        meta: (doc: { id: string }) => `meta:${doc.id}`,
-        backlinks: (doc: { id: string }) => `backlinks:${doc.id}`,
-        nav: (_view: unknown, docId: string) => `nav:${docId}`,
         documentTitle: (title: string, siteTitle: string) => `${title} - ${siteTitle}`,
       },
       lifecycle: {

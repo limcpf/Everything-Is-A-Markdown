@@ -1,123 +1,29 @@
 import { getRuntimeManifestDocs } from "./manifest-adapter.js";
 import { buildTreesAdapterInput } from "./tree-adapter.js";
+import {
+  filterViewDocsByBranch,
+  normalizeViewBranch as normalizeBranch,
+  normalizeViewPathBase as normalizePathBase,
+  normalizeViewPathname as normalizePathname,
+  normalizeViewRoute as normalizeRoute,
+  pickViewHomeRoute,
+  stripViewPathBase as stripPathBase,
+  toViewPathWithBase as toPathWithBase,
+} from "../view-contract.ts";
 
 const DEFAULT_BRANCH = "dev";
 
-function toSafeUrlPath(input) {
-  return String(input)
-    .split("/")
-    .map((segment, index) => {
-      if (index === 0 && segment === "") {
-        return "";
-      }
-      return encodeURIComponent(segment);
-    })
-    .join("/");
-}
-
-export function normalizePathname(pathname) {
-  let normalized = "/";
-  try {
-    normalized = decodeURIComponent(pathname || "/");
-  } catch {
-    normalized = String(pathname || "/");
-  }
-  if (!normalized.startsWith("/")) {
-    normalized = `/${normalized}`;
-  }
-  return normalized.replace(/\/+/g, "/") || "/";
-}
-
-export function normalizeRoute(pathname) {
-  const normalized = normalizePathname(pathname);
-  return normalized.endsWith("/") ? normalized : `${normalized}/`;
-}
-
-export function normalizePathBase(pathBase) {
-  if (typeof pathBase !== "string") {
-    return "";
-  }
-
-  const cleaned = pathBase.trim().replace(/\\/g, "/");
-  if (!cleaned || cleaned === "/") {
-    return "";
-  }
-
-  return `/${cleaned.replace(/^\/+/, "").replace(/\/+$/, "")}`;
-}
-
-export function stripPathBase(pathname, pathBase) {
-  const normalizedPath = normalizePathname(pathname);
-  if (!pathBase) {
-    return normalizedPath;
-  }
-  if (normalizedPath === pathBase) {
-    return "/";
-  }
-  if (normalizedPath.startsWith(`${pathBase}/`)) {
-    return normalizedPath.slice(pathBase.length) || "/";
-  }
-  return normalizedPath;
-}
-
-export function toPathWithBase(pathname, pathBase) {
-  const normalizedPath = normalizePathname(pathname);
-  if (!pathBase) {
-    return toSafeUrlPath(normalizedPath);
-  }
-  if (normalizedPath === "/") {
-    return toSafeUrlPath(`${pathBase}/`);
-  }
-  return toSafeUrlPath(`${pathBase}${normalizedPath}`);
-}
+export {
+  normalizeBranch,
+  normalizePathBase,
+  normalizePathname,
+  normalizeRoute,
+  stripPathBase,
+  toPathWithBase,
+};
 
 export function resolveRouteFromLocation(pathBase, pathname = globalThis.location?.pathname ?? "/") {
   return normalizeRoute(stripPathBase(pathname, pathBase));
-}
-
-export function normalizeBranch(value) {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  return normalized.length > 0 ? normalized : null;
-}
-
-function isDocVisibleInBranch(doc, branch, defaultBranch) {
-  const docBranch = normalizeBranch(doc.branch);
-  return docBranch ? docBranch === branch : branch === defaultBranch;
-}
-
-function parseDateToEpochMs(value) {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return null;
-  }
-
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function getRecentSortEpochMs(doc) {
-  return parseDateToEpochMs(doc.updatedDate) ?? parseDateToEpochMs(doc.date);
-}
-
-function compareDocsByRecentDateThenRoute(left, right) {
-  const leftEpoch = getRecentSortEpochMs(left);
-  const rightEpoch = getRecentSortEpochMs(right);
-
-  if (leftEpoch != null && rightEpoch != null) {
-    const byDate = rightEpoch - leftEpoch;
-    if (byDate !== 0) {
-      return byDate;
-    }
-  } else if (leftEpoch != null) {
-    return -1;
-  } else if (rightEpoch != null) {
-    return 1;
-  }
-
-  return left.route.localeCompare(right.route, "ko-KR");
 }
 
 function cloneFilteredTree(nodes, visibleDocIds) {
@@ -143,7 +49,7 @@ function cloneFilteredTree(nodes, visibleDocIds) {
 }
 
 function buildBranchView(manifest, manifestDocs, branch, defaultBranch) {
-  const docs = manifestDocs.filter((doc) => isDocVisibleInBranch(doc, branch, defaultBranch));
+  const docs = filterViewDocsByBranch(manifestDocs, branch, defaultBranch);
   const visibleDocIds = new Set(docs.map((doc) => doc.id));
   const tree = cloneFilteredTree(manifest.tree, visibleDocIds);
   const trees = buildTreesAdapterInput(tree, docs);
@@ -160,10 +66,7 @@ function buildBranchView(manifest, manifestDocs, branch, defaultBranch) {
 }
 
 export function pickHomeRoute(view) {
-  if (view.routeMap["/index/"]) {
-    return "/index/";
-  }
-  return [...view.docs].sort(compareDocsByRecentDateThenRoute)[0]?.route || "/";
+  return pickViewHomeRoute(view.docs);
 }
 
 function collectAvailableBranches(manifest, manifestDocs, defaultBranch) {
