@@ -8,6 +8,7 @@ import jsonLanguage from "@shikijs/langs/json";
 import markdownLanguage from "@shikijs/langs/markdown";
 import typescriptLanguage from "@shikijs/langs/typescript";
 import githubDarkTheme from "@shikijs/themes/github-dark";
+import { APP_ICON_NAMES, renderAppIcon } from "./icons";
 import type { BuildOptions, WikiResolver } from "./types";
 import { isRemoteUrl } from "./utils";
 
@@ -37,6 +38,7 @@ const DEFAULT_SHIKI_LANGUAGES: LanguageInput[] = [
   javascriptLanguage,
 ];
 const SAFE_COLOR_VALUE = /^#[0-9a-f]{3,8}$/i;
+const SAFE_APP_ICON_HREFS = new Set(APP_ICON_NAMES.map((name) => `#eiam-icon-${name}`));
 const SAFE_HTML_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
     "p",
@@ -82,6 +84,8 @@ const SAFE_HTML_OPTIONS: sanitizeHtml.IOptions = {
     "dd",
     "abbr",
     "time",
+    "svg",
+    "use",
   ],
   allowedAttributes: {
     "*": ["class"],
@@ -94,9 +98,11 @@ const SAFE_HTML_OPTIONS: sanitizeHtml.IOptions = {
     ol: ["start"],
     pre: ["tabindex", "style"],
     span: ["style"],
+    svg: ["aria-hidden", "focusable"],
     td: ["colspan", "rowspan"],
     th: ["colspan", "rowspan", "scope"],
     time: ["datetime"],
+    use: ["href"],
   },
   allowedStyles: {
     pre: {
@@ -115,6 +121,9 @@ const SAFE_HTML_OPTIONS: sanitizeHtml.IOptions = {
   allowProtocolRelative: false,
   disallowedTagsMode: "discard",
   enforceHtmlBoundary: false,
+  exclusiveFilter(frame) {
+    return frame.tag === "use" && !SAFE_APP_ICON_HREFS.has(frame.attribs.href ?? "");
+  },
   nestingLimit: 100,
   nonTextTags: ["script", "style", "textarea", "option", "noscript", "xmp"],
   transformTags: {
@@ -398,8 +407,8 @@ function createMarkdownIt(highlighter: HighlighterCore, theme: string, gfm: bool
         <span class="dot dot-green"></span>
       </div>
       <span class="code-filename">${fileName ? escapeHtmlAttr(fileName) : lang}</span>
-      <button class="code-copy" title="Copy code" data-code="${escapeHtmlAttr(token.content)}">
-        <span class="material-symbols-outlined">content_copy</span>
+      <button class="code-copy" type="button" title="Copy code" aria-label="Copy code" data-code="${escapeHtmlAttr(token.content)}">
+        ${renderAppIcon("copy")}
       </button>
     </div>`;
 

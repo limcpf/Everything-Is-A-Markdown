@@ -6,6 +6,9 @@ import type { OutputWriteContext, RenderDocumentsResult, WikiLookup } from "./co
 import { buildWikiResolutionSignature, createWikiResolver } from "./source";
 import { toContentFileName } from "./shared";
 
+// Bump whenever renderer-owned HTML changes in a way that is incompatible with cached fragments.
+export const CONTENT_RENDERER_VERSION = "content-html-v2";
+
 export async function renderDocuments(
   docs: DocRecord[],
   options: BuildOptions,
@@ -23,6 +26,7 @@ export async function renderDocuments(
     const wikiSignature = options.wikilinks ? buildWikiResolutionSignature(doc, wikiLookup) : "";
     const sourceHash = makeHash(
       [
+        CONTENT_RENDERER_VERSION,
         doc.rawHash,
         doc.route,
         options.shikiTheme,

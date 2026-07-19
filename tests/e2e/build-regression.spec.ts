@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
+import { CONTENT_RENDERER_VERSION } from "../../src/build/content";
 
 interface CliResult {
   status: number | null;
@@ -316,6 +317,95 @@ ALPHA
       expect(afterConfig["manifest.json"]).not.toBe(afterContent["manifest.json"]);
       expect(afterConfig["index.html"]).not.toBe(afterContent["index.html"]);
       expect(afterConfig[contentPath!]).toBe(afterContent[contentPath!]);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("content renderer version은 기존 Markdown fragment cache를 무효화한다", () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-content-renderer-version-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+    const sourcePath = path.join(vaultDir, "icon-cache.md");
+
+    try {
+      writeText(
+        sourcePath,
+        `---
+publish: true
+prefix: CACHE-ICON
+category_path: cache/icons
+title: Cached icon markup
+---
+
+\`\`\`text
+cached code
+\`\`\`
+`,
+      );
+
+      const firstBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(firstBuild.status, firstBuild.output).toBe(0);
+
+      const manifest = readManifest(outDir) as ManifestDocIndex<{
+        route: string;
+        contentUrl: string;
+      }>;
+      const docId = manifest.docIds[0];
+      const contentRelPath = manifest.docsById[docId].contentUrl.replace(/^\/+/, "");
+      const contentPath = path.join(outDir, contentRelPath);
+      const cachePath = findOnlyCacheIndexPath(workDir);
+      const cache = JSON.parse(fs.readFileSync(cachePath, "utf8")) as {
+        sources: Record<string, { rawHash: string }>;
+        docs: Record<string, { hash: string; route: string; relPath: string }>;
+        outputHashes: Record<string, string>;
+      };
+      const sourceHashInputs = [
+        cache.sources["icon-cache.md"].rawHash,
+        "/CACHE-ICON/",
+        "github-dark",
+        "omit-local",
+        "wikilinks-on",
+        "safe-html-v1",
+        "",
+      ];
+      const legacyHash = crypto
+        .createHash("sha1")
+        .update(sourceHashInputs.join("::"))
+        .digest("hex");
+      const versionedHash = crypto
+        .createHash("sha1")
+        .update([CONTENT_RENDERER_VERSION, ...sourceHashInputs].join("::"))
+        .digest("hex");
+
+      expect(cache.docs[docId].hash).toBe(versionedHash);
+      expect(versionedHash).not.toBe(legacyHash);
+
+      cache.docs[docId].hash = legacyHash;
+      cache.outputHashes[contentRelPath] = legacyHash;
+      fs.writeFileSync(cachePath, `${JSON.stringify(cache, null, 2)}\n`, "utf8");
+      writeText(
+        contentPath,
+        '<div class="code-block"><button class="code-copy"><span class="material-symbols-outlined">content_copy</span></button></div>',
+      );
+
+      const upgradedBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultDir,
+        "--out",
+        outDir,
+      ]);
+      expect(upgradedBuild.status, upgradedBuild.output).toBe(0);
+      expect(upgradedBuild.output).toContain("total=1 rendered=1 skipped=0");
+      const upgradedContent = fs.readFileSync(contentPath, "utf8");
+      const upgradedRoute = fs.readFileSync(path.join(outDir, "CACHE-ICON", "index.html"), "utf8");
+      for (const rendered of [upgradedContent, upgradedRoute]) {
+        expect(rendered).toContain('href="#eiam-icon-copy"');
+        expect(rendered).not.toContain("material-symbols-outlined");
+        expect(rendered).not.toContain("content_copy");
+      }
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

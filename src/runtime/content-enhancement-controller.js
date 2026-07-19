@@ -240,16 +240,20 @@ export function createContentEnhancementController(options) {
       }
       await clipboard.writeText(code);
       button.classList.add("copied");
-      const icon = button.querySelector(".material-symbols-outlined");
-      if (icon instanceof windowRef.HTMLElement) {
-        icon.textContent = "check";
+      button.setAttribute("aria-label", "Copied");
+      button.setAttribute("title", "Copied");
+      const iconUse = button.querySelector(".app-icon use");
+      if (iconUse instanceof windowRef.Element) {
+        iconUse.setAttribute("href", "#eiam-icon-check");
       }
       const timer = windowRef.setTimeout(() => {
         resetTimers.delete(timer);
         button.classList.remove("copied");
-        const nextIcon = button.querySelector(".material-symbols-outlined");
-        if (nextIcon instanceof windowRef.HTMLElement) {
-          nextIcon.textContent = "content_copy";
+        button.setAttribute("aria-label", "Copy code");
+        button.setAttribute("title", "Copy code");
+        const nextIconUse = button.querySelector(".app-icon use");
+        if (nextIconUse instanceof windowRef.Element) {
+          nextIconUse.setAttribute("href", "#eiam-icon-copy");
         }
       }, 2000);
       resetTimers.add(timer);

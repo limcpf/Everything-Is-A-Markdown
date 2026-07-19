@@ -1,5 +1,7 @@
 import { escapeHtmlAttribute } from "./seo";
 import { DEFAULT_SITE_TITLE } from "./defaults";
+import { renderAppIconSprite } from "./icon-sprite";
+import { renderAppIcon } from "./icons";
 import type { Manifest } from "./types";
 import { toViewPathWithBase } from "./view-contract";
 
@@ -213,8 +215,6 @@ export function renderAppShellHtml(
   const headMeta = renderHeadMeta(meta);
   const initialViewScript = renderInitialViewScript(initialView);
   const runtimeBootstrapScript = renderRuntimeBootstrapScript(manifest, assets);
-  const symbolFontStylesheet =
-    "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap";
   const appTitle =
     typeof manifest?.siteTitle === "string" && manifest.siteTitle.trim().length > 0
       ? manifest.siteTitle.trim()
@@ -234,14 +234,10 @@ export function renderAppShellHtml(
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 ${headMeta}
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preload" as="style" href="${escapeHtmlAttribute(symbolFontStylesheet)}" />
-    <link rel="stylesheet" href="${escapeHtmlAttribute(symbolFontStylesheet)}" media="print" onload="this.media='all'" />
-    <noscript><link rel="stylesheet" href="${escapeHtmlAttribute(symbolFontStylesheet)}" /></noscript>
     <link rel="stylesheet" href="${escapeHtmlAttribute(assets.cssHref)}" />
   </head>
   <body>
+    ${renderAppIconSprite()}
     <a class="skip-link" href="#viewer-panel">본문으로 건너뛰기</a>
     <div id="a11y-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     <div class="app-root">
@@ -251,7 +247,7 @@ ${headMeta}
           <div class="sidebar-heading">
             <h1 class="sidebar-title">${escapeHtmlAttribute(appTitle)}</h1>
             <button id="sidebar-close" class="sidebar-close" type="button" aria-label="탐색기 닫기">
-              <span class="material-symbols-outlined">close</span>
+              ${renderAppIcon("close")}
             </button>
           </div>
           <label class="sidebar-branch" for="sidebar-branch-select">
@@ -261,7 +257,7 @@ ${headMeta}
         </div>
         <div class="sidebar-search">
           <div class="sidebar-search-box">
-            <span class="material-symbols-outlined sidebar-search-icon" aria-hidden="true">search</span>
+            ${renderAppIcon("search", "sidebar-search-icon")}
             <input
               id="tree-search-input"
               class="tree-search-input"
@@ -272,17 +268,17 @@ ${headMeta}
               placeholder="Search"
             />
             <button id="tree-search-clear" class="tree-search-clear" type="button" aria-label="검색 지우기" title="검색 지우기" hidden>
-              <span class="material-symbols-outlined">close</span>
+              ${renderAppIcon("close")}
             </button>
           </div>
           <div id="sidebar-search-actions" class="sidebar-search-actions" aria-live="polite" hidden>
             <span id="tree-search-count" class="tree-search-count"></span>
             <div class="tree-search-nav">
               <button id="tree-search-prev" class="tree-search-step" type="button" aria-label="이전 검색 결과" title="이전 검색 결과" disabled>
-                <span class="material-symbols-outlined">keyboard_arrow_up</span>
+                ${renderAppIcon("chevron-up")}
               </button>
               <button id="tree-search-next" class="tree-search-step" type="button" aria-label="다음 검색 결과" title="다음 검색 결과" disabled>
-                <span class="material-symbols-outlined">keyboard_arrow_down</span>
+                ${renderAppIcon("chevron-down")}
               </button>
             </div>
           </div>
@@ -297,7 +293,7 @@ ${headMeta}
             aria-expanded="false"
             aria-label="탐색기 설정 열기"
           >
-            <span class="material-symbols-outlined">tune</span>
+            ${renderAppIcon("settings")}
           </button>
           <section id="sidebar-settings" class="sidebar-settings" hidden aria-label="탐색기 설정">
             <p class="sidebar-settings-title">탐색기 설정</p>
@@ -351,7 +347,7 @@ ${headMeta}
           aria-expanded="false"
           aria-label="탐색기 열기"
         >
-          <span class="material-symbols-outlined">menu</span>
+          ${renderAppIcon("menu")}
           <span>Files</span>
         </button>
         <div class="viewer-container">
@@ -380,31 +376,24 @@ export function render404Html(
   homeHref = "/",
   siteTitle = DEFAULT_SITE_TITLE,
 ): string {
-  const symbolFontStylesheet =
-    "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap";
-
   return `<!doctype html>
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>404 - ${escapeHtmlAttribute(siteTitle.trim() || DEFAULT_SITE_TITLE)}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preload" as="style" href="${escapeHtmlAttribute(symbolFontStylesheet)}" />
-    <link rel="stylesheet" href="${escapeHtmlAttribute(symbolFontStylesheet)}" media="print" onload="this.media='all'" />
-    <noscript><link rel="stylesheet" href="${escapeHtmlAttribute(symbolFontStylesheet)}" /></noscript>
     <link rel="stylesheet" href="${escapeHtmlAttribute(assets.cssHref)}" />
   </head>
   <body>
+    ${renderAppIconSprite()}
     <main class="not-found">
       <div class="not-found-icon">
-        <span class="material-symbols-outlined">folder_off</span>
+        ${renderAppIcon("folder-off")}
       </div>
       <h1>404</h1>
       <p>요청한 문서를 찾을 수 없습니다.</p>
       <a href="${escapeHtmlAttribute(homeHref)}" class="not-found-link">
-        <span class="material-symbols-outlined">home</span>
+        ${renderAppIcon("home")}
         홈으로 이동
       </a>
     </main>

@@ -497,6 +497,8 @@ Main behaviors:
 
 - searchable sidebar tree rendered by the exact-pinned vanilla `@pierre/trees`
   runtime with a five-symbol generic icon sprite
+- shell and code-block icons rendered from a local inline SVG sprite, without
+  Google Fonts or font ligatures
 - tree dependency loading deferred until after the first content paint on
   desktop, and until sidebar/search interaction on compact layouts
 - `Recent` virtual folder
