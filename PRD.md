@@ -2,7 +2,7 @@
 
 > 목표: **옵시디언 Vault 전체**를 입력으로 받아, `publish: true`인 마크다운만 추려  
 > “파일 탐색기(좌측) + 문서 뷰어(우측)” UI를 가진 **정적 사이트**를 생성하고 Cloudflare Pages에 배포한다.  
-> 핵심은 **진짜 경로 라우팅(Real Path Routing)** + **빌더 단순성** + **게시글이 많아도 빠른 체감 성능**이다.
+> 핵심은 **prefix 기반 진짜 경로 라우팅(Real Path Routing)** + **빌더 단순성** + **게시글이 많아도 빠른 체감 성능**이다.
 
 ---
 
@@ -11,13 +11,16 @@
 - 입력 루트: `posts/` 같은 별도 루트가 아니라 **Vault 자체가 루트**
   - 빌더 실행 인자로 vault 경로를 받는다.
 - 발행 여부: `frontmatter.publish === true` (유지)
-- 라우팅: **해시 라우팅 X**, **진짜 경로 라우팅 O**
+- 라우팅: **해시 라우팅 X**, **`prefix` 기반 진짜 경로 라우팅 O**
+- 탐색기 폴더: 실제 파일 경로가 아니라 **`category_path` 기준**
 - Obsidian 위키링크: **문서 링크는 지원**, **이미지는 지원하지 않음**(이미지는 별도 사이트)
 - 코드 하이라이트: **무조건 필수**
 - 정렬: 기본은 **ㄱㄴㄷ(가나다) 정렬**
 - 신규 표시: “최근 글”은 파일 트리에서 **NEW 아이콘** 표시
 - “최근 글” 전용 폴더: **실제 파일시스템과 별개인 가상 폴더**를 탐색기에 추가
-- 최신 시간 기준: `mtime`이면 충분
+- 신규/최근 기준: 파일 `mtime`이 아니라 **frontmatter 날짜 사용**
+  - NEW: `date` → `createdDate`
+  - Recent/홈 fallback: `updatedDate` → `modifiedDate` → `lastModified`, 없으면 `date` → `createdDate`
 
 ---
 
@@ -45,7 +48,7 @@
 
 ### 1.3 가상 폴더(Recent)
 - 탐색기 최상단(또는 고정 섹션)에 `Recent` 가상 폴더를 추가한다.
-- `Recent`에는 “최근 수정된 글”을 정렬 기준에 따라 나열한다(기본: 최신 mtime 순).
+- `Recent`에는 frontmatter 수정일을 우선하고 생성일을 fallback으로 사용해 최신순으로 정렬한 문서를 표시한다.
 - 이 목록은 실제 디렉터리 구조와 무관하다.
 
 ---
@@ -63,7 +66,8 @@
 
 ### 2.2 출력(정적 사이트)
 - 빌더는 `dist/`에 정적 파일을 생성한다.
-- **진짜 경로 라우팅**을 위해, 각 글은 실제 파일 경로를 기반으로 **HTML 파일 경로를 그대로 생성**한다.
+- **진짜 경로 라우팅**을 위해, 각 글은 정규화한 frontmatter `prefix`를 기반으로 **HTML route를 생성**한다.
+- 실제 Vault 경로는 안정적인 내부 문서 ID와 위키링크 해석에 사용하고, 공개 URL에는 노출하지 않는다.
 
 권장 산출물 구조:
 
@@ -73,16 +77,18 @@
   - UI 런타임(탐색기/페이지 전환/본문 삽입)
 - `dist/manifest.json`  
   - 트리/메타데이터 인덱스(필수)
-- `dist/content/<id>.html`  
+- `dist/content/<sha1-of-doc-id>.html`
   - 각 문서의 본문 HTML(하이라이트 포함) — 클라이언트가 fetch로 가져오는 용도(필수)
 - `dist/<route>/index.html`  
   - 각 route별 “직접 접근용 프리렌더 페이지”(필수, real routing)
 
 예시:
-- 입력 파일: `vault/posts/2024/file-system-blog.md`
-- 라우트: `/posts/2024/file-system-blog/`
-- 생성 파일: `dist/posts/2024/file-system-blog/index.html`
-- 본문: `dist/content/posts__2024__file-system-blog.html` (id 규칙은 4.2)
+- 입력 파일: `vault/posts/2024/setup-guide.md`
+- frontmatter: `prefix: BC-VO-02`, `category_path: engineering/blog/frontend`
+- 공개 라우트: `/BC-VO-02/`
+- 생성 파일: `dist/BC-VO-02/index.html`
+- 내부 문서 ID: `posts__2024__setup-guide`
+- 본문: `dist/content/<sha1-of-doc-id>.html`
 
 > 핵심: “어떤 경로로 들어와도 해당 경로에 index.html이 존재”하도록 만들어  
 > Cloudflare Pages에서 별도 SPA rewrite 없이도 direct access가 된다.
@@ -95,8 +101,11 @@
 ```yaml
 ---
 publish: true                  # true인 글만 포함
+prefix: "BC-VO-02"             # 공개 route의 기준 (필수)
+category_path: "engineering/blog/frontend" # 탐색기 폴더의 기준 (필수)
 title: "글 제목"                # 없으면 파일명 기반 자동 생성
-date: "2024-10-24"             # 옵션 (없으면 표시 생략 또는 mtime 기반 보정)
+date: "2024-10-24"             # 옵션: 표시 및 NEW 기준
+updatedDate: "2024-10-25"      # 옵션: Recent/홈 정렬 우선 기준
 description: "요약"            # 옵션
 tags: ["react", "nextjs"]      # 옵션
 draft: false                   # 옵션 (true면 제외)
@@ -106,28 +115,31 @@ draft: false                   # 옵션 (true면 제외)
 ### 3.2 기본 동작
 
 * `publish` 누락: 기본 false(= 미발행)
+* `publish: true`지만 `prefix` 또는 `category_path` 누락: 경고 후 게시 대상에서 제외
 * `title` 누락: 파일명에서 자동 생성(예: `file-system-blog` → `File System Blog`)
-* `date` 누락: 화면 표시는 선택(기본은 표시하되 값은 `mtime` 사용 가능)
+* `date`/`createdDate` 누락 또는 유효하지 않음: 날짜를 표시하지 않고 NEW 배지를 붙이지 않음
+* 수정일 누락 또는 유효하지 않음: Recent/홈 정렬에서 `date`/`createdDate`로 fallback
 
 ---
 
 ## 4) 경로/ID 규칙
 
-### 4.1 라우트 생성 규칙(Real Path)
+### 4.1 라우트 생성 규칙(Prefix Route)
 
-* 입력 파일의 Vault 상대경로(확장자 제거)를 그대로 route로 사용:
-
-  * `<vaultRelPathWithoutExt>/`
-* 예: `posts/2024/file-system-blog.md` → `/posts/2024/file-system-blog/`
+* frontmatter `prefix`를 Unicode NFKC로 정규화하고 공백, `_`, `/`를 `-`로 바꾼 값을 route로 사용한다.
+* 지원하지 않는 문장부호를 제거하고 연속 `-`를 하나로 합친다.
+* 예: `prefix: BC-VO-02` → `/BC-VO-02/`
+* 예: `prefix: Docs / Intro` → `/Docs-Intro/`
+* 정규화 결과가 충돌하면 Vault 상대경로 기반 hash suffix를 뒤 문서 route에 추가하고 경고한다.
 
 ### 4.2 문서 ID 규칙
 
-* 본문 HTML 파일명 및 manifest key로 쓸 안정적인 ID가 필요하다.
-* 규칙(권장):
+* manifest key로 쓸 안정적인 ID가 필요하다. 공개 route와 내부 ID는 서로 독립적이다.
+* 규칙:
 
   * `id = vaultRelPathWithoutExt`를 `/`를 `__`로 치환
   * 예: `posts/2024/file-system-blog` → `posts__2024__file-system-blog`
-* `contentUrl = /content/<id>.html`
+* `contentUrl = /content/<sha1-of-id>.html`
 
 ---
 
@@ -180,7 +192,7 @@ draft: false                   # 옵션 (true면 제외)
   * `folder` / `file`
 * 파일 노드 메타:
 
-  * `id`, `title`, `route`, `contentUrl`, `mtime`, `tags`, `description`
+  * `id`, `title`, `prefix`, `categoryPath`, `route`, `contentUrl`, `date`, `updatedDate`, `tags`, `description`, `branch`
 
 ### 6.2 정렬 규칙(기본 ㄱㄴㄷ)
 
@@ -191,12 +203,14 @@ draft: false                   # 옵션 (true면 제외)
 * 파일도 동일하게 가나다 오름차순
 * 단, `Recent` 가상 폴더에서는:
 
-  * 기본 최신 mtime 내림차순
+  * `updatedDate`/`modifiedDate`/`lastModified` 우선, `date`/`createdDate` fallback으로 내림차순
+  * 유효한 날짜가 없는 문서는 날짜가 있는 문서 뒤에서 Vault 상대경로 가나다순
 
 ### 6.3 NEW 표시 규칙
 
-* `mtime`이 최근 N일 이내면 NEW 표시
+* `date` 또는 `createdDate`가 최근 N일 이내면 NEW 표시
 * 기본값: `newWithinDays = 7` (config로 변경 가능)
+* `updatedDate` 계열과 파일 `mtime`은 NEW 판정에 사용하지 않는다.
 * 표시 방식:
 
   * 파일 항목 우측에 작은 “NEW” 배지/아이콘
@@ -206,11 +220,10 @@ draft: false                   # 옵션 (true면 제외)
 * 최상단 고정 노드로 삽입(실제 파일시스템과 별개)
 * 포함 기준:
 
-  * 기본: 최신 mtime 상위 `recentLimit = 20`
-  * 또는 N일 이내 문서만
+  * 기본: frontmatter 날짜 기준 최신 `recentLimit = 5`개
 * 정렬:
 
-  * 최신 mtime 내림차순
+  * 수정일 계열 우선, 생성일 계열 fallback 내림차순
 
 ---
 
@@ -228,6 +241,10 @@ draft: false                   # 옵션 (true면 제외)
 
 * 각 route의 `index.html`은 동일한 앱 셸을 포함한다.
 * 앱 셸은 현재 location.pathname을 읽어 “현재 문서 route”를 선택한다.
+* 기본 branch는 `dev`이며 `branch`가 없는 문서도 기본 branch 뷰에 속한다.
+* 루트 홈은 기본 branch의 `/index/` 문서를 우선한다.
+* `/index/`가 없으면 수정일 계열 → 생성일 계열의 최신 문서를 사용하고, 날짜가 모두 없으면 route 가나다순 첫 문서를 사용한다.
+* 기본 branch 문서가 하나도 없으면 전체 게시 문서에 같은 홈 선택 규칙을 적용한다.
 * 문서가 없는 경로(404):
 
   * `dist/404.html` 제공(Cloudflare Pages 기본 404 처리)
@@ -243,7 +260,7 @@ draft: false                   # 옵션 (true면 제외)
 
 ### 8.1 캐시/증분 빌드(필수 권장)
 
-* `.cache/build-index.json`에 문서별 해시/mtime 저장
+* `.cache/eiam/v1-<namespace>/build-index.json`에 문서별 fingerprint/mtime 저장
 * 변경된 문서만 재변환(Shiki 비용 절감)
 * 삭제된 문서는 dist에서 정리
 
@@ -282,7 +299,7 @@ export default {
   exclude: [".obsidian/**", "private/**"],
   ui: {
     newWithinDays: 7,
-    recentLimit: 20,
+    recentLimit: 5,
   },
   markdown: {
     wikilinks: true,
@@ -323,8 +340,9 @@ export default {
 * [ ] Vault 전체에서 `publish: true`인 문서만 트리에 노출
 * [ ] 모든 문서 route에 대해 `dist/<route>/index.html` 생성되어 direct access 가능
 * [ ] 폴더/파일 가나다 정렬(ko-KR)
-* [ ] NEW 표시가 `mtime` 기준으로 동작
-* [ ] Recent 가상 폴더가 상단에 고정되고 최신 글을 노출
+* [ ] 공개 route가 `prefix`에서 생성되고 탐색기 폴더가 `category_path`에서 생성
+* [ ] NEW 표시가 `date`/`createdDate` 기준으로 동작하며 기본 임계값은 7일
+* [ ] Recent 가상 폴더가 상단에 고정되고 수정일→생성일 기준 최신 5개를 노출
 * [ ] 위키링크 `[[...]]`가 문서 링크로 변환(이미지 제외)
 * [ ] 코드 하이라이트가 모든 코드블록에 적용
 
@@ -344,12 +362,13 @@ export default {
 * exclude 적용
 * gray-matter로 frontmatter 파싱
 * publish/draft 필터
-* mtime 수집
+* 게시 필수 메타데이터(`prefix`, `category_path`) 검증
+* 생성일/수정일 frontmatter 정규화
 
 ### M2. 라우트/ID/manifest 생성
 
-* route 생성(상대경로 기반)
-* 트리 생성(폴더/파일)
+* route 생성(`prefix` 기반, 충돌 suffix 포함)
+* 트리 생성(`category_path` 기반 폴더/파일)
 * Recent 가상 폴더 삽입
 * NEW 플래그 계산
 * `manifest.json` 출력
@@ -358,7 +377,7 @@ export default {
 
 * md → HTML 렌더
 * 코드블록 Shiki 하이라이트 적용
-* `content/<id>.html` 생성
+* `content/<sha1-of-doc-id>.html` 생성
 * 위키링크 resolve & 변환(문서만)
 
 ### M4. 프리렌더 route pages 생성(Real Path)
@@ -380,14 +399,13 @@ export default {
 
 ---
 
-## 12) 질문(선택) — 답 없어도 구현 가능하지만, 더 깔끔해짐
+## 12) 확정된 기본 선택
 
 1. NEW 기준을 “최근 7일”로 둘까, “최근 14일”로 둘까? (default는 7로 잡아둠)
 -> 최근 7일
-2. Recent 가상 폴더는 “최신 20개” 고정이 좋을까, “최근 N일”이 좋을까? (둘 다 지원 가능)
--> 최신 5개
-3. 위키링크 resolve 규칙: 파일명이 중복될 때는 “가장 먼저 매칭” vs “경고 후 무시” 중 어떤 정책이 좋을까?
--> 경고 후 무시
+2. Recent 가상 폴더는 frontmatter 날짜 기준 최신 5개
+   - `ui.recentLimit` 또는 `--recent-limit`로 변경 가능
+3. 위키링크 resolve에서 파일명이 중복되면 경고 후 링크 변환 생략
 ---
 
 ## 13) 프론트엔드 관련 디자인 이미지 및 간략한 코드는 프로젝트 루트경로의 example 디렉터리를 참고.
