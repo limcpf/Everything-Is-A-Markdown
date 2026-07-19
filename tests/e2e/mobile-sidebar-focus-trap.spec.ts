@@ -20,26 +20,38 @@ test.describe("모바일 사이드바 포커스 트랩", () => {
     await expect(sidebar).toHaveAttribute("aria-modal", "true");
     await expect(viewer).toHaveAttribute("aria-hidden", "true");
 
+    const tabHistory: string[] = [];
     for (let i = 0; i < 30; i += 1) {
       await page.keyboard.press("Tab");
-      const insideSidebar = await page.evaluate(() => {
+      const focusState = await page.evaluate(() => {
         const active = document.activeElement;
         const panel = document.getElementById("sidebar-panel");
-        return Boolean(active && panel && panel.contains(active));
+        return {
+          id: active?.id ?? "",
+          inside: Boolean(active && panel && panel.contains(active)),
+          tag: active?.tagName ?? "",
+        };
       });
-      expect(insideSidebar).toBe(true);
+      tabHistory.push(`${focusState.tag}#${focusState.id}`);
+      expect(focusState.inside, `Tab ${i + 1}: ${tabHistory.join(" → ")}`).toBe(true);
     }
 
     for (let i = 0; i < 30; i += 1) {
       await page.keyboard.down("Shift");
       await page.keyboard.press("Tab");
       await page.keyboard.up("Shift");
-      const insideSidebar = await page.evaluate(() => {
+      const focusState = await page.evaluate(() => {
         const active = document.activeElement;
         const panel = document.getElementById("sidebar-panel");
-        return Boolean(active && panel && panel.contains(active));
+        return {
+          id: active?.id ?? "",
+          inside: Boolean(active && panel && panel.contains(active)),
+          tag: active?.tagName ?? "",
+        };
       });
-      expect(insideSidebar).toBe(true);
+      expect(focusState.inside, `Shift+Tab ${i + 1}: ${focusState.tag}#${focusState.id}`).toBe(
+        true,
+      );
     }
 
     await page.keyboard.press("Escape");

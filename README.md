@@ -502,7 +502,7 @@ Main behaviors:
 - `Recent` virtual folder
 - optional pinned virtual folder
 - prefix/title file labels without visible `.md` extensions, plus NEW badges when `ui.newWithinDays` matches
-- branch pills in the sidebar
+- a compact native branch selector in the sidebar
 - active document selection synced between the tree, browser history, and document viewer
 - model-level tree search with clear and previous/next match controls
 - direct-link loading from route HTML
