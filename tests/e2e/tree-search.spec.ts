@@ -12,7 +12,9 @@ test.describe("Trees sidebar search", () => {
     const searchClear = page.locator("#tree-search-clear");
     const searchNext = page.locator("#tree-search-next");
     const setupRow = page
-      .locator('#tree-root [data-type="item"][data-item-type="file"][data-item-path="Recent/BC-VO-02 Setup Guide"]')
+      .locator(
+        '#tree-root [data-type="item"][data-item-type="file"][data-item-path="Recent/BC-VO-02 Setup Guide"]',
+      )
       .first();
 
     await expect(searchInput).toBeVisible();
@@ -33,7 +35,9 @@ test.describe("Trees sidebar search", () => {
 
     await searchNext.click();
     await expect(
-      page.locator('#tree-root [data-type="item"][data-item-type="file"][data-item-focused="true"]').first(),
+      page
+        .locator('#tree-root [data-type="item"][data-item-type="file"][data-item-focused="true"]')
+        .first(),
     ).toContainText("Unsafe");
 
     await unsafeRow.click();

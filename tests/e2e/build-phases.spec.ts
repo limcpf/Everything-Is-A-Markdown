@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { buildDocumentGraph } from "../../src/build/graph";
+import { buildDocumentGraph, pickHomeDoc } from "../../src/build/graph";
+import { DEFAULT_RUNTIME_LAYOUT } from "../../src/defaults";
 import type { BuildOptions, DocRecord } from "../../src/types";
 
 const options: BuildOptions = {
@@ -11,6 +12,7 @@ const options: BuildOptions = {
   staticPaths: [],
   newWithinDays: 7,
   recentLimit: 5,
+  defaultBranch: "dev",
   pinnedMenu: null,
   wikilinks: true,
   imagePolicy: "omit-local",
@@ -22,10 +24,16 @@ const options: BuildOptions = {
     cdnUrl: "https://example.test/mermaid.js",
     theme: "default",
   },
+  layout: { ...DEFAULT_RUNTIME_LAYOUT },
   seo: null,
 };
 
-function createDoc(id: string, title: string, route: string, wikiTargets: string[] = []): DocRecord {
+function createDoc(
+  id: string,
+  title: string,
+  route: string,
+  wikiTargets: string[] = [],
+): DocRecord {
   return {
     sourcePath: `/vault/${id}.md`,
     relPath: `${id}.md`,
@@ -60,6 +68,23 @@ test.describe("build phase contracts", () => {
     ]);
     expect(graph.wikiLookup.byTitle.get("target")).toEqual([target]);
     expect(graph.tree[0]).toMatchObject({ type: "folder", name: "Recent", virtual: true });
+  });
+
+  test("custom defaultBranch가 manifest, branch order, home selection에 일관되게 적용된다", () => {
+    const main = { ...createDoc("main", "Main", "/MAIN/"), branch: "main" };
+    const dev = { ...createDoc("dev", "Dev", "/DEV/"), branch: "dev" };
+    const unclassified = createDoc("unclassified", "Unclassified", "/UNCLASSIFIED/");
+    unclassified.updatedDate = "2026-07-20";
+    const customOptions = { ...options, defaultBranch: "main" };
+
+    const graph = buildDocumentGraph([dev, main, unclassified], customOptions);
+
+    expect(graph.manifest.defaultBranch).toBe("main");
+    expect(graph.manifest.branches).toEqual(["main", "dev"]);
+    expect(graph.manifest.layout).toEqual(DEFAULT_RUNTIME_LAYOUT);
+    expect(pickHomeDoc([dev, main, unclassified], customOptions.defaultBranch)?.id).toBe(
+      "unclassified",
+    );
   });
 
   test("pipeline entry는 phase composition만 소유한다", async () => {

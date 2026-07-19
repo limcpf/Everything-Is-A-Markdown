@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { createMarkdownRenderer } from "../../src/markdown";
+import { DEFAULT_RUNTIME_LAYOUT } from "../../src/defaults";
 import type { BuildOptions, WikiResolver } from "../../src/types";
 
 const resolver: WikiResolver = {
@@ -16,6 +17,7 @@ function buildOptions(shikiTheme = "github-dark"): BuildOptions {
     staticPaths: [],
     newWithinDays: 7,
     recentLimit: 5,
+    defaultBranch: "dev",
     pinnedMenu: null,
     wikilinks: false,
     imagePolicy: "omit-local",
@@ -27,6 +29,7 @@ function buildOptions(shikiTheme = "github-dark"): BuildOptions {
       cdnUrl: "",
       theme: "default",
     },
+    layout: { ...DEFAULT_RUNTIME_LAYOUT },
     seo: null,
   };
 }
@@ -43,7 +46,7 @@ test.describe("fine-grained Shiki loading", () => {
 
     const selectedThemeRenderer = await createMarkdownRenderer(buildOptions("nord"));
     const selectedThemeResult = await selectedThemeRenderer.render(
-      "```json\n{\"answer\": 42}\n```",
+      '```json\n{"answer": 42}\n```',
       resolver,
     );
     expect(selectedThemeResult.html).toContain('class="shiki nord"');

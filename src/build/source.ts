@@ -1,49 +1,19 @@
-import crypto from "node:crypto";
-import fs from "node:fs/promises";
 import path from "node:path";
-import matter from "gray-matter";
-import type { BuildCache, BuildOptions, DocRecord, ManifestDoc, WikiResolver } from "../types";
 import {
-  buildExcluder,
-  makeHash,
-  makeTitleFromFileName,
-  relativePosix,
-  stripMdExt,
-  toDocId,
-} from "../utils";
+  evaluatePublication,
+  formatPublicationDiagnostic,
+  parsePublicationSource,
+  scanMarkdownSources,
+  type ParsedPublicationSource,
+} from "../publication";
+import type { BuildCache, BuildOptions, DocRecord, ManifestDoc, WikiResolver } from "../types";
+import { makeHash, makeTitleFromFileName, stripMdExt, toDocId } from "../utils";
 import type { ReadDocsResult, WikiLookup } from "./contracts";
 import { toContentFileName } from "./shared";
 
+export { normalizeCategoryPath } from "../publication";
+
 type CachedSourceEntry = BuildCache["sources"][string];
-
-async function walkMarkdownFiles(
-  dir: string,
-  vaultDir: string,
-  isExcluded: (relPath: string, isDirectory: boolean) => boolean,
-): Promise<string[]> {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  const files: string[] = [];
-
-  for (const entry of entries) {
-    const absolutePath = path.join(dir, entry.name);
-    const relPath = relativePosix(vaultDir, absolutePath);
-
-    if (isExcluded(relPath, entry.isDirectory())) {
-      continue;
-    }
-
-    if (entry.isDirectory()) {
-      files.push(...(await walkMarkdownFiles(absolutePath, vaultDir, isExcluded)));
-      continue;
-    }
-
-    if (entry.isFile() && /\.md$/i.test(entry.name)) {
-      files.push(absolutePath);
-    }
-  }
-
-  return files;
-}
 
 export function parseStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
@@ -89,24 +59,6 @@ function normalizeFrontmatterDate(value: unknown): string | null {
   }
 
   return null;
-}
-
-export function normalizeCategoryPath(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const normalized = value
-    .trim()
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "")
-    .split("/")
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-    .join("/");
-
-  return normalized.length > 0 ? normalized : undefined;
 }
 
 function extractFrontmatterScalar(raw: string, key: string): string | null {
@@ -167,34 +119,6 @@ function pickDocUpdatedDate(frontmatter: Record<string, unknown>, raw: string): 
   return pickFrontmatterDate(frontmatter, raw, ["updatedDate", "modifiedDate", "lastModified"]);
 }
 
-function pickDocPrefix(frontmatter: Record<string, unknown>, raw: string): string | undefined {
-  const literal = extractFrontmatterScalar(raw, "prefix");
-  if (literal) {
-    return literal;
-  }
-
-  const value = frontmatter.prefix;
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  }
-
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return String(value);
-  }
-
-  return undefined;
-}
-
-function pickDocCategoryPath(frontmatter: Record<string, unknown>, raw: string): string | undefined {
-  const literal = normalizeCategoryPath(extractFrontmatterScalar(raw, "category_path"));
-  if (literal) {
-    return literal;
-  }
-
-  return normalizeCategoryPath(frontmatter.category_path);
-}
-
 function appendRouteSuffix(route: string, suffix: string): string {
   const clean = route.replace(/^\/+/, "").replace(/\/+$/, "");
   if (!clean) {
@@ -239,7 +163,9 @@ function ensureUniqueRoutes(docs: DocRecord[]): void {
   }
 
   const used = new Set<string>();
-  const sorted = [...docs].sort((left, right) => left.relNoExt.localeCompare(right.relNoExt, "ko-KR"));
+  const sorted = [...docs].sort((left, right) =>
+    left.relNoExt.localeCompare(right.relNoExt, "ko-KR"),
+  );
 
   for (const doc of sorted) {
     const baseRoute = doc.route;
@@ -303,39 +229,34 @@ function extractWikiTargets(markdown: string): string[] {
   return Array.from(targets).sort((left, right) => left.localeCompare(right, "ko-KR"));
 }
 
-function makeSourceFingerprint(raw: string): string {
-  return crypto.createHash("sha256").update(raw).digest("hex");
-}
-
-function toCachedSourceEntry(
-  raw: string,
-  rawHash: string,
-  parsed: matter.GrayMatterFile<string>,
-): CachedSourceEntry {
+function toCachedSourceEntry(parsed: ParsedPublicationSource): CachedSourceEntry {
+  const { source, frontmatter, content, metadata } = parsed;
   return {
     mtimeMs: 0,
     size: 0,
-    rawHash,
-    publish: parsed.data.publish === true,
-    draft: parsed.data.draft === true,
-    title: typeof parsed.data.title === "string" && parsed.data.title.trim().length > 0 ? parsed.data.title.trim() : undefined,
-    prefix: pickDocPrefix(parsed.data as Record<string, unknown>, raw),
-    categoryPath: pickDocCategoryPath(parsed.data as Record<string, unknown>, raw),
-    date: pickDocDate(parsed.data as Record<string, unknown>, raw),
-    updatedDate: pickDocUpdatedDate(parsed.data as Record<string, unknown>, raw),
-    description: typeof parsed.data.description === "string" ? parsed.data.description.trim() || undefined : undefined,
-    tags: parseStringArray(parsed.data.tags),
-    branch: parseBranch(parsed.data.branch),
-    body: parsed.content,
-    wikiTargets: extractWikiTargets(parsed.content),
+    rawHash: source.rawHash,
+    publish: metadata.publish,
+    draft: metadata.draft,
+    title:
+      typeof frontmatter.title === "string" && frontmatter.title.trim().length > 0
+        ? frontmatter.title.trim()
+        : undefined,
+    prefix: metadata.prefix,
+    categoryPath: metadata.categoryPath,
+    date: pickDocDate(frontmatter, source.raw),
+    updatedDate: pickDocUpdatedDate(frontmatter, source.raw),
+    description:
+      typeof frontmatter.description === "string"
+        ? frontmatter.description.trim() || undefined
+        : undefined,
+    tags: parseStringArray(frontmatter.tags),
+    branch: parseBranch(frontmatter.branch),
+    body: content,
+    wikiTargets: extractWikiTargets(content),
   };
 }
 
-function toDocRecord(
-  sourcePath: string,
-  relPath: string,
-  entry: CachedSourceEntry,
-): DocRecord {
+function toDocRecord(sourcePath: string, relPath: string, entry: CachedSourceEntry): DocRecord {
   const relNoExt = stripMdExt(relPath);
   const fileName = path.basename(relPath);
   const id = toDocId(relNoExt);
@@ -363,60 +284,48 @@ function toDocRecord(
   };
 }
 
-export async function readPublishedDocs(options: BuildOptions, previousSources: BuildCache["sources"]): Promise<ReadDocsResult> {
-  const isExcluded = buildExcluder(options.exclude);
-  const mdFiles = await walkMarkdownFiles(options.vaultDir, options.vaultDir, isExcluded);
-  const fileEntries = await Promise.all(
-    mdFiles.map(async (sourcePath) => ({
-      sourcePath,
-      relPath: relativePosix(options.vaultDir, sourcePath),
-      stat: await fs.stat(sourcePath),
-    })),
-  );
+export async function readPublishedDocs(
+  options: BuildOptions,
+  previousSources: BuildCache["sources"],
+): Promise<ReadDocsResult> {
   const docs: DocRecord[] = [];
   const nextSources: BuildCache["sources"] = {};
 
-  for (const { sourcePath, relPath, stat } of fileEntries) {
-    const prev = previousSources[relPath];
-    const raw = await Bun.file(sourcePath).text();
-    const rawHash = makeSourceFingerprint(raw);
+  for await (const source of scanMarkdownSources(options.vaultDir, options.exclude)) {
+    const prev = previousSources[source.relPath];
 
     let entry: CachedSourceEntry;
-    const canReuse = !!prev && prev.rawHash === rawHash;
+    const canReuse = !!prev && prev.rawHash === source.rawHash;
     if (canReuse) {
       entry = prev;
     } else {
-      let parsed: matter.GrayMatterFile<string>;
-      try {
-        parsed = matter(raw);
-      } catch (error) {
-        throw new Error(`Frontmatter parse failed: ${relPath}\n${(error as Error).message}`);
+      const parsed = parsePublicationSource(source);
+      if (!parsed.ok) {
+        throw new Error(formatPublicationDiagnostic(parsed.diagnostic), {
+          cause: parsed.cause,
+        });
       }
-
-      entry = toCachedSourceEntry(raw, rawHash, parsed);
+      entry = toCachedSourceEntry(parsed.value);
     }
 
     const completeEntry: CachedSourceEntry = {
       ...entry,
-      mtimeMs: stat.mtimeMs,
-      size: stat.size,
+      mtimeMs: source.mtimeMs,
+      size: source.size,
     };
-    if (!completeEntry.publish || completeEntry.draft) {
+    const evaluation = evaluatePublication(source.relPath, completeEntry);
+    if (evaluation.status === "ignored") {
+      continue;
+    }
+    if (evaluation.status === "invalid") {
+      for (const diagnostic of evaluation.diagnostics) {
+        console.warn(formatPublicationDiagnostic(diagnostic));
+      }
       continue;
     }
 
-    if (!completeEntry.prefix) {
-      console.warn(`[publish] Skipped published doc without prefix: ${relPath}`);
-      continue;
-    }
-
-    if (!completeEntry.categoryPath) {
-      console.warn(`[publish] Skipped published doc without category_path: ${relPath}`);
-      continue;
-    }
-
-    nextSources[relPath] = completeEntry;
-    docs.push(toDocRecord(sourcePath, relPath, completeEntry));
+    nextSources[source.relPath] = completeEntry;
+    docs.push(toDocRecord(source.sourcePath, source.relPath, completeEntry));
   }
 
   ensureUniqueRoutes(docs);
@@ -562,7 +471,8 @@ export function buildBacklinksByDocId(
         continue;
       }
 
-      const bucket = buckets.get(targetDoc.id) ?? new Map<string, ManifestDoc["backlinks"][number]>();
+      const bucket =
+        buckets.get(targetDoc.id) ?? new Map<string, ManifestDoc["backlinks"][number]>();
       bucket.set(doc.id, {
         id: doc.id,
         route: doc.route,

@@ -20,10 +20,7 @@ export function toDocId(relNoExt: string): string {
 }
 
 export function slugifySegment(input: string): string {
-  const normalized = input
-    .normalize("NFKC")
-    .trim()
-    .toLowerCase();
+  const normalized = input.normalize("NFKC").trim().toLowerCase();
 
   const slug = normalized
     .replace(/['’]/g, "")
@@ -60,7 +57,9 @@ export function isRemoteUrl(input: string): boolean {
   return /^(https?:)?\/\//i.test(input) || /^data:/i.test(input) || /^mailto:/i.test(input);
 }
 
-export function buildExcluder(patterns: string[]): (relPath: string, isDirectory: boolean) => boolean {
+export function buildExcluder(
+  patterns: string[],
+): (relPath: string, isDirectory: boolean) => boolean {
   const matchers = patterns.map((pattern) => picomatch(pattern, { dot: true }));
 
   return (relPath: string, isDirectory: boolean): boolean => {
@@ -89,7 +88,10 @@ export async function removeEmptyParents(startDir: string, stopDir: string): Pro
   let current = startDir;
   const normalizedStop = path.resolve(stopDir);
 
-  while (path.resolve(current).startsWith(normalizedStop) && path.resolve(current) !== normalizedStop) {
+  while (
+    path.resolve(current).startsWith(normalizedStop) &&
+    path.resolve(current) !== normalizedStop
+  ) {
     try {
       const entries = await fs.readdir(current);
       if (entries.length > 0) {

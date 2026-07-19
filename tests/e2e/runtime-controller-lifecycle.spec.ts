@@ -1,7 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { createContentEnhancementController } from "../../src/runtime/content-enhancement-controller.js";
 import { createEventScope } from "../../src/runtime/controller-lifecycle.js";
-import { createMermaidController, resolveMermaidConfig } from "../../src/runtime/mermaid-controller.js";
+import {
+  createMermaidController,
+  resolveMermaidConfig,
+} from "../../src/runtime/mermaid-controller.js";
 import { loadInitialViewData } from "../../src/runtime/runtime-bootstrap.js";
 import {
   createSettingsController,
@@ -226,7 +229,10 @@ function createFakeDocument() {
   const appRoot = new FakeElement();
   const viewer = new FakeElement();
   const inputs = {
-    menu: [Object.assign(new FakeInput(), { value: "left" }), Object.assign(new FakeInput(), { value: "right" })],
+    menu: [
+      Object.assign(new FakeInput(), { value: "left" }),
+      Object.assign(new FakeInput(), { value: "right" }),
+    ],
     theme: [
       Object.assign(new FakeInput(), { value: "system" }),
       Object.assign(new FakeInput(), { value: "light" }),
@@ -288,9 +294,15 @@ test.describe("runtime controller module contracts", () => {
       windowRef: createFakeWindow(),
       clipboard: { async writeText() {} },
       mermaidController: {
-        setup() { calls.setup += 1; },
-        destroy() { calls.destroy += 1; },
-        async render() { calls.render += 1; },
+        setup() {
+          calls.setup += 1;
+        },
+        destroy() {
+          calls.destroy += 1;
+        },
+        async render() {
+          calls.render += 1;
+        },
       },
     });
 
@@ -389,7 +401,9 @@ test.describe("runtime controller module contracts", () => {
           treePathToRoute: new Map(),
         },
       },
-      setActiveBranch() { return true; },
+      setActiveBranch() {
+        return true;
+      },
     };
     const controller = createTreeController({
       navigation,
@@ -418,16 +432,18 @@ test.describe("runtime controller module contracts", () => {
     expect(normalizeThemeMode("unexpected")).toBe("system");
     expect(resolveAppliedTheme("system", true)).toBe("dark");
     expect(clampDesktopSidebarWidth(900, 1200)).toBe(510);
-    expect(resolveMermaidConfig({ mermaid: { cdnUrl: "", theme: "bad theme" } }))
-      .toMatchObject({
-        enabled: true,
-        cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
-        theme: "default",
-      });
-    const mermaid = createMermaidController({ enabled: false, cdnUrl: "/mermaid.js", theme: "default" }, {
-      documentRef: {},
-      windowRef: {},
+    expect(resolveMermaidConfig({ mermaid: { cdnUrl: "", theme: "bad theme" } })).toMatchObject({
+      enabled: true,
+      cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
+      theme: "default",
     });
+    const mermaid = createMermaidController(
+      { enabled: false, cdnUrl: "/mermaid.js", theme: "default" },
+      {
+        documentRef: {},
+        windowRef: {},
+      },
+    );
     expect(typeof mermaid.setup).toBe("function");
     expect(typeof mermaid.destroy).toBe("function");
 

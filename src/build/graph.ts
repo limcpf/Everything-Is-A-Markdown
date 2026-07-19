@@ -1,11 +1,9 @@
-import path from "node:path";
 import type { BuildOptions, DocRecord, FileNode, FolderNode, Manifest, TreeNode } from "../types";
+import { DEFAULT_BRANCH } from "../defaults";
 import { filterViewDocsByBranch, pickViewHomeRoute } from "../view-contract";
 import type { DocumentGraphResult, WikiLookup } from "./contracts";
 import { buildBacklinksByDocId, createWikiLookup } from "./source";
 import { resolveSiteTitle } from "./shared";
-
-const DEFAULT_BRANCH = "dev";
 
 function fileNodeFromDoc(doc: DocRecord): FileNode {
   return {
@@ -67,8 +65,8 @@ function matchesPathPrefix(value: string, prefix: string): boolean {
   return value === prefix || value.startsWith(`${prefix}/`);
 }
 
-export function pickHomeDoc(docs: DocRecord[]): DocRecord | null {
-  const defaultCandidates = filterViewDocsByBranch(docs, DEFAULT_BRANCH, DEFAULT_BRANCH);
+export function pickHomeDoc(docs: DocRecord[], defaultBranch = DEFAULT_BRANCH): DocRecord | null {
+  const defaultCandidates = filterViewDocsByBranch(docs, defaultBranch, defaultBranch);
   const candidates = defaultCandidates.length > 0 ? defaultCandidates : docs;
   const route = pickViewHomeRoute(candidates);
   return candidates.find((doc) => doc.route === route) ?? null;
@@ -198,7 +196,7 @@ function buildManifest(
     ]),
   );
 
-  const branchSet = new Set<string>([DEFAULT_BRANCH]);
+  const branchSet = new Set<string>([options.defaultBranch]);
   for (const doc of docs) {
     if (doc.branch) {
       branchSet.add(doc.branch);
@@ -206,10 +204,10 @@ function buildManifest(
   }
 
   const branches = Array.from(branchSet).sort((left, right) => {
-    if (left === DEFAULT_BRANCH) {
+    if (left === options.defaultBranch) {
       return -1;
     }
-    if (right === DEFAULT_BRANCH) {
+    if (right === options.defaultBranch) {
       return 1;
     }
     return left.localeCompare(right, "ko-KR");
@@ -219,8 +217,9 @@ function buildManifest(
     schemaVersion: 2,
     siteTitle: resolveSiteTitle(options),
     pathBase: options.seo?.pathBase ?? "",
-    defaultBranch: DEFAULT_BRANCH,
+    defaultBranch: options.defaultBranch,
     mermaid: options.mermaid,
+    layout: options.layout,
     branches,
     ui: {
       newWithinDays: options.newWithinDays,

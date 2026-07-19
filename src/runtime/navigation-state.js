@@ -1,5 +1,6 @@
 import { getRuntimeManifestDocs } from "./manifest-adapter.js";
 import { buildTreesAdapterInput } from "./tree-adapter.js";
+import { DEFAULT_BRANCH } from "../defaults.ts";
 import {
   filterViewDocsByBranch,
   normalizeViewBranch as normalizeBranch,
@@ -11,7 +12,11 @@ import {
   toViewPathWithBase as toPathWithBase,
 } from "../view-contract.ts";
 
-const DEFAULT_BRANCH = "dev";
+/** @typedef {import("./contracts").BranchView} BranchView */
+/** @typedef {import("./contracts").NavigationState} NavigationState */
+/** @typedef {import("./contracts").RuntimeManifest} RuntimeManifest */
+/** @typedef {import("./contracts").RuntimeManifestDoc} RuntimeManifestDoc */
+/** @typedef {import("./contracts").RuntimeTreeNode} RuntimeTreeNode */
 
 export {
   normalizeBranch,
@@ -22,11 +27,24 @@ export {
   toPathWithBase,
 };
 
-export function resolveRouteFromLocation(pathBase, pathname = globalThis.location?.pathname ?? "/") {
+/**
+ * @param {unknown} pathBase
+ * @param {unknown} [pathname]
+ */
+export function resolveRouteFromLocation(
+  pathBase,
+  pathname = globalThis.location?.pathname ?? "/",
+) {
   return normalizeRoute(stripPathBase(pathname, pathBase));
 }
 
+/**
+ * @param {RuntimeTreeNode[]} nodes
+ * @param {Set<string>} visibleDocIds
+ * @returns {RuntimeTreeNode[]}
+ */
 function cloneFilteredTree(nodes, visibleDocIds) {
+  /** @type {RuntimeTreeNode[]} */
   const filteredNodes = [];
 
   for (const node of nodes) {
@@ -48,12 +66,21 @@ function cloneFilteredTree(nodes, visibleDocIds) {
   return filteredNodes;
 }
 
+/**
+ * @param {RuntimeManifest} manifest
+ * @param {RuntimeManifestDoc[]} manifestDocs
+ * @param {string} branch
+ * @param {string} defaultBranch
+ * @returns {BranchView}
+ */
 function buildBranchView(manifest, manifestDocs, branch, defaultBranch) {
   const docs = filterViewDocsByBranch(manifestDocs, branch, defaultBranch);
   const visibleDocIds = new Set(docs.map((doc) => doc.id));
   const tree = cloneFilteredTree(manifest.tree, visibleDocIds);
   const trees = buildTreesAdapterInput(tree, docs);
+  /** @type {Record<string, string>} */
   const routeMap = {};
+  /** @type {Map<string, number>} */
   const docIndexById = new Map();
 
   for (let index = 0; index < docs.length; index += 1) {
@@ -65,10 +92,17 @@ function buildBranchView(manifest, manifestDocs, branch, defaultBranch) {
   return { docs, visibleDocIds, tree, trees, routeMap, docIndexById };
 }
 
+/** @param {BranchView} view */
 export function pickHomeRoute(view) {
   return pickViewHomeRoute(view.docs);
 }
 
+/**
+ * @param {RuntimeManifest} manifest
+ * @param {RuntimeManifestDoc[]} manifestDocs
+ * @param {string} defaultBranch
+ * @returns {string[]}
+ */
 function collectAvailableBranches(manifest, manifestDocs, defaultBranch) {
   const branchSet = new Set([defaultBranch]);
   for (const doc of manifestDocs) {
@@ -93,6 +127,11 @@ function collectAvailableBranches(manifest, manifestDocs, defaultBranch) {
   });
 }
 
+/**
+ * @param {RuntimeManifest} manifest
+ * @param {{ savedBranch?: unknown; initialDocId?: unknown }} [options]
+ * @returns {NavigationState}
+ */
 export function createNavigationState(manifest, options = {}) {
   const defaultBranch = normalizeBranch(manifest.defaultBranch) || DEFAULT_BRANCH;
   const docs = getRuntimeManifestDocs(manifest);
@@ -100,10 +139,13 @@ export function createNavigationState(manifest, options = {}) {
   const availableBranches = collectAvailableBranches(manifest, docs, defaultBranch);
   const availableBranchSet = new Set(availableBranches);
   const savedBranch = normalizeBranch(options.savedBranch);
+  /** @type {Map<string, BranchView>} */
   const branchViewCache = new Map();
-  let activeBranch = savedBranch && availableBranchSet.has(savedBranch) ? savedBranch : defaultBranch;
+  let activeBranch =
+    savedBranch && availableBranchSet.has(savedBranch) ? savedBranch : defaultBranch;
   let currentDocId = typeof options.initialDocId === "string" ? options.initialDocId : "";
 
+  /** @param {string} branch */
   const getBranchView = (branch) => {
     const cached = branchViewCache.get(branch);
     if (cached) {
@@ -125,6 +167,7 @@ export function createNavigationState(manifest, options = {}) {
     }
   }
 
+  /** @param {unknown} value */
   const setActiveBranch = (value) => {
     const branch = normalizeBranch(value);
     if (!branch || !availableBranchSet.has(branch)) {
@@ -135,6 +178,7 @@ export function createNavigationState(manifest, options = {}) {
     return true;
   };
 
+  /** @param {unknown} rawRoute */
   const resolve = (rawRoute) => {
     const route = normalizeRoute(rawRoute);
     const previousBranch = activeBranch;
@@ -153,7 +197,7 @@ export function createNavigationState(manifest, options = {}) {
     return {
       route,
       id: id ?? null,
-      doc: id ? docsById.get(id) ?? null : null,
+      doc: id ? (docsById.get(id) ?? null) : null,
       branchChanged: previousBranch !== activeBranch,
     };
   };

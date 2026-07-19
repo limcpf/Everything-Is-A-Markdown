@@ -1,17 +1,49 @@
 import { toPathWithBase } from "./navigation-state.js";
 
+/** @typedef {import("./contracts").ContentController} ContentController */
+/** @typedef {import("./contracts").ContentLifecycle} ContentLifecycle */
+/** @typedef {import("./contracts").ContentRenderers} ContentRenderers */
+/** @typedef {import("./contracts").InitialViewData} InitialViewData */
+/** @typedef {import("./contracts").NavigationState} NavigationState */
+/** @typedef {import("./contracts").RuntimeManifestDoc} RuntimeManifestDoc */
+/** @typedef {import("./contracts").ViewerElements} ViewerElements */
+
+/**
+ * @param {Element | null | undefined} element
+ * @param {string} value
+ */
 function setHtml(element, value) {
   if (element && element.innerHTML !== value) {
     element.innerHTML = value;
   }
 }
 
+/**
+ * @param {Node | null | undefined} element
+ * @param {string} value
+ */
 function setText(element, value) {
   if (element && element.textContent !== value) {
     element.textContent = value;
   }
 }
 
+/**
+ * @param {{
+ *   navigation: NavigationState;
+ *   elements: ViewerElements;
+ *   initialViewData: InitialViewData | null;
+ *   pathBase: string;
+ *   siteTitle: string;
+ *   renderers: ContentRenderers;
+ *   lifecycle?: ContentLifecycle;
+ *   fetchContent?: (url: string) => Promise<Response>;
+ *   historyApi?: Pick<History, "pushState"> | null;
+ *   locationApi?: Pick<Location, "pathname"> | null;
+ *   setPageTitle?: (value: string) => void;
+ * }} options
+ * @returns {ContentController}
+ */
 export function createContentController(options) {
   const {
     navigation,
@@ -31,6 +63,7 @@ export function createContentController(options) {
   let hasHydratedInitialView = false;
   let isSetup = false;
 
+  /** @param {string} html */
   const updateBacklinks = (html) => {
     if (!elements.backlinks) {
       return;
@@ -42,6 +75,10 @@ export function createContentController(options) {
     }
   };
 
+  /**
+   * @param {string} route
+   * @param {RuntimeManifestDoc} doc
+   */
   const renderChrome = (route, doc) => {
     const chrome = renderers.chrome({
       route,
@@ -56,6 +93,7 @@ export function createContentController(options) {
     setHtml(elements.nav, chrome.navHtml);
   };
 
+  /** @param {RuntimeManifestDoc} doc */
   const finishNavigation = async (doc) => {
     await lifecycle.enhanceContent?.(elements.content);
     setPageTitle(renderers.documentTitle(doc.title, siteTitle));
@@ -63,6 +101,10 @@ export function createContentController(options) {
     lifecycle.announce?.(`탐색 완료: ${doc.title} 문서를 열었습니다.`);
   };
 
+  /**
+   * @param {string} route
+   * @param {boolean} push
+   */
   const renderMissingRoute = (route, push) => {
     navigation.setCurrentDocId("");
     lifecycle.onMissingSelection?.();
@@ -78,6 +120,10 @@ export function createContentController(options) {
     }
   };
 
+  /**
+   * @param {unknown} rawRoute
+   * @param {boolean} push
+   */
   const navigate = async (rawRoute, push) => {
     lifecycle.beforeNavigate?.();
     const resolved = navigation.resolve(rawRoute);
@@ -124,6 +170,7 @@ export function createContentController(options) {
     return true;
   };
 
+  /** @param {Event} event */
   const handleLinkClick = (event) => {
     const target = event.target;
     if (!(target instanceof Element)) {

@@ -119,7 +119,7 @@ Notes:
 - Invalid numeric options fail fast.
 - Builds validate and read the vault before marking a dedicated output directory with `.eiam-output.json`, bind that marker to a cache namespace derived from the canonical vault, output, and cache-root paths, and refuse to claim a non-empty unmarked or mismatched directory.
 - `dev` aborts before starting its watcher or server when the initial build cannot claim the output safely; later rebuild failures are logged without stopping an already-safe server.
-- Build migration and `clean` remove `.cache/build-index.json` only when it matches a historical EIAM cache schema, including when either command must reject a pre-marker output directory or reserved static path. Outputs that contain or sit inside the cache root, symlinked cache components/namespaces/indexes, and static paths that collide with the reserved `.eiam-output.json` marker are rejected; `clean` otherwise removes only the marked output directory and its matching EIAM cache namespace, preserving sibling namespaces and unrelated `.cache` data.
+- Build migration and `clean` remove `.cache/build-index.json` only when it matches a historical EIAM cache schema, including when either command must reject a pre-marker output directory. Config validation rejects reserved static paths before migration or storage inspection. Outputs that contain or sit inside the cache root, symlinked cache components/namespaces/indexes, and static paths that collide with the reserved `.eiam-output.json` marker are rejected; `clean` otherwise removes only the marked output directory and its matching EIAM cache namespace, preserving sibling namespaces and unrelated `.cache` data.
 
 ## Frontmatter
 
@@ -215,7 +215,7 @@ Key points:
 - Route HTML embeds only a small path-aware runtime bootstrap; the shared manifest is fetched once from `manifest.json` instead of being copied into every generated page.
 - Generated files omit wall-clock build metadata and derived current-time flags, so two builds with unchanged content and config produce byte-identical output. The runtime derives each `NEW` badge from the manifest `date` and configured `newWithinDays` when the page loads.
 - Static files declared in config are copied into the same relative paths under `dist/`.
-- Build cache is stored under `.cache/eiam/v1-<namespace>/build-index.json`.
+- Build cache is stored under `.cache/eiam/v2-<namespace>/build-index.json`.
 
 CI enforces raw and gzip budgets for the generated runtime assets. After a
 sample build, run `bun run check:size` to apply the same limits locally. The
@@ -251,6 +251,7 @@ Example:
 export default {
   vaultDir: "./vault",
   outDir: "./dist",
+  defaultBranch: "dev",
   exclude: [".obsidian/**", "private/**"],
   staticPaths: ["assets", "public/favicon.ico"],
   pinnedMenu: {
@@ -297,6 +298,8 @@ export default {
 
 - `vaultDir`: default vault root.
 - `outDir`: default output directory.
+- `defaultBranch`: initial runtime branch, default `"dev"`; values are trimmed and normalized to
+  lowercase. Notes without a `branch` belong to this branch.
 - `exclude`: extra exclude globs.
 - `staticPaths`: vault-relative files or directories copied into output.
 - `pinnedMenu`: optional virtual folder shown above `Recent`.
@@ -312,13 +315,20 @@ export default {
 - `markdown.mermaid.*`: Mermaid runtime settings.
 - `seo.*`: canonical URL, social metadata, sitemap, robots, and path-base behavior.
 
+Config modules are treated as untrusted runtime input. Every supported field is validated and
+normalized before `build`, `dev`, or `clean` can create, modify, or remove output/cache paths. An
+invalid value stops the command with its exact dotted field path and received runtime type.
+Unknown fields are ignored after a warning so spelling mistakes remain visible without breaking
+forward-compatible configs. Unsafe Mermaid URL/theme strings keep their documented safe-default
+fallback; values with the wrong runtime type are rejected.
+
 ### `staticPaths`
 
 - Must be vault-relative
 - Can point to either a file or a directory
 - Are copied as-is into the output directory
 - Must not normalize to the vault root, escape the output directory, or collide with the reserved `.eiam-output.json` ownership marker
-- Invalid or missing paths are skipped with a warning
+- Invalid configured path values fail config validation; valid paths that are missing from the vault are skipped with a warning
 
 ### `pinnedMenu`
 
@@ -535,7 +545,7 @@ Example:
 
 ## Incremental Build and Caching
 
-The build caches source metadata and output hashes in `.cache/eiam/v1-<namespace>/build-index.json`, relative to the process working directory. The namespace is a stable hash of the canonical, resolved `vaultDir` and `outDir` pair.
+The build caches source metadata and output hashes in `.cache/eiam/v2-<namespace>/build-index.json`, relative to the process working directory. The namespace is a stable hash of the canonical vault, output, and cache-root paths.
 
 Config values are resolved first, with CLI `--vault` and `--out` values taking precedence. Changing either resolved path selects a different namespace; it does not reuse or overwrite the previous pair's cache. The cache root itself has no separate override. `clean` removes only the namespace for the selected pair, never sibling EIAM namespaces or general-purpose `.cache` files.
 
@@ -573,11 +583,16 @@ Options:
 
 What it checks:
 
-- only notes with `publish: true`
-- skips docs missing `prefix`
+- uses the same vault scanner, exclusions, and frontmatter parser as the build
+- selects only `publish: true`, non-draft notes that have both `prefix` and `category_path`
+- reports malformed frontmatter and missing publication metadata separately from Markdown style findings
 - runs `markdownlint`
 - adds a custom rule that forbids H1 in the Markdown body after frontmatter
-- writes a JSON report file
+- writes a JSON report with `targetFiles`, `publicationDiagnostics`, `markdownStyleIssues`, and a backward-compatible combined `issues` list
+
+Publication metadata diagnostics are warnings in the report, while frontmatter parse and Markdown
+style findings are errors. `--strict` exits with status `1` when any of those diagnostics or findings
+exists, including a publication warning.
 
 ## Example Vault
 
@@ -602,10 +617,18 @@ Scripts from `package.json`:
 
 ```bash
 bun install
+bun run lint:source
+bun run format:check
+bun run typecheck
+bun run test:unit
 bun run build -- --vault ./test-vault --out ./dist
 bun run dev -- --vault ./test-vault --out ./dist
 bun run test:e2e
 ```
+
+The fast unit suite in `tests/unit/` covers deterministic transformations and safety contracts: CLI parsing, paths and routes, cache guards, manifest adaptation, and rendered HTML sanitization. Changes or regressions in these areas should add or update a unit test; Playwright remains focused on browser and full-build integration.
+
+CI does not enforce a numeric coverage threshold yet. `bun run test:unit:coverage` provides local visibility using Bun's built-in coverage, so coverage can improve without adding another test framework or turning line count into the goal.
 
 E2E coverage in `tests/e2e/` includes:
 

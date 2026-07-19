@@ -1,5 +1,5 @@
-const MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
-const MERMAID_DEFAULT_THEME = "default";
+import { DEFAULT_MERMAID_CONFIG } from "../defaults.ts";
+
 const MERMAID_SELECTOR = "pre.mermaid";
 const MERMAID_ERROR_CLASS = "mermaid-render-error";
 const MERMAID_THEME_VALIDATION_RE = /^[a-zA-Z][a-zA-Z0-9._-]*$/;
@@ -9,6 +9,15 @@ const MERMAID_TALL_RATIO = 0.85;
 const MERMAID_BLOCK_WIDE_CLASS = "is-wide";
 const MERMAID_BLOCK_TALL_CLASS = "is-tall";
 
+/**
+ * @typedef {import("./contracts").MermaidConfig} MermaidConfig
+ * @typedef {import("./contracts").MermaidController} MermaidController
+ * @typedef {import("./contracts").MermaidLibrary} MermaidLibrary
+ * @typedef {import("./contracts").RuntimeManifest} RuntimeManifest
+ * @typedef {import("./contracts").RuntimeWindow} RuntimeWindow
+ */
+
+/** @type {{ initialized: boolean; loadingPromise: Promise<MermaidLibrary | null> | null; scriptElement: HTMLScriptElement | null; lastCdnUrl: string; lastTheme: string }} */
 const mermaidRuntime = {
   initialized: false,
   loadingPromise: null,
@@ -17,38 +26,48 @@ const mermaidRuntime = {
   lastTheme: "",
 };
 
+/**
+ * @param {RuntimeManifest | { mermaid?: Partial<MermaidConfig> } | null | undefined} manifest
+ * @returns {MermaidConfig}
+ */
 export function resolveMermaidConfig(manifest) {
   const mermaid = manifest?.mermaid;
   return {
-    enabled: mermaid?.enabled !== false,
+    enabled:
+      typeof mermaid?.enabled === "boolean" ? mermaid.enabled : DEFAULT_MERMAID_CONFIG.enabled,
     cdnUrl:
       typeof mermaid?.cdnUrl === "string" && mermaid.cdnUrl.trim()
         ? mermaid.cdnUrl.trim()
-        : MERMAID_CDN,
+        : DEFAULT_MERMAID_CONFIG.cdnUrl,
     theme:
-      typeof mermaid?.theme === "string" &&
-      MERMAID_THEME_VALIDATION_RE.test(mermaid.theme.trim())
+      typeof mermaid?.theme === "string" && MERMAID_THEME_VALIDATION_RE.test(mermaid.theme.trim())
         ? mermaid.theme.trim()
-        : MERMAID_DEFAULT_THEME,
+        : DEFAULT_MERMAID_CONFIG.theme,
   };
 }
 
+/** @param {unknown} value */
 function normalizeMermaidTheme(value) {
   const normalized = typeof value === "string" ? value.trim() : "";
   if (!normalized || !MERMAID_THEME_VALIDATION_RE.test(normalized)) {
-    return MERMAID_DEFAULT_THEME;
+    return DEFAULT_MERMAID_CONFIG.theme;
   }
   return normalized;
 }
 
+/** @param {unknown} value */
 function normalizeMermaidUrl(value) {
   const normalized = typeof value === "string" ? value.trim() : "";
   if (!normalized || !MERMAID_URL_VALIDATION_RE.test(normalized)) {
-    return MERMAID_CDN;
+    return DEFAULT_MERMAID_CONFIG.cdnUrl;
   }
   return normalized;
 }
 
+/**
+ * @param {string} value
+ * @param {RuntimeWindow} windowRef
+ */
 function toAbsoluteUrl(value, windowRef) {
   try {
     return new URL(value, windowRef.location.href).href;
@@ -57,6 +76,10 @@ function toAbsoluteUrl(value, windowRef) {
   }
 }
 
+/**
+ * @param {string} message
+ * @param {Document} documentRef
+ */
 function createMermaidLoadError(message, documentRef) {
   const paragraph = documentRef.createElement("p");
   paragraph.className = MERMAID_ERROR_CLASS;
@@ -64,6 +87,7 @@ function createMermaidLoadError(message, documentRef) {
   return paragraph;
 }
 
+/** @param {ParentNode | null | undefined} container */
 function removeMermaidErrorMessage(container) {
   if (!container?.querySelectorAll) {
     return;
@@ -74,6 +98,11 @@ function removeMermaidErrorMessage(container) {
   }
 }
 
+/**
+ * @param {HTMLElement} preview
+ * @param {string} message
+ * @param {Document} documentRef
+ */
 function showMermaidError(preview, message, documentRef) {
   const container = preview?.parentElement;
   if (!container?.appendChild) {
@@ -84,6 +113,10 @@ function showMermaidError(preview, message, documentRef) {
   container.appendChild(createMermaidLoadError(message, documentRef));
 }
 
+/**
+ * @param {HTMLElement} block
+ * @param {RuntimeWindow} windowRef
+ */
 function normalizeRenderedMermaidSvg(block, windowRef) {
   const container = block?.parentElement;
   const svg = block?.querySelector?.("svg");
@@ -97,7 +130,7 @@ function normalizeRenderedMermaidSvg(block, windowRef) {
   svg.style.width = "auto";
   svg.style.height = "auto";
   svg.style.margin = "0 auto";
-  svg.style.maxWidth = "min(100%, var(--content-visual-max-width, 880px))";
+  svg.style.maxWidth = "min(100%, var(--content-visual-max-width))";
   svg.style.removeProperty("max-height");
 
   const viewBox = svg.viewBox?.baseVal;
@@ -117,15 +150,16 @@ function normalizeRenderedMermaidSvg(block, windowRef) {
   const aspectRatio = intrinsicWidth / intrinsicHeight;
   if (container && aspectRatio >= MERMAID_WIDE_RATIO) {
     container.classList.add(MERMAID_BLOCK_WIDE_CLASS);
-    svg.style.maxWidth = "min(100%, var(--mermaid-wide-max-width, 820px))";
+    svg.style.maxWidth = "min(100%, var(--mermaid-wide-max-width))";
   }
 
   if (container && aspectRatio <= MERMAID_TALL_RATIO) {
     container.classList.add(MERMAID_BLOCK_TALL_CLASS);
-    svg.style.maxHeight = "min(var(--mermaid-tall-max-height, 560px), 68vh)";
+    svg.style.maxHeight = "min(var(--mermaid-tall-max-height), 68vh)";
   }
 }
 
+/** @param {HTMLElement[]} nodes */
 function resetMermaidNodes(nodes) {
   for (const node of nodes) {
     node.removeAttribute("data-mermaid-rendered");
@@ -136,6 +170,11 @@ function resetMermaidNodes(nodes) {
   }
 }
 
+/**
+ * @param {MermaidConfig} config
+ * @param {{ documentRef: Document; windowRef: RuntimeWindow }} environment
+ * @returns {Promise<MermaidLibrary | null>}
+ */
 async function loadMermaidLibrary(config, { documentRef, windowRef }) {
   if (!config.enabled) {
     return null;
@@ -185,6 +224,7 @@ async function loadMermaidLibrary(config, { documentRef, windowRef }) {
       mermaidRuntime.lastCdnUrl = expectedAbsoluteUrl;
     }
 
+    /** @param {unknown} [error] */
     const finalize = (error) => {
       mermaidRuntime.loadingPromise = null;
       if (error) {
@@ -227,6 +267,11 @@ async function loadMermaidLibrary(config, { documentRef, windowRef }) {
   return mermaidRuntime.loadingPromise;
 }
 
+/**
+ * @param {MermaidConfig} config
+ * @param {{ documentRef?: Document; windowRef?: RuntimeWindow }} [options]
+ * @returns {MermaidController}
+ */
 export function createMermaidController(config, options = {}) {
   const documentRef = options.documentRef ?? globalThis.document;
   const windowRef = options.windowRef ?? globalThis.window;
@@ -254,7 +299,10 @@ export function createMermaidController(config, options = {}) {
       }
 
       const renderGeneration = lifecycleGeneration;
-      const blocks = Array.from(root.querySelectorAll(MERMAID_SELECTOR));
+      /** @type {HTMLElement[]} */
+      const blocks = Array.from(root.querySelectorAll(MERMAID_SELECTOR)).filter(
+        (block) => block instanceof windowRef.HTMLElement,
+      );
       if (blocks.length === 0) {
         return;
       }

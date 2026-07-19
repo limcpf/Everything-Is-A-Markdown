@@ -68,7 +68,9 @@ function toFilePath(outDir: string, pathname: string): string {
   return path.join(outDir, "404.html");
 }
 
-async function startStaticServer(outDir: string): Promise<{ baseUrl: string; close: () => Promise<void> }> {
+async function startStaticServer(
+  outDir: string,
+): Promise<{ baseUrl: string; close: () => Promise<void> }> {
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const requestUrl = new URL(req.url ?? "/", "http://127.0.0.1");
     const filePath = toFilePath(outDir, requestUrl.pathname);
@@ -185,7 +187,9 @@ test.describe("responsive Trees sidebar layout", () => {
   });
 
   for (const viewport of VIEWPORTS) {
-    test(`${viewport.width}x${viewport.height} keeps sidebar sections ordered and contained`, async ({ page }) => {
+    test(`${viewport.width}x${viewport.height} keeps sidebar sections ordered and contained`, async ({
+      page,
+    }) => {
       expect(server).not.toBeNull();
       await page.setViewportSize(viewport);
       await openSidebar(page, server!.baseUrl);
@@ -207,10 +211,16 @@ test.describe("responsive Trees sidebar layout", () => {
       const rowState = await page.locator("#tree-root").evaluate(() => {
         const host = document.querySelector("#tree-root file-tree-container");
         const root = host?.shadowRoot;
-        const rows = Array.from(root?.querySelectorAll('[data-type="item"][data-item-type="file"]') ?? []);
+        const rows = Array.from(
+          root?.querySelectorAll('[data-type="item"][data-item-type="file"]') ?? [],
+        );
         const firstRow = rows[0] as HTMLElement | undefined;
-        const content = firstRow?.querySelector('[data-item-section="content"]') as HTMLElement | null;
-        const decoration = firstRow?.querySelector('[data-item-section="decoration"]') as HTMLElement | null;
+        const content = firstRow?.querySelector(
+          '[data-item-section="content"]',
+        ) as HTMLElement | null;
+        const decoration = firstRow?.querySelector(
+          '[data-item-section="decoration"]',
+        ) as HTMLElement | null;
         const rowRect = firstRow?.getBoundingClientRect();
         const contentRect = content?.getBoundingClientRect();
         const decorationRect = decoration?.getBoundingClientRect();
@@ -222,7 +232,8 @@ test.describe("responsive Trees sidebar layout", () => {
             rowRect!.left >= host!.getBoundingClientRect().left - 1 &&
             rowRect!.right <= host!.getBoundingClientRect().right + 1,
           lanesDoNotOverlap:
-            Boolean(contentRect && decorationRect) && contentRect!.right <= decorationRect!.left + 1,
+            Boolean(contentRect && decorationRect) &&
+            contentRect!.right <= decorationRect!.left + 1,
         };
       });
 
@@ -233,7 +244,9 @@ test.describe("responsive Trees sidebar layout", () => {
 
       const scrollState = await page.locator("#tree-root").evaluate((treeRoot) => {
         const host = treeRoot.querySelector("file-tree-container");
-        const scroller = host?.shadowRoot?.querySelector('[data-file-tree-virtualized-scroll="true"]') as HTMLElement | null;
+        const scroller = host?.shadowRoot?.querySelector(
+          '[data-file-tree-virtualized-scroll="true"]',
+        ) as HTMLElement | null;
         const beforeWindowY = window.scrollY;
         if (scroller) {
           scroller.scrollTop = 240;

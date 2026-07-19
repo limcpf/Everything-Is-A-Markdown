@@ -1,8 +1,8 @@
 import { escapeHtmlAttribute } from "./seo";
+import { DEFAULT_SITE_TITLE } from "./defaults";
 import type { Manifest } from "./types";
 import { toViewPathWithBase } from "./view-contract";
 
-const DEFAULT_TITLE = "File-System Blog";
 const DEFAULT_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
 
 export interface AppShellMeta {
@@ -48,7 +48,7 @@ interface AppShellInitialViewPayload {
   title: string;
 }
 
-interface AppShellManifestPayload extends Manifest {}
+type AppShellManifestPayload = Manifest;
 
 interface AppShellRuntimePayload {
   manifestUrl: string;
@@ -77,7 +77,7 @@ function stringifyJsonLd(value: unknown): string {
 }
 
 function renderHeadMeta(meta: AppShellMeta): string {
-  const title = (meta.title ?? DEFAULT_TITLE).trim() || DEFAULT_TITLE;
+  const title = (meta.title ?? DEFAULT_SITE_TITLE).trim() || DEFAULT_SITE_TITLE;
   const description = typeof meta.description === "string" ? meta.description.trim() : "";
   const fallbackDescription = description || DEFAULT_DESCRIPTION;
   const canonicalUrl = typeof meta.canonicalUrl === "string" ? meta.canonicalUrl.trim() : "";
@@ -87,12 +87,14 @@ function renderHeadMeta(meta: AppShellMeta): string {
   const ogSiteName = typeof meta.ogSiteName === "string" ? meta.ogSiteName.trim() : "";
   const ogLocale = typeof meta.ogLocale === "string" ? meta.ogLocale.trim() : "";
   const ogUrl = typeof meta.ogUrl === "string" ? meta.ogUrl.trim() : "";
-  const ogDescription = (meta.ogDescription ?? (description || DEFAULT_DESCRIPTION)).trim() || DEFAULT_DESCRIPTION;
+  const ogDescription =
+    (meta.ogDescription ?? (description || DEFAULT_DESCRIPTION)).trim() || DEFAULT_DESCRIPTION;
   const ogImage = typeof meta.ogImage === "string" ? meta.ogImage.trim() : "";
 
   const twitterCard = (meta.twitterCard ?? "summary").trim() || "summary";
   const twitterTitle = (meta.twitterTitle ?? title).trim() || title;
-  const twitterDescription = (meta.twitterDescription ?? (description || DEFAULT_DESCRIPTION)).trim() || DEFAULT_DESCRIPTION;
+  const twitterDescription =
+    (meta.twitterDescription ?? (description || DEFAULT_DESCRIPTION)).trim() || DEFAULT_DESCRIPTION;
   const twitterImage = typeof meta.twitterImage === "string" ? meta.twitterImage.trim() : "";
   const twitterSite = typeof meta.twitterSite === "string" ? meta.twitterSite.trim() : "";
   const twitterCreator = typeof meta.twitterCreator === "string" ? meta.twitterCreator.trim() : "";
@@ -100,7 +102,9 @@ function renderHeadMeta(meta: AppShellMeta): string {
 
   const headTags: string[] = [`    <title>${escapeHtmlAttribute(title)}</title>`];
 
-  headTags.push(`    <meta name="description" content="${escapeHtmlAttribute(fallbackDescription)}" />`);
+  headTags.push(
+    `    <meta name="description" content="${escapeHtmlAttribute(fallbackDescription)}" />`,
+  );
 
   if (canonicalUrl) {
     headTags.push(`    <link rel="canonical" href="${escapeHtmlAttribute(canonicalUrl)}" />`);
@@ -114,14 +118,18 @@ function renderHeadMeta(meta: AppShellMeta): string {
   }
 
   if (ogSiteName) {
-    headTags.push(`    <meta property="og:site_name" content="${escapeHtmlAttribute(ogSiteName)}" />`);
+    headTags.push(
+      `    <meta property="og:site_name" content="${escapeHtmlAttribute(ogSiteName)}" />`,
+    );
   }
 
   if (ogLocale) {
     headTags.push(`    <meta property="og:locale" content="${escapeHtmlAttribute(ogLocale)}" />`);
   }
 
-  headTags.push(`    <meta property="og:description" content="${escapeHtmlAttribute(ogDescription)}" />`);
+  headTags.push(
+    `    <meta property="og:description" content="${escapeHtmlAttribute(ogDescription)}" />`,
+  );
 
   if (ogImage) {
     headTags.push(`    <meta property="og:image" content="${escapeHtmlAttribute(ogImage)}" />`);
@@ -129,10 +137,14 @@ function renderHeadMeta(meta: AppShellMeta): string {
 
   headTags.push(`    <meta name="twitter:card" content="${escapeHtmlAttribute(twitterCard)}" />`);
   headTags.push(`    <meta name="twitter:title" content="${escapeHtmlAttribute(twitterTitle)}" />`);
-  headTags.push(`    <meta name="twitter:description" content="${escapeHtmlAttribute(twitterDescription)}" />`);
+  headTags.push(
+    `    <meta name="twitter:description" content="${escapeHtmlAttribute(twitterDescription)}" />`,
+  );
 
   if (twitterImage) {
-    headTags.push(`    <meta name="twitter:image" content="${escapeHtmlAttribute(twitterImage)}" />`);
+    headTags.push(
+      `    <meta name="twitter:image" content="${escapeHtmlAttribute(twitterImage)}" />`,
+    );
   }
 
   if (twitterSite) {
@@ -140,7 +152,9 @@ function renderHeadMeta(meta: AppShellMeta): string {
   }
 
   if (twitterCreator) {
-    headTags.push(`    <meta name="twitter:creator" content="${escapeHtmlAttribute(twitterCreator)}" />`);
+    headTags.push(
+      `    <meta name="twitter:creator" content="${escapeHtmlAttribute(twitterCreator)}" />`,
+    );
   }
 
   for (const schema of jsonLd) {
@@ -201,9 +215,10 @@ export function renderAppShellHtml(
   const runtimeBootstrapScript = renderRuntimeBootstrapScript(manifest, assets);
   const symbolFontStylesheet =
     "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap";
-  const appTitle = typeof manifest?.siteTitle === "string" && manifest.siteTitle.trim().length > 0
-    ? manifest.siteTitle.trim()
-    : DEFAULT_TITLE;
+  const appTitle =
+    typeof manifest?.siteTitle === "string" && manifest.siteTitle.trim().length > 0
+      ? manifest.siteTitle.trim()
+      : DEFAULT_SITE_TITLE;
   const initialTitle = initialView ? escapeHtmlAttribute(initialView.title) : "문서를 선택하세요";
   const initialBreadcrumb = initialView ? initialView.breadcrumbHtml : "";
   const initialMeta = initialView ? initialView.metaHtml : "";
@@ -371,7 +386,11 @@ ${runtimeBootstrapScript}
 `;
 }
 
-export function render404Html(assets: AppShellAssets = DEFAULT_ASSETS, homeHref = "/"): string {
+export function render404Html(
+  assets: AppShellAssets = DEFAULT_ASSETS,
+  homeHref = "/",
+  siteTitle = DEFAULT_SITE_TITLE,
+): string {
   const symbolFontStylesheet =
     "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap";
 
@@ -380,7 +399,7 @@ export function render404Html(assets: AppShellAssets = DEFAULT_ASSETS, homeHref 
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>404 - File-System Blog</title>
+    <title>404 - ${escapeHtmlAttribute(siteTitle.trim() || DEFAULT_SITE_TITLE)}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preload" as="style" href="${escapeHtmlAttribute(symbolFontStylesheet)}" />

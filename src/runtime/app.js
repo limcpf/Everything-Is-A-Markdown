@@ -20,10 +20,23 @@ const BRANCH_KEY = "fsblog.branch";
 const APP_READY_STATE_ATTR = "data-app-ready";
 const TREE_RUNTIME_STATE_ATTR = "data-tree-runtime";
 
+/**
+ * @typedef {import("./contracts").A11yAnnouncer} A11yAnnouncer
+ * @typedef {import("./contracts").ContentController} ContentController
+ * @typedef {import("./contracts").RuntimeController} RuntimeController
+ * @typedef {import("./contracts").TreeController} TreeController
+ * @typedef {import("./contracts").ViewerElements} ViewerElements
+ */
+
+/**
+ * @param {string} attribute
+ * @param {string} state
+ */
 function setRuntimeState(attribute, state) {
   document.documentElement?.setAttribute(attribute, state);
 }
 
+/** @returns {ViewerElements} */
 function collectViewerElements() {
   return {
     breadcrumb: document.getElementById("viewer-breadcrumb"),
@@ -36,9 +49,15 @@ function collectViewerElements() {
   };
 }
 
+/**
+ * @param {HTMLElement | null} element
+ * @returns {A11yAnnouncer}
+ */
 function createA11yAnnouncer(element) {
+  /** @type {number | null} */
   let timer = null;
   return {
+    /** @param {string} message */
     announce(message) {
       if (!element) {
         return;
@@ -61,6 +80,10 @@ function createA11yAnnouncer(element) {
   };
 }
 
+/**
+ * @param {RuntimeController[]} controllers
+ * @param {ContentController} contentController
+ */
 function installPageLifecycle(controllers, contentController) {
   window.addEventListener("pagehide", (event) => {
     if (event.persisted) {
@@ -76,6 +99,7 @@ function installPageLifecycle(controllers, contentController) {
   });
 }
 
+/** @param {RuntimeController[]} controllers */
 function destroyControllers(controllers) {
   for (const controller of [...controllers].reverse()) {
     controller.destroy?.();
@@ -94,10 +118,12 @@ async function start() {
     initialDocId: bootstrap.initialViewData?.docId,
   });
   const settingsController = createSettingsController();
+  /** @type {TreeController | null} */
   let treeController = null;
   const layoutController = createSidebarLayoutController({
+    layout: bootstrap.manifest.layout,
     closeSettings: () => settingsController.close(),
-    requestTreeLoad: (reason) => treeController?.requestLoad(reason),
+    requestTreeLoad: (reason) => treeController?.requestLoad(reason) ?? Promise.resolve(false),
   });
   const mermaidController = createMermaidController(resolveMermaidConfig(bootstrap.manifest));
   const enhancementController = createContentEnhancementController({
@@ -146,6 +172,7 @@ async function start() {
     isCompactLayout: () => layoutController.isCompact(),
   });
 
+  /** @type {RuntimeController[]} */
   const controllers = [
     settingsController,
     layoutController,

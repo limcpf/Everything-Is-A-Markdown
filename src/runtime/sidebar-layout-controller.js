@@ -1,21 +1,27 @@
 import { createEventScope } from "./controller-lifecycle.js";
+import { DEFAULT_RUNTIME_LAYOUT, resolveRuntimeLayoutConfig } from "../defaults.ts";
 
-const COMPACT_LAYOUT_QUERY = "(max-width: 1024px)";
 const SIDEBAR_WIDTH_KEY = "fsblog.desktopSidebarWidth";
-const DESKTOP_SIDEBAR_DEFAULT = 420;
-const DESKTOP_SIDEBAR_MIN = 320;
-const DESKTOP_VIEWER_MIN = 680;
-const DESKTOP_SPLITTER_WIDTH = 10;
-const DESKTOP_SPLITTER_STEP = 24;
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** @typedef {import("./contracts").EventScope} EventScope */
+/** @typedef {import("./contracts").RuntimeWindow} RuntimeWindow */
+/** @typedef {import("./contracts").SidebarLayoutController} SidebarLayoutController */
+
+/**
+ * @param {ParentNode | null} container
+ * @param {RuntimeWindow} windowRef
+ * @returns {HTMLElement[]}
+ */
 function getFocusableElements(container, windowRef) {
   if (!container) {
     return [];
   }
 
+  /** @type {HTMLElement[]} */
   const candidates = [];
+  /** @param {ParentNode} root */
   const collect = (root) => {
     for (const element of root.querySelectorAll("*")) {
       if (!(element instanceof windowRef.HTMLElement)) {
@@ -49,18 +55,52 @@ function getFocusableElements(container, windowRef) {
   });
 }
 
-export function clampDesktopSidebarWidth(width, viewportWidth) {
+/**
+ * @param {number} width
+ * @param {number} viewportWidth
+ * @param {import("../defaults").RuntimeLayoutConfig} layout
+ */
+function clampResolvedDesktopSidebarWidth(width, viewportWidth, layout) {
   const max = Math.max(
-    DESKTOP_SIDEBAR_MIN,
-    viewportWidth - DESKTOP_VIEWER_MIN - DESKTOP_SPLITTER_WIDTH,
+    layout.desktopSidebarMinPx,
+    viewportWidth - layout.desktopViewerMinPx - layout.splitterWidthPx,
   );
-  return Math.min(Math.max(width, DESKTOP_SIDEBAR_MIN), max);
+  return Math.min(Math.max(width, layout.desktopSidebarMinPx), max);
 }
 
+/**
+ * @param {number} width
+ * @param {number} viewportWidth
+ * @param {unknown} [layoutConfig]
+ */
+export function clampDesktopSidebarWidth(
+  width,
+  viewportWidth,
+  layoutConfig = DEFAULT_RUNTIME_LAYOUT,
+) {
+  return clampResolvedDesktopSidebarWidth(
+    width,
+    viewportWidth,
+    resolveRuntimeLayoutConfig(layoutConfig),
+  );
+}
+
+/**
+ * @param {{
+ *   documentRef?: Document;
+ *   windowRef?: RuntimeWindow;
+ *   storage?: Storage;
+ *   layout?: unknown;
+ *   requestTreeLoad?: (reason: string) => Promise<boolean>;
+ *   closeSettings?: () => void;
+ * }} [options]
+ * @returns {SidebarLayoutController & { open(): void }}
+ */
 export function createSidebarLayoutController(options = {}) {
   const documentRef = options.documentRef ?? globalThis.document;
   const windowRef = options.windowRef ?? globalThis.window;
   const storage = options.storage ?? globalThis.localStorage;
+  const layout = resolveRuntimeLayoutConfig(options.layout);
   const requestTreeLoad = options.requestTreeLoad ?? (() => Promise.resolve(false));
   const closeSettings = options.closeSettings ?? (() => {});
   const appRoot = documentRef.querySelector(".app-root");
@@ -70,9 +110,11 @@ export function createSidebarLayoutController(options = {}) {
   const sidebarClose = documentRef.getElementById("sidebar-close");
   const sidebarOverlay = documentRef.getElementById("sidebar-overlay");
   const viewer = documentRef.querySelector(".viewer");
-  const compactMediaQuery = windowRef.matchMedia(COMPACT_LAYOUT_QUERY);
+  const compactMediaQuery = windowRef.matchMedia(`(max-width: ${layout.compactBreakpointPx}px)`);
+  /** @type {EventScope | null} */
   let events = null;
-  let desktopSidebarWidth = DESKTOP_SIDEBAR_DEFAULT;
+  let desktopSidebarWidth = layout.desktopSidebarDefaultPx;
+  /** @type {number | null} */
   let activeResizePointerId = null;
   let resizeStartX = 0;
   let resizeStartWidth = desktopSidebarWidth;
@@ -84,18 +126,23 @@ export function createSidebarLayoutController(options = {}) {
       return;
     }
     const max = Math.max(
-      DESKTOP_SIDEBAR_MIN,
-      windowRef.innerWidth - DESKTOP_VIEWER_MIN - DESKTOP_SPLITTER_WIDTH,
+      layout.desktopSidebarMinPx,
+      windowRef.innerWidth - layout.desktopViewerMinPx - layout.splitterWidthPx,
     );
-    splitter.setAttribute("aria-valuemin", String(DESKTOP_SIDEBAR_MIN));
+    splitter.setAttribute("aria-valuemin", String(layout.desktopSidebarMinPx));
     splitter.setAttribute("aria-valuemax", String(Math.round(max)));
     splitter.setAttribute("aria-valuenow", String(Math.round(desktopSidebarWidth)));
     splitter.setAttribute("aria-valuetext", `${Math.round(desktopSidebarWidth)}px`);
     splitter.setAttribute("aria-disabled", String(isCompact()));
   };
 
+  /** @param {boolean} persist */
   const syncDesktopSidebarWidth = (persist) => {
-    desktopSidebarWidth = clampDesktopSidebarWidth(desktopSidebarWidth, windowRef.innerWidth);
+    desktopSidebarWidth = clampResolvedDesktopSidebarWidth(
+      desktopSidebarWidth,
+      windowRef.innerWidth,
+      layout,
+    );
     if (appRoot instanceof windowRef.HTMLElement) {
       if (isCompact()) {
         appRoot.style.removeProperty("--sidebar-width");
@@ -109,6 +156,7 @@ export function createSidebarLayoutController(options = {}) {
     }
   };
 
+  /** @param {boolean} isInteractive */
   const setViewerInteractiveState = (isInteractive) => {
     if (!(viewer instanceof windowRef.HTMLElement)) {
       return;
@@ -122,6 +170,7 @@ export function createSidebarLayoutController(options = {}) {
     }
   };
 
+  /** @param {boolean} isOpen */
   const syncSidebarA11y = (isOpen) => {
     sidebarToggle?.setAttribute("aria-expanded", String(isOpen));
     sidebarOverlay?.setAttribute("aria-hidden", String(!isOpen));
@@ -183,6 +232,7 @@ export function createSidebarLayoutController(options = {}) {
     }
   };
 
+  /** @param {boolean} requestDesktopTreeLoad */
   const syncLayout = (requestDesktopTreeLoad) => {
     close();
     if (!isCompact()) {
@@ -203,7 +253,11 @@ export function createSidebarLayoutController(options = {}) {
     syncLayout(true);
   };
 
+  /** @param {Event} event */
   const beginSplitterResize = (event) => {
+    if (!(event instanceof windowRef.PointerEvent)) {
+      return;
+    }
     if (
       !(splitter instanceof windowRef.HTMLElement) ||
       !(appRoot instanceof windowRef.HTMLElement) ||
@@ -222,7 +276,11 @@ export function createSidebarLayoutController(options = {}) {
     splitter.setPointerCapture(event.pointerId);
   };
 
+  /** @param {Event} event */
   const updateSplitterResize = (event) => {
+    if (!(event instanceof windowRef.PointerEvent)) {
+      return;
+    }
     if (event.pointerId !== activeResizePointerId) {
       return;
     }
@@ -230,7 +288,11 @@ export function createSidebarLayoutController(options = {}) {
     syncDesktopSidebarWidth(false);
   };
 
+  /** @param {Event} event */
   const endSplitterResize = (event) => {
+    if (!(event instanceof windowRef.PointerEvent)) {
+      return;
+    }
     if (event.pointerId !== activeResizePointerId) {
       return;
     }
@@ -242,21 +304,25 @@ export function createSidebarLayoutController(options = {}) {
     syncDesktopSidebarWidth(true);
   };
 
+  /** @param {Event} event */
   const handleSplitterKeydown = (event) => {
+    if (!(event instanceof windowRef.KeyboardEvent)) {
+      return;
+    }
     if (isCompact()) {
       return;
     }
     const max = Math.max(
-      DESKTOP_SIDEBAR_MIN,
-      windowRef.innerWidth - DESKTOP_VIEWER_MIN - DESKTOP_SPLITTER_WIDTH,
+      layout.desktopSidebarMinPx,
+      windowRef.innerWidth - layout.desktopViewerMinPx - layout.splitterWidthPx,
     );
     let nextWidth = desktopSidebarWidth;
     if (event.key === "ArrowLeft") {
-      nextWidth -= DESKTOP_SPLITTER_STEP;
+      nextWidth -= layout.splitterStepPx;
     } else if (event.key === "ArrowRight") {
-      nextWidth += DESKTOP_SPLITTER_STEP;
+      nextWidth += layout.splitterStepPx;
     } else if (event.key === "Home") {
-      nextWidth = DESKTOP_SIDEBAR_MIN;
+      nextWidth = layout.desktopSidebarMinPx;
     } else if (event.key === "End") {
       nextWidth = max;
     } else {
@@ -267,16 +333,16 @@ export function createSidebarLayoutController(options = {}) {
     syncDesktopSidebarWidth(true);
   };
 
+  /** @param {Event} event */
   const handleDocumentKeydown = (event) => {
+    if (!(event instanceof windowRef.KeyboardEvent)) {
+      return;
+    }
     if (event.key === "Escape" && appRoot?.classList?.contains("sidebar-open")) {
       close();
       return;
     }
-    if (
-      event.key !== "Tab" ||
-      !isCompact() ||
-      !appRoot?.classList?.contains("sidebar-open")
-    ) {
+    if (event.key !== "Tab" || !isCompact() || !appRoot?.classList?.contains("sidebar-open")) {
       return;
     }
 
@@ -288,7 +354,8 @@ export function createSidebarLayoutController(options = {}) {
     const first = focusables[0];
     const last = focusables[focusables.length - 1];
     const activeElement = documentRef.activeElement;
-    const activeInsideSidebar = activeElement instanceof windowRef.Node && sidebar?.contains(activeElement);
+    const activeInsideSidebar =
+      activeElement instanceof windowRef.Node && sidebar?.contains(activeElement);
     if (!activeInsideSidebar) {
       event.preventDefault();
       first.focus();
@@ -323,7 +390,9 @@ export function createSidebarLayoutController(options = {}) {
         return;
       }
       const storedWidth = Number.parseInt(storage.getItem(SIDEBAR_WIDTH_KEY) ?? "", 10);
-      desktopSidebarWidth = Number.isFinite(storedWidth) ? storedWidth : DESKTOP_SIDEBAR_DEFAULT;
+      desktopSidebarWidth = Number.isFinite(storedWidth)
+        ? storedWidth
+        : layout.desktopSidebarDefaultPx;
       events = createEventScope();
       events.listen(sidebarToggle, "click", open);
       events.listen(sidebarClose, "click", close);

@@ -25,7 +25,9 @@ interface TestTreeNode {
 }
 
 function getManifestDocs<T>(manifest: ManifestDocIndex<T>): T[] {
-  return manifest.docIds.map((id) => manifest.docsById[id]).filter((doc): doc is T => doc !== undefined);
+  return manifest.docIds
+    .map((id) => manifest.docsById[id])
+    .filter((doc): doc is T => doc !== undefined);
 }
 
 function getTreeDocTitles(
@@ -87,16 +89,19 @@ function readManifest(outDir: string): unknown {
 function snapshotOutputHashes(outDir: string): Record<string, string> {
   const hashes: Record<string, string> = {};
   const walk = (directory: string) => {
-    const entries = fs.readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
-      left.name.localeCompare(right.name, "en"),
-    );
+    const entries = fs
+      .readdirSync(directory, { withFileTypes: true })
+      .sort((left, right) => left.name.localeCompare(right.name, "en"));
     for (const entry of entries) {
       const absolutePath = path.join(directory, entry.name);
       if (entry.isDirectory()) {
         walk(absolutePath);
       } else if (entry.isFile()) {
         const relativePath = path.relative(outDir, absolutePath).split(path.sep).join("/");
-        hashes[relativePath] = crypto.createHash("sha256").update(fs.readFileSync(absolutePath)).digest("hex");
+        hashes[relativePath] = crypto
+          .createHash("sha256")
+          .update(fs.readFileSync(absolutePath))
+          .digest("hex");
       }
     }
   };
@@ -124,10 +129,7 @@ function findOnlyCacheIndexPath(workDir: string): string {
   return cachePaths[0];
 }
 
-function findFolderNodeByPath(
-  nodes: TestTreeNode[],
-  targetPath: string,
-): TestTreeNode | null {
+function findFolderNodeByPath(nodes: TestTreeNode[], targetPath: string): TestTreeNode | null {
   for (const node of nodes) {
     if (node.type === "folder" && node.path === targetPath) {
       return node;
@@ -157,7 +159,9 @@ test.describe("빌드 회귀 가드", () => {
       const build = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
       expect(build.status, build.output).toBe(0);
       const assetsDir = path.join(outDir, "assets");
-      const runtimeJs = fs.readdirSync(assetsDir).find((fileName) => /^app\.[a-f0-9]{12}\.js$/.test(fileName));
+      const runtimeJs = fs
+        .readdirSync(assetsDir)
+        .find((fileName) => /^app\.[a-f0-9]{12}\.js$/.test(fileName));
       expect(runtimeJs).toBeDefined();
       fs.appendFileSync(path.join(assetsDir, runtimeJs!), '"file-tree-builtin-astro";\n', "utf8");
 
@@ -230,10 +234,15 @@ title: Document ${index}
         path.join(workDir, "blog.config.mjs"),
         'export default { vaultDir: "./vault", outDir: "./dist", staticPaths: ["static-site"] };\n',
       );
-      writeText(path.join(vaultDir, "static-site", "index.html"), "<!doctype html><title>Static microsite</title>\n");
+      writeText(
+        path.join(vaultDir, "static-site", "index.html"),
+        "<!doctype html><title>Static microsite</title>\n",
+      );
       const build = runCli(workDir, [cliPath, "build"]);
       expect(build.status, build.output).toBe(0);
-      expect(fs.readFileSync(path.join(outDir, "static-site", "index.html"), "utf8")).toContain("Static microsite");
+      expect(fs.readFileSync(path.join(outDir, "static-site", "index.html"), "utf8")).toContain(
+        "Static microsite",
+      );
 
       const sizeCheck = runCli(workDir, [sizeCheckPath, "--out", outDir]);
       expect(sizeCheck.status, sizeCheck.output).toBe(0);
@@ -273,7 +282,10 @@ ALPHA
         Record<string, unknown>;
       expect(firstManifest).not.toHaveProperty("generatedAt");
       expect(firstManifest.docsById[firstManifest.docIds[0]]).not.toHaveProperty("isNew");
-      const contentPath = firstManifest.docsById[firstManifest.docIds[0]]?.contentUrl.replace(/^\/+/, "");
+      const contentPath = firstManifest.docsById[firstManifest.docIds[0]]?.contentUrl.replace(
+        /^\/+/,
+        "",
+      );
       expect(contentPath).toBeDefined();
 
       await new Promise((resolve) => setTimeout(resolve, 20));
@@ -283,7 +295,14 @@ ALPHA
       expect(second).toEqual(first);
 
       writeText(sourcePath, fs.readFileSync(sourcePath, "utf8").replace("ALPHA", "BRAVO"));
-      const contentBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      const contentBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultDir,
+        "--out",
+        outDir,
+      ]);
       expect(contentBuild.status, contentBuild.output).toBe(0);
       const afterContent = snapshotOutputHashes(outDir);
       expect(afterContent[contentPath!]).not.toBe(second[contentPath!]);
@@ -311,7 +330,9 @@ ALPHA
       expect(firstBuild.status, firstBuild.output).toBe(0);
 
       const contentDir = path.join(outDir, "content");
-      const contentFiles = fs.readdirSync(contentDir).filter((fileName) => fileName.endsWith(".html"));
+      const contentFiles = fs
+        .readdirSync(contentDir)
+        .filter((fileName) => fileName.endsWith(".html"));
       expect(contentFiles.length).toBeGreaterThan(0);
 
       const missingFile = contentFiles[0];
@@ -319,7 +340,14 @@ ALPHA
       fs.rmSync(missingFilePath);
       expect(fs.existsSync(missingFilePath)).toBe(false);
 
-      const secondBuild = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
+      const secondBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        outDir,
+      ]);
       expect(secondBuild.status, secondBuild.output).toBe(0);
       expect(fs.existsSync(missingFilePath)).toBe(true);
     } finally {
@@ -357,7 +385,14 @@ ALPHA
       expect(fs.existsSync(treeRuntimeJsPath)).toBe(false);
       expect(fs.existsSync(runtimeCssPath)).toBe(false);
 
-      const secondBuild = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
+      const secondBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        outDir,
+      ]);
       expect(secondBuild.status, secondBuild.output).toBe(0);
       expect(fs.existsSync(runtimeJsPath)).toBe(true);
       expect(fs.existsSync(treeRuntimeJsPath)).toBe(true);
@@ -406,7 +441,14 @@ ALPHA
 
       const foreignLegacyNamedContents = `${JSON.stringify({ tool: "another-cache", entries: ["keep"] })}\n`;
       writeText(legacyCacheFile, foreignLegacyNamedContents);
-      const repeatedClean = runCli(workDir, [cliPath, "clean", "--vault", vaultPath, "--out", outDir]);
+      const repeatedClean = runCli(workDir, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultPath,
+        "--out",
+        outDir,
+      ]);
       expect(repeatedClean.status, repeatedClean.output).toBe(0);
       expect(fs.readFileSync(legacyCacheFile, "utf8")).toBe(foreignLegacyNamedContents);
 
@@ -576,7 +618,9 @@ ALPHA
       expect(buildWithSymlinkedNamespace.output).toContain("Refusing symlinked cache namespace");
       expect(fs.existsSync(namespaceGuardOutDir)).toBe(false);
       expect(fs.lstatSync(symlinkedNamespace).isSymbolicLink()).toBe(true);
-      expect(fs.readFileSync(externalNamespaceSentinel, "utf8")).toBe("keep external namespace data");
+      expect(fs.readFileSync(externalNamespaceSentinel, "utf8")).toBe(
+        "keep external namespace data",
+      );
 
       const cleanWithSymlinkedNamespace = runCli(workDir, [
         cliPath,
@@ -589,7 +633,9 @@ ALPHA
       expect(cleanWithSymlinkedNamespace.status).not.toBe(0);
       expect(cleanWithSymlinkedNamespace.output).toContain("Refusing symlinked cache namespace");
       expect(fs.lstatSync(symlinkedNamespace).isSymbolicLink()).toBe(true);
-      expect(fs.readFileSync(externalNamespaceSentinel, "utf8")).toBe("keep external namespace data");
+      expect(fs.readFileSync(externalNamespaceSentinel, "utf8")).toBe(
+        "keep external namespace data",
+      );
 
       fs.unlinkSync(symlinkedNamespace);
 
@@ -725,7 +771,7 @@ PRIVATE_STATIC_SOURCE_SECRET
         expect(rejectedBuild.output).toContain(expectedError);
         expect(fs.existsSync(outDir)).toBe(false);
         expect(findCacheIndexPaths(workDir)).toEqual([]);
-        expect(fs.existsSync(legacyCacheFile)).toBe(false);
+        expect(fs.readFileSync(legacyCacheFile, "utf8")).toBe(legacyCacheContents);
         expect(fs.readFileSync(sourceMarker, "utf8")).toBe('{"foreign":"marker"}\n');
         expect(fs.readFileSync(path.join(vaultDir, "private.md"), "utf8")).toContain(
           "PRIVATE_STATIC_SOURCE_SECRET",
@@ -733,12 +779,38 @@ PRIVATE_STATIC_SOURCE_SECRET
       }
 
       writeText(configPath, "export default {};\n");
-      const correctedBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      const correctedBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultDir,
+        "--out",
+        outDir,
+      ]);
       expect(correctedBuild.status, correctedBuild.output).toBe(0);
-      const outputMarker = JSON.parse(fs.readFileSync(path.join(outDir, ".eiam-output.json"), "utf8")) as {
+      const outputMarker = JSON.parse(
+        fs.readFileSync(path.join(outDir, ".eiam-output.json"), "utf8"),
+      ) as {
         format: string;
       };
       expect(outputMarker.format).toBe("everything-is-a-markdown-output");
+
+      const cachePathsBeforeInvalidClean = findCacheIndexPaths(workDir);
+      expect(cachePathsBeforeInvalidClean).toHaveLength(1);
+      writeText(configPath, 'export default { staticPaths: [".eiam-output.json"] };\n');
+      const rejectedClean = runCli(workDir, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultDir,
+        "--out",
+        outDir,
+      ]);
+      expect(rejectedClean.status).not.toBe(0);
+      expect(rejectedClean.output).toContain('"staticPaths[0]"');
+      expect(rejectedClean.output).toContain("Refusing reserved static output path");
+      expect(fs.existsSync(path.join(outDir, ".eiam-output.json"))).toBe(true);
+      expect(findCacheIndexPaths(workDir)).toEqual(cachePathsBeforeInvalidClean);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
@@ -762,7 +834,14 @@ PRIVATE_STATIC_SOURCE_SECRET
       expect(fs.existsSync(outDir)).toBe(false);
       expect(findCacheIndexPaths(workDir)).toEqual([]);
 
-      const correctedBuild = runCli(workDir, [cliPath, "build", "--vault", vaultPath, "--out", outDir]);
+      const correctedBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultPath,
+        "--out",
+        outDir,
+      ]);
       expect(correctedBuild.status, correctedBuild.output).toBe(0);
       expect(fs.existsSync(path.join(outDir, ".eiam-output.json"))).toBe(true);
     } finally {
@@ -822,7 +901,9 @@ VAULT_B_BODY
       expect(wrongVaultBuild.output).toContain("matching .eiam-output.json");
       expect(fs.readFileSync(markerAPath, "utf8")).toBe(markerABefore);
       const manifestAfterWrongBuild = readManifest(outA) as ManifestDocIndex<{ route: string }>;
-      expect(getManifestDocs(manifestAfterWrongBuild).map((doc) => doc.route)).toEqual(["/NS-CACHE-A/"]);
+      expect(getManifestDocs(manifestAfterWrongBuild).map((doc) => doc.route)).toEqual([
+        "/NS-CACHE-A/",
+      ]);
 
       const wrongVaultClean = runCli(workDir, [cliPath, "clean", "--vault", vaultB, "--out", outA]);
       expect(wrongVaultClean.status).not.toBe(0);
@@ -843,7 +924,9 @@ VAULT_B_BODY
       expect(fs.readFileSync(markerAPath, "utf8")).toBe(markerABefore);
       expect(fs.existsSync(path.join(alternateCwd, ".cache", "eiam"))).toBe(false);
       expect(
-        getManifestDocs(readManifest(outA) as ManifestDocIndex<{ route: string }>).map((doc) => doc.route),
+        getManifestDocs(readManifest(outA) as ManifestDocIndex<{ route: string }>).map(
+          (doc) => doc.route,
+        ),
       ).toEqual(["/NS-CACHE-A/"]);
 
       const wrongCwdClean = runCli(alternateCwd, [
@@ -988,7 +1071,10 @@ TARGET_B_BODY
       }
 
       const initialStats = new Map(
-        [mutablePath, linkerPath, frontmatterPath].map((sourcePath) => [sourcePath, fs.statSync(sourcePath)]),
+        [mutablePath, linkerPath, frontmatterPath].map((sourcePath) => [
+          sourcePath,
+          fs.statSync(sourcePath),
+        ]),
       );
       const firstBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
       expect(firstBuild.status, firstBuild.output).toBe(0);
@@ -1009,7 +1095,14 @@ TARGET_B_BODY
         expect(current.mtimeMs).toBe(previous.mtimeMs);
       }
 
-      const changedBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      const changedBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultDir,
+        "--out",
+        outDir,
+      ]);
       expect(changedBuild.status, changedBuild.output).toBe(0);
       expect(changedBuild.output).toContain("total=5 rendered=3 skipped=2");
       expect(readDocContentHtml(outDir, "/FP-MUTABLE/")).toContain("BRAVO");
@@ -1098,12 +1191,24 @@ title: HTML Policy
       fs.mkdirSync(unsafeWorkDir, { recursive: true });
 
       const safeOutDir = path.join(safeWorkDir, "dist");
-      const safeBuild = runCli(safeWorkDir, [cliPath, "build", "--vault", vaultDir, "--out", safeOutDir]);
+      const safeBuild = runCli(safeWorkDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultDir,
+        "--out",
+        safeOutDir,
+      ]);
       expect(safeBuild.status, safeBuild.output).toBe(0);
       const safeContent = readDocContentHtml(safeOutDir, "/SAFE-HTML-01/");
-      const safeRoute = fs.readFileSync(path.join(safeOutDir, "SAFE-HTML-01", "index.html"), "utf8");
+      const safeRoute = fs.readFileSync(
+        path.join(safeOutDir, "SAFE-HTML-01", "index.html"),
+        "utf8",
+      );
       for (const rendered of [safeContent, safeRoute]) {
-        expect(rendered).toContain('<div class="safe-format"><strong>Allowed formatting</strong></div>');
+        expect(rendered).toContain(
+          '<div class="safe-format"><strong>Allowed formatting</strong></div>',
+        );
         expect(rendered).not.toContain("window.__script_payload");
         expect(rendered).not.toContain("window.__event_payload");
         expect(rendered).not.toContain("javascript:window.__url_payload");
@@ -1126,7 +1231,9 @@ title: HTML Policy
         unsafeOutDir,
       ]);
       expect(unsafeBuild.status, unsafeBuild.output).toBe(0);
-      expect(unsafeBuild.output).toContain("allowUnsafeHtml=true disables rendered HTML sanitization");
+      expect(unsafeBuild.output).toContain(
+        "allowUnsafeHtml=true disables rendered HTML sanitization",
+      );
       const unsafeContent = readDocContentHtml(unsafeOutDir, "/SAFE-HTML-01/");
       expect(unsafeContent).toContain("<script>window.__script_payload = 1</script>");
       expect(unsafeContent).toContain('onerror="window.__event_payload = 1"');
@@ -1222,7 +1329,14 @@ MISSING_CATEGORY_CACHE_SECRET
       expect(firstSources["missing-prefix.md"]).toBeUndefined();
       expect(firstSources["missing-category.md"]).toBeUndefined();
 
-      const incrementalBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      const incrementalBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultDir,
+        "--out",
+        outDir,
+      ]);
       expect(incrementalBuild.status, incrementalBuild.output).toBe(0);
       expect(incrementalBuild.output).toContain("total=1 rendered=0 skipped=1");
 
@@ -1267,10 +1381,11 @@ DRAFT_CACHE_SECRET
       const stateBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
       expect(stateBuild.status, stateBuild.output).toBe(0);
       const manifest = readManifest(outDir) as ManifestDocIndex<{ route: string }>;
-      expect(getManifestDocs(manifest).map((doc) => doc.route).sort()).toEqual([
-        "/CACHE-DRAFT/",
-        "/CACHE-PRIVATE/",
-      ]);
+      expect(
+        getManifestDocs(manifest)
+          .map((doc) => doc.route)
+          .sort(),
+      ).toEqual(["/CACHE-DRAFT/", "/CACHE-PRIVATE/"]);
 
       const nextCache = fs.readFileSync(cachePath, "utf8");
       expect(nextCache).not.toContain("PUBLIC_CACHE_BODY");
@@ -1345,7 +1460,10 @@ DRAFT_CACHE_SECRET
         expect(omitted.output).toContain(expectedError);
 
         const followedByFlag = runCli(workDir, [cliPath, command, option, "--help"]);
-        expect(followedByFlag.status, `${command} ${option} --help\n${followedByFlag.output}`).not.toBe(0);
+        expect(
+          followedByFlag.status,
+          `${command} ${option} --help\n${followedByFlag.output}`,
+        ).not.toBe(0);
         expect(followedByFlag.output).toContain(expectedError);
       }
     } finally {
@@ -1433,7 +1551,9 @@ title: Duplicate Title
       expect(duplicateContent).toContain("<li>Duplicate Title</li>");
       expect(duplicateContent).not.toContain('href="/DOC-03/"');
       expect(duplicateContent).not.toContain('href="/DOC-04/"');
-      expect(build.output).toContain('[wikilink] Duplicate title target "Duplicate Title" in notes/duplicates.md. Candidates: notes/duplicate-one.md, notes/duplicate-two.md');
+      expect(build.output).toContain(
+        '[wikilink] Duplicate title target "Duplicate Title" in notes/duplicates.md. Candidates: notes/duplicate-one.md, notes/duplicate-two.md',
+      );
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
@@ -1501,13 +1621,18 @@ title: API Detail
       const pinnedFolder = manifest.tree[0];
       expect(pinnedFolder.type).toBe("folder");
       expect(pinnedFolder.path).toBe("__virtual__/pinned/category/engineering/guides");
-      expect(getTreeDocTitles(pinnedFolder.children, manifest.docsById)).toEqual(["Guide Overview", "API Detail"]);
+      expect(getTreeDocTitles(pinnedFolder.children, manifest.docsById)).toEqual([
+        "Guide Overview",
+        "API Detail",
+      ]);
 
       const engineeringFolder = findFolderNodeByPath(manifest.tree, "engineering");
       expect(engineeringFolder).not.toBeNull();
       const guidesFolder = findFolderNodeByPath(manifest.tree, "engineering/guides");
       expect(guidesFolder).not.toBeNull();
-      expect(getTreeDocTitles(guidesFolder?.children, manifest.docsById)).toContain("Guide Overview");
+      expect(getTreeDocTitles(guidesFolder?.children, manifest.docsById)).toContain(
+        "Guide Overview",
+      );
       expect(findFolderNodeByPath(manifest.tree, "misc")).toBeNull();
 
       const apiFolder = findFolderNodeByPath(manifest.tree, "engineering/guides/api");
@@ -1515,7 +1640,9 @@ title: API Detail
       expect(getTreeDocTitles(apiFolder?.children, manifest.docsById)).toContain("API Detail");
 
       expect(docs.find((doc) => doc.route === "/CAT-02/")?.categoryPath).toBe("engineering/guides");
-      expect(docs.find((doc) => doc.route === "/CAT-03/")?.categoryPath).toBe("engineering/guides/api");
+      expect(docs.find((doc) => doc.route === "/CAT-03/")?.categoryPath).toBe(
+        "engineering/guides/api",
+      );
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
@@ -1539,7 +1666,9 @@ title: Missing Category
 
       const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
       expect(build.status, build.output).toBe(0);
-      expect(build.output).toContain("[publish] Skipped published doc without category_path: notes/missing-category.md");
+      expect(build.output).toContain(
+        "[publish] Skipped published doc without category_path: notes/missing-category.md",
+      );
 
       const manifest = readManifest(outDir) as ManifestDocIndex<{ route: string }>;
       expect(getManifestDocs(manifest)).toEqual([]);
@@ -1599,7 +1728,9 @@ title: Should Not Pin
       const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
       expect(build.status, build.output).toBe(0);
 
-      const manifest = readManifest(outDir) as ManifestDocIndex<{ title: string }> & { tree: TestTreeNode[] };
+      const manifest = readManifest(outDir) as ManifestDocIndex<{ title: string }> & {
+        tree: TestTreeNode[];
+      };
 
       const pinnedFolder = manifest.tree[0];
       expect(pinnedFolder.type).toBe("folder");
@@ -1668,8 +1799,12 @@ title: Normalized API Reference
       ]);
 
       expect(findFolderNodeByPath(manifest.tree, "engineering/guides/api")).not.toBeNull();
-      expect(findFolderNodeByPath(manifest.tree, "engineering/guides/api/reference")).not.toBeNull();
-      expect(docs.find((doc) => doc.route === "/NORM-01/")?.categoryPath).toBe("engineering/guides/api");
+      expect(
+        findFolderNodeByPath(manifest.tree, "engineering/guides/api/reference"),
+      ).not.toBeNull();
+      expect(docs.find((doc) => doc.route === "/NORM-01/")?.categoryPath).toBe(
+        "engineering/guides/api",
+      );
       expect(docs.find((doc) => doc.route === "/NORM-02/")?.categoryPath).toBe(
         "engineering/guides/api/reference",
       );
@@ -1741,12 +1876,16 @@ title: Menu Config Guide
       ]);
       expect(build.status, build.output).toBe(0);
 
-      const manifest = readManifest(outDir) as ManifestDocIndex<{ title: string }> & { tree: TestTreeNode[] };
+      const manifest = readManifest(outDir) as ManifestDocIndex<{ title: string }> & {
+        tree: TestTreeNode[];
+      };
 
       const pinnedFolder = manifest.tree[0];
       expect(pinnedFolder.name).toBe("GUIDES");
       expect(pinnedFolder.path).toBe("__virtual__/pinned/category/engineering/guides");
-      expect(getTreeDocTitles(pinnedFolder.children, manifest.docsById)).toEqual(["Menu Config Guide"]);
+      expect(getTreeDocTitles(pinnedFolder.children, manifest.docsById)).toEqual([
+        "Menu Config Guide",
+      ]);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
@@ -1766,9 +1905,18 @@ title: Menu Config Guide
 `,
       );
 
-      const missingTarget = runCli(workDir, [cliPath, "build", "--vault", "./vault", "--out", "./dist"]);
+      const missingTarget = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        "./vault",
+        "--out",
+        "./dist",
+      ]);
       expect(missingTarget.status).not.toBe(0);
-      expect(missingTarget.output).toContain('"pinnedMenu" must include "sourceDir" or "categoryPath"');
+      expect(missingTarget.output).toContain(
+        '"pinnedMenu" must include "sourceDir" or "categoryPath"',
+      );
 
       writeText(
         path.join(workDir, "blog.config.mjs"),
@@ -1781,9 +1929,44 @@ title: Menu Config Guide
 `,
       );
 
-      const rootCategory = runCli(workDir, [cliPath, "build", "--vault", "./vault", "--out", "./dist"]);
+      const rootCategory = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        "./vault",
+        "--out",
+        "./dist",
+      ]);
       expect(rootCategory.status).not.toBe(0);
       expect(rootCategory.output).toContain('"pinnedMenu.categoryPath" must not be root');
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("사용자 config 전체를 output/cache 변경 전에 검증한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-invalid-user-config-"));
+    const outDir = path.join(workDir, "dist");
+    const cacheDir = path.join(workDir, ".cache");
+
+    try {
+      writeText(
+        path.join(workDir, "blog.config.mjs"),
+        `export default {
+  exclude: ["private/**", 42],
+  markdown: {
+    wikilinks: "yes",
+  },
+};
+`,
+      );
+
+      const build = runCli(workDir, [cliPath, "build", "--vault", "./vault", "--out", "./dist"]);
+
+      expect(build.status).not.toBe(0);
+      expect(build.output).toContain('"exclude[1]" must be a string; received number (42)');
+      expect(fs.existsSync(outDir)).toBe(false);
+      expect(fs.existsSync(cacheDir)).toBe(false);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

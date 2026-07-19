@@ -34,8 +34,9 @@ bun run blog [build|dev|clean] [options]
 - `bun run build`: 정적 파일 빌드
 - `bun run dev`: 로컬 개발 서버 실행 (기본 `http://localhost:3000`)
 - `bun run clean`: EIAM 소유권 마커가 확인된 `dist`와 일치하는 EIAM cache namespace만 삭제
+- `bun run typecheck`: TypeScript와 브라우저 런타임 JavaScript 정적 타입 검사
 
-빌드는 vault를 검증하고 읽은 뒤 전용 출력 디렉터리에 `.eiam-output.json` 소유권 마커를 기록하고 canonical vault/output/cache-root 경로에서 파생한 cache namespace에 결속합니다. 비어 있지 않은 미소유 또는 namespace 불일치 디렉터리, cache root를 포함하거나 그 안에 놓인 경로는 출력으로 사용하지 않으며, symlink인 cache path component, namespace, index도 거부합니다. `staticPaths`는 output 밖으로 벗어나거나 예약된 `.eiam-output.json` 마커와 충돌할 수 없습니다. `dev`는 초기 build가 이 안전 검사를 통과하지 못하면 watcher와 server를 시작하지 않고 종료하며, 안전하게 시작된 뒤의 rebuild 실패만 로그로 남깁니다. `clean`도 광범위한 경로나 선택한 실행 context와 마커가 일치하지 않는 디렉터리를 삭제하지 않습니다. build migration과 `clean`은 과거 EIAM cache schema로 확인된 `.cache/build-index.json`만 제거하며, pre-marker output과 예약 static path를 거부하는 경로에서도 이 migration을 수행합니다. sibling EIAM cache namespace와 일반 `.cache`의 다른 파일은 보존합니다.
+빌드는 vault를 검증하고 읽은 뒤 전용 출력 디렉터리에 `.eiam-output.json` 소유권 마커를 기록하고 canonical vault/output/cache-root 경로에서 파생한 cache namespace에 결속합니다. 비어 있지 않은 미소유 또는 namespace 불일치 디렉터리, cache root를 포함하거나 그 안에 놓인 경로는 출력으로 사용하지 않으며, symlink인 cache path component, namespace, index도 거부합니다. `staticPaths`는 output 밖으로 벗어나거나 예약된 `.eiam-output.json` 마커와 충돌할 수 없습니다. `dev`는 초기 build가 이 안전 검사를 통과하지 못하면 watcher와 server를 시작하지 않고 종료하며, 안전하게 시작된 뒤의 rebuild 실패만 로그로 남깁니다. `clean`도 광범위한 경로나 선택한 실행 context와 마커가 일치하지 않는 디렉터리를 삭제하지 않습니다. build migration과 `clean`은 과거 EIAM cache schema로 확인된 `.cache/build-index.json`만 제거하며, pre-marker output을 거부하는 경로에서도 이 migration을 수행합니다. 예약 static path는 migration이나 storage 검사보다 앞선 config 검증에서 거부합니다. sibling EIAM cache namespace와 일반 `.cache`의 다른 파일은 보존합니다.
 
 자주 쓰는 옵션:
 
@@ -70,6 +71,28 @@ bun run lint:md:publish -- --out-dir ./reports --strict
 - `--vault <path>`: Markdown 루트 디렉터리 재지정 (선택)
 - `--exclude <glob>`: 제외 패턴 추가 (반복 가능)
 
+build와 같은 vault scanner, 제외 규칙, frontmatter parser를 사용하므로 `publish: true`이고
+draft가 아니며 `prefix`와 `category_path`가 모두 있는 문서만 동일하게 선택합니다. JSON
+리포트는 잘못된 publication metadata와 frontmatter parse 진단을 `publicationDiagnostics`에,
+Markdown 규칙 위반을 `markdownStyleIssues`에 분리하고, 호환용 통합 `issues`도 제공합니다.
+publication metadata 진단은 warning이지만 `--strict`에서는 Markdown style finding이나 parse
+error와 마찬가지로 종료 코드 `1`을 반환합니다.
+
+## 개발 품질 검사
+
+브라우저 설치나 E2E 실행 전에 빠른 source gate를 로컬에서 그대로 실행할 수 있습니다.
+
+```bash
+bun run lint:source
+bun run format:check
+bun run typecheck
+bun run test:unit
+```
+
+`tests/unit/`은 CLI 파싱, 경로와 라우트, cache 안전 가드, manifest 변환, 렌더된 HTML sanitize처럼 결정적인 변환과 안전 계약을 다룹니다. 이 영역의 동작을 바꾸거나 회귀를 수정할 때는 unit test도 함께 추가하거나 갱신하고, Playwright는 브라우저 및 전체 build 통합 동작에 집중합니다.
+
+현재 CI는 숫자 coverage 임계값을 강제하지 않습니다. 추가 test framework 없이 Bun 내장 coverage를 확인하려면 `bun run test:unit:coverage`를 사용합니다.
+
 ## 설정 파일 (`blog.config.ts`)
 
 SEO/UI/정적 파일 설정은 config 파일에서 관리할 수 있습니다.
@@ -78,6 +101,7 @@ SEO/UI/정적 파일 설정은 config 파일에서 관리할 수 있습니다.
 const config = {
   vaultDir: "./vault",
   outDir: "./dist",
+  defaultBranch: "dev",
   staticPaths: ["assets", "public/favicon.ico"],
   pinnedMenu: {
     label: "NOTICE",
@@ -100,6 +124,17 @@ const config = {
 
 export default config;
 ```
+
+`defaultBranch`는 런타임이 처음 선택하는 브랜치이며 기본값은 `"dev"`입니다. 값은 앞뒤
+공백을 제거하고 소문자로 정규화하며, frontmatter에 `branch`가 없는 문서는 이 기본 브랜치에
+포함됩니다.
+
+Config module은 신뢰되지 않은 런타임 입력으로 취급합니다. 지원하는 모든 필드를 검증하고
+정규화한 뒤에만 `build`, `dev`, `clean`이 output/cache 경로를 생성·변경·삭제할 수 있습니다.
+잘못된 값은 정확한 점 표기 필드 경로와 실제 런타임 타입을 포함한 오류로 명령을 중단합니다.
+알 수 없는 필드는 오타를 확인할 수 있도록 경고한 뒤 무시합니다. 안전하지 않은 Mermaid
+URL/theme 문자열은 기존 정책대로 안전한 기본값을 사용하지만, 런타임 타입이 잘못된 값은
+거부합니다.
 
 `staticPaths`:
 
@@ -211,7 +246,7 @@ title: Work In Progress
 
 ## 캐시와 비공개 문서
 
-빌드 cache는 실행 작업 디렉터리 기준 `.cache/eiam/v1-<namespace>/build-index.json`에 저장됩니다. namespace는 canonical `vaultDir`와 `outDir` 경로 쌍의 안정적인 hash입니다. config를 먼저 해석한 다음 CLI의 `--vault`와 `--out`이 이를 덮어쓰며, 어느 경로든 달라지면 별도 namespace를 선택합니다. cache root 자체를 별도로 재지정하는 옵션은 없습니다. `clean`은 선택된 경로 쌍의 namespace만 삭제합니다.
+빌드 cache는 실행 작업 디렉터리 기준 `.cache/eiam/v2-<namespace>/build-index.json`에 저장됩니다. namespace는 canonical vault, output, cache-root 경로의 안정적인 hash입니다. config를 먼저 해석한 다음 CLI의 `--vault`와 `--out`이 이를 덮어쓰며, 어느 경로든 달라지면 별도 namespace를 선택합니다. cache root 자체를 별도로 재지정하는 옵션은 없습니다. `clean`은 선택된 경로 쌍의 namespace만 삭제합니다.
 
 증분 빌드 cache에는 `publish: true`이면서 draft가 아닌 Markdown 본문만 저장됩니다. 비공개 문서와 draft 문서는 persistent cache entry에서 완전히 제외되며, publish/draft 상태가 바뀌면 다음 빌드에서 다시 평가됩니다.
 

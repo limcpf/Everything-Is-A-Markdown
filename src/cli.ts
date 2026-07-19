@@ -1,6 +1,12 @@
 #!/usr/bin/env bun
 import { buildSite, cleanBuildArtifacts } from "./build";
-import { parseCliArgs, loadPinnedMenuConfig, loadUserConfig, printHelp, resolveBuildOptions } from "./config";
+import {
+  parseCliArgs,
+  loadPinnedMenuConfig,
+  loadUserConfig,
+  printHelp,
+  resolveBuildOptions,
+} from "./config";
 import { runDev } from "./dev";
 
 async function main(): Promise<void> {
@@ -27,7 +33,9 @@ async function main(): Promise<void> {
   }
 
   const result = await buildSite(buildOptions);
-  console.log(`[build] total=${result.totalDocs} rendered=${result.renderedDocs} skipped=${result.skippedDocs}`);
+  console.log(
+    `[build] total=${result.totalDocs} rendered=${result.renderedDocs} skipped=${result.skippedDocs}`,
+  );
 }
 
 main().catch((error) => {

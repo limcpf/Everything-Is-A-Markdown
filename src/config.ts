@@ -1,7 +1,9 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { OUTPUT_MARKER_FILE_NAME } from "./build/shared";
+import { DEFAULT_RUNTIME_CONFIG } from "./defaults";
 import { normalizeSeoConfig } from "./seo";
-import type { BuildOptions, PinnedMenuOption, UserConfig } from "./types";
+import type { BuildOptions, PinnedMenuOption, UserConfig, UserSeoConfig } from "./types";
 
 export interface CliArgs {
   command: "build" | "dev" | "clean";
@@ -26,23 +28,161 @@ const DEFAULTS = {
   gfm: true,
   allowUnsafeHtml: false,
   shikiTheme: "github-dark",
-  mermaid: {
-    enabled: true,
-    cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
-    theme: "default",
-  },
+  defaultBranch: DEFAULT_RUNTIME_CONFIG.defaultBranch,
+  mermaid: DEFAULT_RUNTIME_CONFIG.mermaid,
 };
 
 const MERMAID_URL_MAX_LENGTH = 1024;
 const MERMAID_THEME_PATTERN = /^[a-zA-Z][a-zA-Z0-9._-]*$/;
 const MERMAID_CDN_URL_PATTERN = /^(https?:\/\/|\/|\.{1,2}\/)[^\s"'><]+$/;
 
-function normalizeMermaidEnabled(value: unknown): boolean {
-  return typeof value === "boolean" ? value : DEFAULTS.mermaid.enabled;
+type ConfigWarningHandler = (message: string) => void;
+
+export type ValidatedUserConfig = Omit<UserConfig, "pinnedMenu"> & {
+  pinnedMenu?: PinnedMenuOption;
+};
+
+function defaultConfigWarning(message: string): void {
+  console.warn(message);
 }
 
-function normalizeMermaidCdnUrl(value: unknown): string {
+function receivedValue(value: unknown): string {
+  const type = value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
+  let preview: string | undefined;
+
+  if (typeof value === "string") {
+    const shortened = value.length > 120 ? `${value.slice(0, 117)}...` : value;
+    preview = JSON.stringify(shortened);
+  } else if (typeof value === "number" || typeof value === "boolean") {
+    preview = String(value);
+  } else if (typeof value === "bigint") {
+    preview = `${String(value)}n`;
+  }
+
+  return preview === undefined ? type : `${type} (${preview})`;
+}
+
+function invalidValue(
+  errorPrefix: string,
+  field: string,
+  expectation: string,
+  value: unknown,
+): never {
+  throw new Error(
+    `${errorPrefix} "${field}" must be ${expectation}; received ${receivedValue(value)}`,
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function requireRecord(
+  value: unknown,
+  field: string,
+  errorPrefix = "[config]",
+): Record<string, unknown> {
+  if (!isRecord(value)) {
+    invalidValue(errorPrefix, field, "a plain object", value);
+  }
+  return value;
+}
+
+function warnUnknownFields(
+  record: Record<string, unknown>,
+  allowedFields: readonly string[],
+  parentPath: string,
+  errorPrefix: string,
+  warn: ConfigWarningHandler,
+): void {
+  const allowed = new Set(allowedFields);
+  for (const key of Object.keys(record)) {
+    if (!allowed.has(key)) {
+      const field = parentPath ? `${parentPath}.${key}` : key;
+      warn(`${errorPrefix} unknown field "${field}" will be ignored`);
+    }
+  }
+}
+
+function optionalString(
+  record: Record<string, unknown>,
+  key: string,
+  field: string,
+  options: { trim?: boolean; allowEmpty?: boolean } = {},
+): string | undefined {
+  const value = record[key];
+  if (value === undefined) {
+    return undefined;
+  }
   if (typeof value !== "string") {
+    invalidValue("[config]", field, "a string", value);
+  }
+
+  const normalized = options.trim ? value.trim() : value;
+  if (options.allowEmpty === false && normalized.length === 0) {
+    invalidValue("[config]", field, "a non-empty string", value);
+  }
+  return normalized;
+}
+
+function optionalBoolean(
+  record: Record<string, unknown>,
+  key: string,
+  field: string,
+): boolean | undefined {
+  const value = record[key];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "boolean") {
+    invalidValue("[config]", field, "a boolean", value);
+  }
+  return value;
+}
+
+function optionalInteger(
+  record: Record<string, unknown>,
+  key: string,
+  field: string,
+  min: number,
+): number | undefined {
+  const value = record[key];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    !Number.isInteger(value) ||
+    value < min
+  ) {
+    invalidValue("[config]", field, `an integer >= ${min}`, value);
+  }
+  return value;
+}
+
+function normalizeStringArray(raw: unknown, field: string): string[] {
+  if (!Array.isArray(raw)) {
+    invalidValue("[config]", field, "an array of strings", raw);
+  }
+
+  return raw.map((value, index) => {
+    if (typeof value !== "string") {
+      invalidValue("[config]", `${field}[${index}]`, "a string", value);
+    }
+    return value;
+  });
+}
+
+function normalizeMermaidCdnUrl(
+  value: string | undefined,
+  warn: ConfigWarningHandler = defaultConfigWarning,
+): string {
+  if (value === undefined) {
     return DEFAULTS.mermaid.cdnUrl;
   }
 
@@ -52,21 +192,28 @@ function normalizeMermaidCdnUrl(value: unknown): string {
   }
 
   if (normalized.length > MERMAID_URL_MAX_LENGTH || !MERMAID_CDN_URL_PATTERN.test(normalized)) {
-    console.warn(`[config] invalid mermaid.cdnUrl: ${JSON.stringify(value)}. fallback to default ${JSON.stringify(DEFAULTS.mermaid.cdnUrl)}.`);
+    warn(
+      `[config] "markdown.mermaid.cdnUrl" has an invalid string value ${JSON.stringify(value)}; using default ${JSON.stringify(DEFAULTS.mermaid.cdnUrl)}`,
+    );
     return DEFAULTS.mermaid.cdnUrl;
   }
 
   return normalized;
 }
 
-function normalizeMermaidTheme(value: unknown): string {
-  if (typeof value !== "string") {
+function normalizeMermaidTheme(
+  value: string | undefined,
+  warn: ConfigWarningHandler = defaultConfigWarning,
+): string {
+  if (value === undefined) {
     return DEFAULTS.mermaid.theme;
   }
 
   const normalized = value.trim();
   if (!MERMAID_THEME_PATTERN.test(normalized)) {
-    console.warn(`[config] invalid mermaid.theme: ${JSON.stringify(value)}. fallback to default ${JSON.stringify(DEFAULTS.mermaid.theme)}.`);
+    warn(
+      `[config] "markdown.mermaid.theme" has an invalid string value ${JSON.stringify(value)}; using default ${JSON.stringify(DEFAULTS.mermaid.theme)}`,
+    );
     return DEFAULTS.mermaid.theme;
   }
 
@@ -152,7 +299,7 @@ export function parseCliArgs(argv: string[]): CliArgs {
   return parsed;
 }
 
-export async function loadUserConfig(cwd = process.cwd()): Promise<UserConfig> {
+export async function loadUserConfig(cwd = process.cwd()): Promise<ValidatedUserConfig> {
   const candidates = ["blog.config.ts", "blog.config.js", "blog.config.mjs", "blog.config.cjs"];
 
   for (const fileName of candidates) {
@@ -163,31 +310,38 @@ export async function loadUserConfig(cwd = process.cwd()): Promise<UserConfig> {
     }
 
     const imported = await import(pathToFileURL(absolute).href);
-    const config = (imported.default ?? imported) as UserConfig;
-    return config ?? {};
+    const raw =
+      imported.default ??
+      Object.fromEntries(Object.entries(imported).filter(([key]) => key !== "default"));
+    return validateUserConfig(raw);
   }
 
-  return {};
+  return validateUserConfig({});
 }
 
-function normalizePinnedMenu(raw: unknown, errorPrefix = "[config]"): PinnedMenuOption | null {
-  if (raw == null) {
+function normalizePinnedMenu(
+  raw: unknown,
+  errorPrefix = "[config]",
+  warn: ConfigWarningHandler = defaultConfigWarning,
+): PinnedMenuOption | null {
+  if (raw === undefined) {
     return null;
   }
-  if (typeof raw !== "object") {
-    throw new Error(`${errorPrefix} "pinnedMenu" must be an object`);
-  }
 
-  const menu = raw as Record<string, unknown>;
+  const menu = requireRecord(raw, "pinnedMenu", errorPrefix);
+  warnUnknownFields(menu, ["label", "sourceDir", "categoryPath"], "pinnedMenu", errorPrefix, warn);
   const sourceDirRaw = menu.sourceDir;
   const categoryPathRaw = menu.categoryPath;
   const labelRaw = menu.label;
-  const normalizeMenuPath = (value: unknown, fieldName: "sourceDir" | "categoryPath"): string | undefined => {
-    if (value == null) {
+  const normalizeMenuPath = (
+    value: unknown,
+    fieldName: "sourceDir" | "categoryPath",
+  ): string | undefined => {
+    if (value === undefined) {
       return undefined;
     }
     if (typeof value !== "string" || value.trim().length === 0) {
-      throw new Error(`${errorPrefix} "pinnedMenu.${fieldName}" must be a non-empty string`);
+      invalidValue(errorPrefix, `pinnedMenu.${fieldName}`, "a non-empty string", value);
     }
 
     const normalized = value
@@ -201,7 +355,9 @@ function normalizePinnedMenu(raw: unknown, errorPrefix = "[config]"): PinnedMenu
       .join("/");
 
     if (!normalized) {
-      throw new Error(`${errorPrefix} "pinnedMenu.${fieldName}" must not be root`);
+      throw new Error(
+        `${errorPrefix} "pinnedMenu.${fieldName}" must not be root; received ${receivedValue(value)}`,
+      );
     }
 
     return normalized;
@@ -211,13 +367,15 @@ function normalizePinnedMenu(raw: unknown, errorPrefix = "[config]"): PinnedMenu
   const normalizedCategoryPath = normalizeMenuPath(categoryPathRaw, "categoryPath");
 
   if (!normalizedSourceDir && !normalizedCategoryPath) {
-    throw new Error(`${errorPrefix} "pinnedMenu" must include "sourceDir" or "categoryPath"`);
+    throw new Error(
+      `${errorPrefix} "pinnedMenu" must include "sourceDir" or "categoryPath"; received object`,
+    );
   }
 
-  const label =
-    typeof labelRaw === "string" && labelRaw.trim().length > 0
-      ? labelRaw.trim()
-      : "NOTICE";
+  if (labelRaw !== undefined && typeof labelRaw !== "string") {
+    invalidValue(errorPrefix, "pinnedMenu.label", "a string", labelRaw);
+  }
+  const label = typeof labelRaw === "string" && labelRaw.trim() ? labelRaw.trim() : "NOTICE";
 
   return {
     label,
@@ -227,17 +385,17 @@ function normalizePinnedMenu(raw: unknown, errorPrefix = "[config]"): PinnedMenu
 }
 
 function normalizeStaticPaths(raw: unknown, errorPrefix = "[config]"): string[] {
-  if (raw == null) {
+  if (raw === undefined) {
     return [];
   }
   if (!Array.isArray(raw)) {
-    throw new Error(`${errorPrefix} "staticPaths" must be an array of strings`);
+    invalidValue(errorPrefix, "staticPaths", "an array of strings", raw);
   }
 
   const normalized = new Set<string>();
   for (const [index, value] of raw.entries()) {
     if (typeof value !== "string") {
-      throw new Error(`${errorPrefix} "staticPaths[${index}]" must be a string`);
+      invalidValue(errorPrefix, `staticPaths[${index}]`, "a string", value);
     }
 
     const cleaned = value
@@ -248,21 +406,230 @@ function normalizeStaticPaths(raw: unknown, errorPrefix = "[config]"): string[] 
 
     if (
       !cleaned ||
-      cleaned === "." ||
-      cleaned === ".." ||
-      cleaned.startsWith("../") ||
       cleaned.startsWith("/") ||
-      path.isAbsolute(value.trim())
+      path.isAbsolute(value.trim()) ||
+      path.win32.isAbsolute(value.trim())
     ) {
       throw new Error(
-        `${errorPrefix} "staticPaths[${index}]" must be a non-empty vault-relative path (for example: "assets")`,
+        `${errorPrefix} "staticPaths[${index}]" must be a non-empty vault-relative path (for example: "assets"); received ${receivedValue(value)}`,
       );
     }
 
-    normalized.add(cleaned);
+    const normalizedPath = path.posix.normalize(cleaned);
+    if (normalizedPath === ".") {
+      throw new Error(
+        `${errorPrefix} "staticPaths[${index}]" is invalid: Refusing static path that resolves to the vault root; received ${receivedValue(value)}`,
+      );
+    }
+    if (normalizedPath === ".." || normalizedPath.startsWith("../")) {
+      throw new Error(
+        `${errorPrefix} "staticPaths[${index}]" is invalid: Refusing static output path outside the output directory; received ${receivedValue(value)}`,
+      );
+    }
+    if (
+      normalizedPath === OUTPUT_MARKER_FILE_NAME ||
+      normalizedPath.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`)
+    ) {
+      throw new Error(
+        `${errorPrefix} "staticPaths[${index}]" is invalid: Refusing reserved static output path; received ${receivedValue(value)}`,
+      );
+    }
+
+    normalized.add(normalizedPath);
   }
 
   return Array.from(normalized);
+}
+
+function normalizeUiConfig(
+  raw: unknown,
+  warn: ConfigWarningHandler,
+): NonNullable<UserConfig["ui"]> {
+  const ui = requireRecord(raw, "ui");
+  warnUnknownFields(ui, ["newWithinDays", "recentLimit"], "ui", "[config]", warn);
+
+  return {
+    newWithinDays: optionalInteger(ui, "newWithinDays", "ui.newWithinDays", 0),
+    recentLimit: optionalInteger(ui, "recentLimit", "ui.recentLimit", 1),
+  };
+}
+
+function normalizeMarkdownConfig(
+  raw: unknown,
+  warn: ConfigWarningHandler,
+): NonNullable<UserConfig["markdown"]> {
+  const markdown = requireRecord(raw, "markdown");
+  warnUnknownFields(
+    markdown,
+    ["wikilinks", "images", "gfm", "allowUnsafeHtml", "highlight", "mermaid"],
+    "markdown",
+    "[config]",
+    warn,
+  );
+
+  const normalized: NonNullable<UserConfig["markdown"]> = {
+    wikilinks: optionalBoolean(markdown, "wikilinks", "markdown.wikilinks"),
+    gfm: optionalBoolean(markdown, "gfm", "markdown.gfm"),
+    allowUnsafeHtml: optionalBoolean(markdown, "allowUnsafeHtml", "markdown.allowUnsafeHtml"),
+  };
+
+  const images = markdown.images;
+  if (images !== undefined) {
+    if (images !== "keep" && images !== "omit-local") {
+      invalidValue("[config]", "markdown.images", '"keep" or "omit-local"', images);
+    }
+    normalized.images = images;
+  }
+
+  if (markdown.highlight !== undefined) {
+    const highlight = requireRecord(markdown.highlight, "markdown.highlight");
+    warnUnknownFields(highlight, ["engine", "theme"], "markdown.highlight", "[config]", warn);
+
+    const engine = highlight.engine;
+    if (engine !== undefined && engine !== "shiki") {
+      invalidValue("[config]", "markdown.highlight.engine", '"shiki"', engine);
+    }
+    normalized.highlight = {
+      engine,
+      theme: optionalString(highlight, "theme", "markdown.highlight.theme", {
+        trim: true,
+        allowEmpty: false,
+      }),
+    };
+  }
+
+  if (markdown.mermaid !== undefined) {
+    const mermaid = requireRecord(markdown.mermaid, "markdown.mermaid");
+    warnUnknownFields(
+      mermaid,
+      ["enabled", "cdnUrl", "theme"],
+      "markdown.mermaid",
+      "[config]",
+      warn,
+    );
+
+    const cdnUrl = optionalString(mermaid, "cdnUrl", "markdown.mermaid.cdnUrl");
+    const theme = optionalString(mermaid, "theme", "markdown.mermaid.theme");
+    normalized.mermaid = {
+      enabled: optionalBoolean(mermaid, "enabled", "markdown.mermaid.enabled"),
+      cdnUrl: cdnUrl === undefined ? undefined : normalizeMermaidCdnUrl(cdnUrl, warn),
+      theme: theme === undefined ? undefined : normalizeMermaidTheme(theme, warn),
+    };
+  }
+
+  return normalized;
+}
+
+function normalizeSeoUserConfig(raw: unknown, warn: ConfigWarningHandler): UserSeoConfig {
+  const seo = requireRecord(raw, "seo");
+  warnUnknownFields(
+    seo,
+    [
+      "siteUrl",
+      "pathBase",
+      "siteName",
+      "defaultTitle",
+      "defaultDescription",
+      "locale",
+      "twitterCard",
+      "twitterSite",
+      "twitterCreator",
+      "defaultSocialImage",
+      "defaultOgImage",
+      "defaultTwitterImage",
+    ],
+    "seo",
+    "[config]",
+    warn,
+  );
+
+  const normalizeSeoString = (key: string): string | undefined => {
+    const value = optionalString(seo, key, `seo.${key}`, { trim: true });
+    return value ? value : undefined;
+  };
+  const siteUrl = optionalString(seo, "siteUrl", "seo.siteUrl", {
+    trim: true,
+    allowEmpty: false,
+  });
+  const twitterCard = seo.twitterCard;
+  if (
+    twitterCard !== undefined &&
+    twitterCard !== "summary" &&
+    twitterCard !== "summary_large_image"
+  ) {
+    invalidValue("[config]", "seo.twitterCard", '"summary" or "summary_large_image"', twitterCard);
+  }
+
+  const normalized: UserSeoConfig = {
+    siteUrl,
+    pathBase: optionalString(seo, "pathBase", "seo.pathBase", { trim: true }),
+    siteName: normalizeSeoString("siteName"),
+    defaultTitle: normalizeSeoString("defaultTitle"),
+    defaultDescription: normalizeSeoString("defaultDescription"),
+    locale: normalizeSeoString("locale"),
+    twitterCard,
+    twitterSite: normalizeSeoString("twitterSite"),
+    twitterCreator: normalizeSeoString("twitterCreator"),
+    defaultSocialImage: normalizeSeoString("defaultSocialImage"),
+    defaultOgImage: normalizeSeoString("defaultOgImage"),
+    defaultTwitterImage: normalizeSeoString("defaultTwitterImage"),
+  };
+
+  const buildSeo = normalizeSeoConfig(normalized);
+  return buildSeo ?? normalized;
+}
+
+/** Validate and normalize the complete public config shape before build storage is inspected. */
+export function validateUserConfig(
+  raw: unknown,
+  warn: ConfigWarningHandler = defaultConfigWarning,
+): ValidatedUserConfig {
+  const config = requireRecord(raw, "<root>");
+  warnUnknownFields(
+    config,
+    [
+      "vaultDir",
+      "outDir",
+      "defaultBranch",
+      "exclude",
+      "staticPaths",
+      "pinnedMenu",
+      "ui",
+      "markdown",
+      "seo",
+    ],
+    "",
+    "[config]",
+    warn,
+  );
+
+  const normalized: ValidatedUserConfig = {};
+  const vaultDir = optionalString(config, "vaultDir", "vaultDir");
+  const outDir = optionalString(config, "outDir", "outDir");
+  const defaultBranch = optionalString(config, "defaultBranch", "defaultBranch", {
+    trim: true,
+    allowEmpty: false,
+  });
+
+  if (vaultDir !== undefined) normalized.vaultDir = vaultDir;
+  if (outDir !== undefined) normalized.outDir = outDir;
+  if (defaultBranch !== undefined) normalized.defaultBranch = defaultBranch.toLowerCase();
+  if (config.exclude !== undefined)
+    normalized.exclude = normalizeStringArray(config.exclude, "exclude");
+  if (config.staticPaths !== undefined) {
+    normalized.staticPaths = normalizeStaticPaths(config.staticPaths);
+  }
+  if (config.pinnedMenu !== undefined) {
+    const pinnedMenu = normalizePinnedMenu(config.pinnedMenu, "[config]", warn);
+    if (pinnedMenu) normalized.pinnedMenu = pinnedMenu;
+  }
+  if (config.ui !== undefined) normalized.ui = normalizeUiConfig(config.ui, warn);
+  if (config.markdown !== undefined) {
+    normalized.markdown = normalizeMarkdownConfig(config.markdown, warn);
+  }
+  if (config.seo !== undefined) normalized.seo = normalizeSeoUserConfig(config.seo, warn);
+
+  return normalized;
 }
 
 export async function loadPinnedMenuConfig(
@@ -283,51 +650,56 @@ export async function loadPinnedMenuConfig(
   try {
     parsed = await file.json();
   } catch (error) {
-    throw new Error(`[menu-config] failed to parse JSON: ${(error as Error).message}`);
+    throw new Error(`[menu-config] failed to parse JSON: ${(error as Error).message}`, {
+      cause: error,
+    });
   }
 
-  if (typeof parsed !== "object" || parsed == null) {
-    throw new Error("[menu-config] top-level JSON must be an object");
-  }
-
-  return normalizePinnedMenu((parsed as Record<string, unknown>).pinnedMenu, "[menu-config]");
+  const menuConfig = requireRecord(parsed, "<root>", "[menu-config]");
+  warnUnknownFields(menuConfig, ["pinnedMenu"], "", "[menu-config]", defaultConfigWarning);
+  return normalizePinnedMenu(menuConfig.pinnedMenu, "[menu-config]", defaultConfigWarning);
 }
 
 function ensureIntegerOption(value: unknown, optionLabel: string, min: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value < min) {
-    throw new Error(`[config] "${optionLabel}" must be an integer >= ${min}`);
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    !Number.isInteger(value) ||
+    value < min
+  ) {
+    invalidValue("[cli]", optionLabel, `an integer >= ${min}`, value);
   }
   return value;
 }
 
 export function resolveBuildOptions(
   cli: CliArgs,
-  userConfig: UserConfig,
+  userConfig: unknown,
   pinnedMenu: PinnedMenuOption | null,
   cwd = process.cwd(),
 ): BuildOptions {
-  const vaultDir = path.resolve(cwd, cli.vaultDir ?? userConfig.vaultDir ?? DEFAULTS.vaultDir);
-  const outDir = path.resolve(cwd, cli.outDir ?? userConfig.outDir ?? DEFAULTS.outDir);
-  const cfgExclude = userConfig.exclude ?? [];
+  const config = validateUserConfig(userConfig);
+  const vaultDir = path.resolve(cwd, cli.vaultDir ?? config.vaultDir ?? DEFAULTS.vaultDir);
+  const outDir = path.resolve(cwd, cli.outDir ?? config.outDir ?? DEFAULTS.outDir);
+  const cfgExclude = config.exclude ?? [];
   const cliExclude = cli.exclude ?? [];
   const mergedExclude = Array.from(new Set([...DEFAULTS.exclude, ...cfgExclude, ...cliExclude]));
-  const staticPaths = normalizeStaticPaths(userConfig.staticPaths, "[config]");
-  const seo = normalizeSeoConfig(userConfig.seo);
-  const siteTitleRaw = userConfig.seo?.siteName ?? userConfig.seo?.defaultTitle;
+  const staticPaths = config.staticPaths ?? [];
+  const seo = normalizeSeoConfig(config.seo);
+  const siteTitleRaw = config.seo?.siteName ?? config.seo?.defaultTitle;
   const siteTitle =
     typeof siteTitleRaw === "string" && siteTitleRaw.trim().length > 0
       ? siteTitleRaw.trim()
       : undefined;
-  const configPinnedMenu = normalizePinnedMenu(userConfig.pinnedMenu, "[config]");
-  const resolvedPinnedMenu = pinnedMenu ?? configPinnedMenu;
+  const resolvedPinnedMenu = pinnedMenu ?? config.pinnedMenu ?? null;
   const newWithinDays = ensureIntegerOption(
-    cli.newWithinDays ?? userConfig.ui?.newWithinDays ?? DEFAULTS.newWithinDays,
-    "--new-within-days (or ui.newWithinDays)",
+    cli.newWithinDays ?? config.ui?.newWithinDays ?? DEFAULTS.newWithinDays,
+    "--new-within-days",
     0,
   );
   const recentLimit = ensureIntegerOption(
-    cli.recentLimit ?? userConfig.ui?.recentLimit ?? DEFAULTS.recentLimit,
-    "--recent-limit (or ui.recentLimit)",
+    cli.recentLimit ?? config.ui?.recentLimit ?? DEFAULTS.recentLimit,
+    "--recent-limit",
     1,
   );
 
@@ -338,18 +710,20 @@ export function resolveBuildOptions(
     staticPaths,
     newWithinDays,
     recentLimit,
+    defaultBranch: config.defaultBranch ?? DEFAULTS.defaultBranch,
     siteTitle,
     pinnedMenu: resolvedPinnedMenu,
-    wikilinks: userConfig.markdown?.wikilinks ?? DEFAULTS.wikilinks,
-    imagePolicy: userConfig.markdown?.images ?? DEFAULTS.imagePolicy,
-    gfm: userConfig.markdown?.gfm ?? DEFAULTS.gfm,
-    allowUnsafeHtml: userConfig.markdown?.allowUnsafeHtml === true,
-    shikiTheme: userConfig.markdown?.highlight?.theme ?? DEFAULTS.shikiTheme,
+    wikilinks: config.markdown?.wikilinks ?? DEFAULTS.wikilinks,
+    imagePolicy: config.markdown?.images ?? DEFAULTS.imagePolicy,
+    gfm: config.markdown?.gfm ?? DEFAULTS.gfm,
+    allowUnsafeHtml: config.markdown?.allowUnsafeHtml ?? DEFAULTS.allowUnsafeHtml,
+    shikiTheme: config.markdown?.highlight?.theme ?? DEFAULTS.shikiTheme,
     mermaid: {
-      enabled: normalizeMermaidEnabled(userConfig.markdown?.mermaid?.enabled),
-      cdnUrl: normalizeMermaidCdnUrl(userConfig.markdown?.mermaid?.cdnUrl),
-      theme: normalizeMermaidTheme(userConfig.markdown?.mermaid?.theme),
+      enabled: config.markdown?.mermaid?.enabled ?? DEFAULTS.mermaid.enabled,
+      cdnUrl: config.markdown?.mermaid?.cdnUrl ?? DEFAULTS.mermaid.cdnUrl,
+      theme: config.markdown?.mermaid?.theme ?? DEFAULTS.mermaid.theme,
     },
+    layout: { ...DEFAULT_RUNTIME_CONFIG.layout },
     seo,
   };
 }

@@ -5,8 +5,16 @@ const CONTENT_IMAGE_PORTRAIT_CLASS = "is-portrait";
 const CONTENT_IMAGE_SQUARE_CLASS = "is-square";
 const CONTENT_IMAGE_LANDSCAPE_THRESHOLD = 1.1;
 const CONTENT_IMAGE_PORTRAIT_THRESHOLD = 0.9;
+/** @typedef {{ width: number; height: number }} ImageDimensions */
+/** @typedef {import("./contracts").ContentEnhancementController} ContentEnhancementController */
+/** @typedef {import("./contracts").EventScope} EventScope */
+/** @typedef {import("./contracts").MermaidController} MermaidController */
+/** @typedef {import("./contracts").RuntimeWindow} RuntimeWindow */
+
+/** @type {Map<string, Promise<ImageDimensions | null>>} */
 const contentImageDimensionCache = new Map();
 
+/** @param {Element | null | undefined} target */
 function clearContentImageClasses(target) {
   target?.classList?.remove(
     CONTENT_IMAGE_LANDSCAPE_CLASS,
@@ -15,6 +23,11 @@ function clearContentImageClasses(target) {
   );
 }
 
+/**
+ * @param {unknown} image
+ * @param {string} className
+ * @param {RuntimeWindow} windowRef
+ */
 function syncContentImageClasses(image, className, windowRef) {
   if (!(image instanceof windowRef.HTMLImageElement)) {
     return;
@@ -33,6 +46,11 @@ function syncContentImageClasses(image, className, windowRef) {
   }
 }
 
+/**
+ * @param {unknown} imageLike
+ * @param {RuntimeWindow} windowRef
+ * @returns {ImageDimensions | null}
+ */
 function readIntrinsicImageDimensions(imageLike, windowRef) {
   if (!(imageLike instanceof windowRef.HTMLImageElement)) {
     return null;
@@ -54,6 +72,11 @@ function readIntrinsicImageDimensions(imageLike, windowRef) {
   return { width, height };
 }
 
+/**
+ * @param {unknown} image
+ * @param {ImageDimensions | null} dimensions
+ * @param {RuntimeWindow} windowRef
+ */
 function classifyContentImageByDimensions(image, dimensions, windowRef) {
   if (!(image instanceof windowRef.HTMLImageElement) || !dimensions) {
     return;
@@ -73,6 +96,11 @@ function classifyContentImageByDimensions(image, dimensions, windowRef) {
   syncContentImageClasses(image, CONTENT_IMAGE_SQUARE_CLASS, windowRef);
 }
 
+/**
+ * @param {HTMLImageElement} image
+ * @param {RuntimeWindow} windowRef
+ * @returns {Promise<ImageDimensions | null>}
+ */
 function resolveContentImageDimensions(image, windowRef) {
   const immediate = readIntrinsicImageDimensions(image, windowRef);
   if (immediate) {
@@ -89,7 +117,7 @@ function resolveContentImageDimensions(image, windowRef) {
     return cached;
   }
 
-  const pending = new Promise((resolve) => {
+  const pending = new Promise((/** @type {(value: ImageDimensions | null) => void} */ resolve) => {
     const probe = new windowRef.Image();
     const finalize = () => {
       resolve(readIntrinsicImageDimensions(probe, windowRef));
@@ -112,6 +140,10 @@ function resolveContentImageDimensions(image, windowRef) {
   return pending;
 }
 
+/**
+ * @param {Element} image
+ * @param {RuntimeWindow} windowRef
+ */
 function prepareContentImage(image, windowRef) {
   if (!(image instanceof windowRef.HTMLImageElement) || image.closest(".mermaid-block")) {
     return;
@@ -155,6 +187,10 @@ function prepareContentImage(image, windowRef) {
   }
 }
 
+/**
+ * @param {ParentNode | null | undefined} root
+ * @param {RuntimeWindow} [windowRef]
+ */
 export function enhanceContentImages(root, windowRef = globalThis.window) {
   if (!root?.querySelectorAll) {
     return;
@@ -165,6 +201,10 @@ export function enhanceContentImages(root, windowRef = globalThis.window) {
   }
 }
 
+/**
+ * @param {{ root: HTMLElement | null; mermaidController: MermaidController; clipboard?: Pick<Clipboard, "writeText">; windowRef?: RuntimeWindow }} options
+ * @returns {ContentEnhancementController}
+ */
 export function createContentEnhancementController(options) {
   const {
     root,
@@ -172,9 +212,12 @@ export function createContentEnhancementController(options) {
     clipboard = globalThis.navigator?.clipboard,
     windowRef = globalThis.window,
   } = options;
+  /** @type {EventScope | null} */
   let events = null;
+  /** @type {Set<number>} */
   const resetTimers = new Set();
 
+  /** @param {Event} event */
   const handleCopyClick = async (event) => {
     const target = event.target;
     if (!(target instanceof windowRef.Element)) {

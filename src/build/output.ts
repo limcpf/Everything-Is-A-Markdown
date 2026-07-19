@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { BuildOptions, DocRecord, Manifest } from "../types";
-import { buildCanonicalUrl, escapeHtmlAttribute } from "../seo";
+import { DEFAULT_BRANCH, type RuntimeLayoutConfig } from "../defaults";
+import { buildCanonicalUrl } from "../seo";
 import { render404Html, renderAppShellHtml } from "../template";
 import type { AppShellAssets, AppShellInitialView, AppShellMeta } from "../template";
 import { ensureDir, makeHash, removeEmptyParents, removeFileIfExists, toPosixPath } from "../utils";
@@ -18,11 +19,12 @@ import type { OutputPhaseState, OutputWriteContext, RuntimeAssets } from "./cont
 import { OUTPUT_MARKER_FILE_NAME, resolveSiteTitle } from "./shared";
 
 const DEFAULT_SITE_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
-const DEFAULT_SITE_TITLE = "File-System Blog";
 
-function pickSeoImageDefaults(
-  seo: BuildOptions["seo"],
-): { social: string | null; og: string | null; twitter: string | null } {
+function pickSeoImageDefaults(seo: BuildOptions["seo"]): {
+  social: string | null;
+  og: string | null;
+  twitter: string | null;
+} {
   if (!seo) {
     return { social: null, og: null, twitter: null };
   }
@@ -53,9 +55,13 @@ function pickSeoImageDefaults(
   };
 }
 
-function buildStructuredData(route: string, doc: DocRecord | null, options: BuildOptions): unknown[] {
+function buildStructuredData(
+  route: string,
+  doc: DocRecord | null,
+  options: BuildOptions,
+): unknown[] {
   const canonicalUrl = options.seo ? buildCanonicalUrl(route, options.seo) : undefined;
-  const siteName = options.seo?.siteName ?? options.seo?.defaultTitle ?? DEFAULT_SITE_TITLE;
+  const siteName = resolveSiteTitle(options);
 
   if (!doc) {
     const websiteSchema: Record<string, string> = {
@@ -132,12 +138,19 @@ async function copyOutputFileIfChanged(
 function assertSafeStaticOutputPath(relOutputPath: string): void {
   const normalized = path.posix.normalize(toPosixPath(relOutputPath));
   if (normalized === ".") {
-    throw new Error(`[safety] Refusing static path that resolves to the vault root: ${relOutputPath}`);
+    throw new Error(
+      `[safety] Refusing static path that resolves to the vault root: ${relOutputPath}`,
+    );
   }
   if (normalized === ".." || normalized.startsWith("../") || path.posix.isAbsolute(normalized)) {
-    throw new Error(`[safety] Refusing static output path outside the output directory: ${relOutputPath}`);
+    throw new Error(
+      `[safety] Refusing static output path outside the output directory: ${relOutputPath}`,
+    );
   }
-  if (normalized === OUTPUT_MARKER_FILE_NAME || normalized.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`)) {
+  if (
+    normalized === OUTPUT_MARKER_FILE_NAME ||
+    normalized.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`)
+  ) {
     throw new Error(`[safety] Refusing reserved static output path: ${relOutputPath}`);
   }
 }
@@ -221,7 +234,10 @@ function toRelativeAssetPath(fromOutputPath: string, assetOutputPath: string): s
   return relative.length > 0 ? relative : path.posix.basename(assetOutputPath);
 }
 
-function buildAppShellAssetsForOutput(outputPath: string, runtimeAssets: RuntimeAssets): AppShellAssets {
+function buildAppShellAssetsForOutput(
+  outputPath: string,
+  runtimeAssets: RuntimeAssets,
+): AppShellAssets {
   return {
     cssHref: toRelativeAssetPath(outputPath, runtimeAssets.cssRelPath),
     jsSrc: toRelativeAssetPath(outputPath, runtimeAssets.jsRelPath),
@@ -251,6 +267,48 @@ function createMinimalTreeIconPlugin(): { plugin: Bun.BunPlugin; replacementCoun
   };
 }
 
+const COMPACT_BREAKPOINT_MARKER = "0px /* eiam-compact-breakpoint */";
+
+function createRuntimeCssDefaultsPlugin(layout: RuntimeLayoutConfig): {
+  plugin: Bun.BunPlugin;
+  replacementCount: () => number;
+} {
+  let replacements = 0;
+  const generatedDefaults = `:root {
+  --desktop-sidebar-default: ${layout.desktopSidebarDefaultPx}px;
+  --desktop-sidebar-min: ${layout.desktopSidebarMinPx}px;
+  --desktop-viewer-min: ${layout.desktopViewerMinPx}px;
+  --splitter-width: ${layout.splitterWidthPx}px;
+  --mobile-sidebar-min: ${layout.mobileSidebarMinPx}px;
+  --mobile-sidebar-max: ${layout.mobileSidebarMaxPx}px;
+}`;
+
+  return {
+    plugin: {
+      name: "eiam-runtime-css-defaults",
+      setup(builder) {
+        builder.onLoad({ filter: /app[.]css$/ }, async (args) => {
+          const source = await fs.readFile(args.path, "utf8");
+          replacements = source.split(COMPACT_BREAKPOINT_MARKER).length - 1;
+          if (replacements !== 2) {
+            throw new Error(
+              `Expected 2 compact breakpoint markers in app.css, found ${replacements}`,
+            );
+          }
+          return {
+            contents: `${generatedDefaults}\n${source.replaceAll(
+              COMPACT_BREAKPOINT_MARKER,
+              `${layout.compactBreakpointPx}px`,
+            )}`,
+            loader: "css",
+          };
+        });
+      },
+    },
+    replacementCount: () => replacements,
+  };
+}
+
 async function bundleRuntimeJs(
   entrypoint: string,
   options: { label: string; replaceTreeIcons: boolean },
@@ -267,11 +325,15 @@ async function bundleRuntimeJs(
   });
 
   if (!result.success) {
-    const details = result.logs.map((log) => String(log)).filter(Boolean).join("\n");
+    const details = result.logs
+      .map((log) => String(log))
+      .filter(Boolean)
+      .join("\n");
     throw new Error(`Failed to bundle runtime ${options.label}${details ? `:\n${details}` : ""}`);
   }
 
-  const output = result.outputs.find((artifact) => artifact.path.endsWith(".js")) ?? result.outputs[0];
+  const output =
+    result.outputs.find((artifact) => artifact.path.endsWith(".js")) ?? result.outputs[0];
   if (!output) {
     throw new Error(`Failed to bundle runtime ${options.label}: no JavaScript output was produced`);
   }
@@ -287,28 +349,40 @@ async function bundleRuntimeJs(
   return runtimeJs;
 }
 
-async function bundleRuntimeCss(entrypoint: string): Promise<string> {
+async function bundleRuntimeCss(entrypoint: string, layout: RuntimeLayoutConfig): Promise<string> {
+  const runtimeCssDefaults = createRuntimeCssDefaultsPlugin(layout);
   const result = await Bun.build({
     entrypoints: [entrypoint],
     target: "browser",
     sourcemap: "none",
     minify: true,
+    plugins: [runtimeCssDefaults.plugin],
   });
 
   if (!result.success) {
-    const details = result.logs.map((log) => String(log)).filter(Boolean).join("\n");
+    const details = result.logs
+      .map((log) => String(log))
+      .filter(Boolean)
+      .join("\n");
     throw new Error(`Failed to bundle runtime app.css${details ? `:\n${details}` : ""}`);
   }
 
-  const output = result.outputs.find((artifact) => artifact.path.endsWith(".css")) ?? result.outputs[0];
+  const output =
+    result.outputs.find((artifact) => artifact.path.endsWith(".css")) ?? result.outputs[0];
   if (!output) {
     throw new Error("Failed to bundle runtime app.css: no CSS output was produced");
+  }
+  if (runtimeCssDefaults.replacementCount() !== 2) {
+    throw new Error("Failed to generate runtime CSS defaults");
   }
 
   return output.text();
 }
 
-async function writeRuntimeAssets(context: OutputWriteContext): Promise<RuntimeAssets> {
+async function writeRuntimeAssets(
+  context: OutputWriteContext,
+  layout: RuntimeLayoutConfig,
+): Promise<RuntimeAssets> {
   const runtimeDir = path.join(import.meta.dir, "..", "runtime");
   const [runtimeJs, treeRuntimeJs, runtimeCss] = await Promise.all([
     bundleRuntimeJs(path.join(runtimeDir, "app.js"), {
@@ -319,7 +393,7 @@ async function writeRuntimeAssets(context: OutputWriteContext): Promise<RuntimeA
       label: "tree-runtime.js",
       replaceTreeIcons: true,
     }),
-    bundleRuntimeCss(path.join(runtimeDir, "app.css")),
+    bundleRuntimeCss(path.join(runtimeDir, "app.css"), layout),
   ]);
 
   const jsRelPath = `assets/app.${makeHash(runtimeJs).slice(0, 12)}.js`;
@@ -351,10 +425,13 @@ async function writeRuntimeAssets(context: OutputWriteContext): Promise<RuntimeA
 }
 
 function buildShellMeta(route: string, doc: DocRecord | null, options: BuildOptions): AppShellMeta {
-  const defaultTitle = options.seo?.defaultTitle ?? options.siteTitle ?? DEFAULT_SITE_TITLE;
   const siteTitle = resolveSiteTitle(options);
+  const defaultTitle = options.seo?.defaultTitle ?? siteTitle;
   const defaultDescription = options.seo?.defaultDescription ?? DEFAULT_SITE_DESCRIPTION;
-  const description = typeof doc?.description === "string" && doc.description.trim().length > 0 ? doc.description.trim() : undefined;
+  const description =
+    typeof doc?.description === "string" && doc.description.trim().length > 0
+      ? doc.description.trim()
+      : undefined;
   const canonicalUrl = options.seo ? buildCanonicalUrl(route, options.seo) : undefined;
   const baseTitle = doc?.title ?? defaultTitle;
   const title = composeViewDocumentTitle(baseTitle, siteTitle);
@@ -392,7 +469,8 @@ function buildInitialView(
   defaultBranch: string,
 ): AppShellInitialView {
   const manifestDoc = manifestDocById.get(doc.id);
-  const activeBranch = normalizeViewBranch(doc.branch) ?? normalizeViewBranch(defaultBranch) ?? "dev";
+  const activeBranch =
+    normalizeViewBranch(doc.branch) ?? normalizeViewBranch(defaultBranch) ?? DEFAULT_BRANCH;
   const visibleDocs = filterViewDocsByBranch(docs, activeBranch, defaultBranch);
   const chrome = renderViewChrome({
     route: doc.route,
@@ -452,6 +530,7 @@ async function writeShellPages(
     render404Html(
       buildAppShellAssetsForOutput("404.html", runtimeAssets),
       toViewPathWithBase("/", pathBase),
+      resolveSiteTitle(options),
     ),
   );
 
@@ -498,11 +577,17 @@ function buildSitemapXml(urls: string[]): string {
   ].join("\n");
 }
 
-async function writeSeoArtifacts(context: OutputWriteContext, docs: DocRecord[], options: BuildOptions): Promise<void> {
+async function writeSeoArtifacts(
+  context: OutputWriteContext,
+  docs: DocRecord[],
+  options: BuildOptions,
+): Promise<void> {
   if (!options.seo) {
     await removeFileIfExists(path.join(context.outDir, "robots.txt"));
     await removeFileIfExists(path.join(context.outDir, "sitemap.xml"));
-    console.warn('[seo] Skipping robots.txt and sitemap.xml generation. Add "seo.siteUrl" to blog.config.* to enable SEO artifacts.');
+    console.warn(
+      '[seo] Skipping robots.txt and sitemap.xml generation. Add "seo.siteUrl" to blog.config.* to enable SEO artifacts.',
+    );
     return;
   }
 
@@ -535,7 +620,7 @@ export async function prepareOutputPhase(
     previousHashes,
     nextHashes: {},
   };
-  const runtimeAssets = await writeRuntimeAssets(context);
+  const runtimeAssets = await writeRuntimeAssets(context, options.layout);
   await copyStaticPaths(context, options);
   return { context, runtimeAssets };
 }
@@ -547,8 +632,19 @@ export async function emitOutputPhase(
   options: BuildOptions,
   contentByDocId: Map<string, string>,
 ): Promise<void> {
-  await writeOutputIfChanged(output.context, "manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
-  await writeShellPages(output.context, docs, manifest, options, output.runtimeAssets, contentByDocId);
+  await writeOutputIfChanged(
+    output.context,
+    "manifest.json",
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
+  await writeShellPages(
+    output.context,
+    docs,
+    manifest,
+    options,
+    output.runtimeAssets,
+    contentByDocId,
+  );
   await writeSeoArtifacts(output.context, docs, options);
   await removeStaleOutputs(output.context);
 }

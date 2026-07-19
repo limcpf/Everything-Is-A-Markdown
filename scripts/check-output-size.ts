@@ -51,16 +51,25 @@ function parseOutDir(argv: string[]): string {
   return path.resolve(value);
 }
 
-function findRuntimeAsset(assetsDir: string, stem: "app" | "tree", extension: "js" | "css"): string {
+function findRuntimeAsset(
+  assetsDir: string,
+  stem: "app" | "tree",
+  extension: "js" | "css",
+): string {
   const pattern = new RegExp(`^${stem}\\.([a-f0-9]{12})\\.${extension}$`);
   const matches = fs.readdirSync(assetsDir).filter((entry) => pattern.test(entry));
   if (matches.length !== 1) {
-    throw new Error(`[size] Expected exactly one ${stem}.*.${extension} asset, found ${matches.length}`);
+    throw new Error(
+      `[size] Expected exactly one ${stem}.*.${extension} asset, found ${matches.length}`,
+    );
   }
   return path.join(assetsDir, matches[0]);
 }
 
-function inspectAsset(assetPath: string, kind: AssetKind): { failures: string[]; gzipBytes: number; rawBytes: number } {
+function inspectAsset(
+  assetPath: string,
+  kind: AssetKind,
+): { failures: string[]; gzipBytes: number; rawBytes: number } {
   const bytes = fs.readFileSync(assetPath);
   const rawBytes = bytes.byteLength;
   const gzipBytes = gzipSync(bytes, { level: 9 }).byteLength;
@@ -159,7 +168,9 @@ function checkManifest(manifestPath: string): string[] {
     return ["manifest.json tree must be an array"];
   }
 
-  const docIds = parsed.docIds.filter((id): id is string => typeof id === "string" && id.length > 0);
+  const docIds = parsed.docIds.filter(
+    (id): id is string => typeof id === "string" && id.length > 0,
+  );
   const uniqueDocIds = new Set(docIds);
   const docsByIdKeys = Object.keys(parsed.docsById);
   if (docIds.length !== parsed.docIds.length || uniqueDocIds.size !== docIds.length) {
@@ -188,10 +199,14 @@ function checkManifest(manifestPath: string): string[] {
       }
       const keys = Object.keys(node).sort();
       if (keys.join(",") !== "id,name,type") {
-        failures.push(`manifest file node ${String(node.id ?? "<unknown>")} duplicates document metadata`);
+        failures.push(
+          `manifest file node ${String(node.id ?? "<unknown>")} duplicates document metadata`,
+        );
       }
       if (typeof node.id !== "string" || !Object.hasOwn(parsed.docsById, node.id)) {
-        failures.push(`manifest file node ${String(node.id ?? "<unknown>")} has a dangling document reference`);
+        failures.push(
+          `manifest file node ${String(node.id ?? "<unknown>")} has a dangling document reference`,
+        );
       }
     }
   };
@@ -211,10 +226,14 @@ function checkManifest(manifestPath: string): string[] {
 
   if (legacyRaw.byteLength >= MANIFEST_RATIO_MIN_LEGACY_BYTES) {
     if (rawRatio > 0.75) {
-      failures.push(`manifest raw ratio ${(rawRatio * 100).toFixed(1)}% exceeds 75% of the legacy projection`);
+      failures.push(
+        `manifest raw ratio ${(rawRatio * 100).toFixed(1)}% exceeds 75% of the legacy projection`,
+      );
     }
     if (gzipRatio > 0.95) {
-      failures.push(`manifest gzip ratio ${(gzipRatio * 100).toFixed(1)}% exceeds 95% of the legacy projection`);
+      failures.push(
+        `manifest gzip ratio ${(gzipRatio * 100).toFixed(1)}% exceeds 95% of the legacy projection`,
+      );
     }
   } else {
     console.log(
@@ -229,7 +248,9 @@ function checkManifest(manifestPath: string): string[] {
 }
 
 function findRouteHtmlFiles(outDir: string): string[] {
-  const manifest = JSON.parse(fs.readFileSync(path.join(outDir, "manifest.json"), "utf8")) as unknown;
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(outDir, "manifest.json"), "utf8"),
+  ) as unknown;
   if (!isRecord(manifest) || !isRecord(manifest.routeMap)) {
     return [];
   }
@@ -259,7 +280,9 @@ function checkRouteHtml(outDir: string, treeAssetFileName: string): string[] {
     }
 
     const matches = Array.from(
-      html.matchAll(/<script id="initial-runtime-data" type="application\/json">([^<]*)<\/script>/g),
+      html.matchAll(
+        /<script id="initial-runtime-data" type="application\/json">([^<]*)<\/script>/g,
+      ),
     );
     if (matches.length !== 1) {
       failures.push(`${relativePath} must contain exactly one initial runtime bootstrap`);
@@ -290,7 +313,8 @@ function checkRouteHtml(outDir: string, treeAssetFileName: string): string[] {
       );
       continue;
     }
-    const pathBase = typeof payload.pathBase === "string" ? payload.pathBase.replace(/\/+$/, "") : "";
+    const pathBase =
+      typeof payload.pathBase === "string" ? payload.pathBase.replace(/\/+$/, "") : "";
     const rawManifestUrl = pathBase ? `${pathBase}/manifest.json` : "/manifest.json";
     const expectedManifestUrl = rawManifestUrl
       .split("/")
@@ -314,7 +338,9 @@ function checkRouteHtml(outDir: string, treeAssetFileName: string): string[] {
   if (routeHtmlFiles.length === 0) {
     failures.push("generated output must contain at least one route index.html");
   }
-  console.log(`[size] route-html files=${routeHtmlFiles.length} bootstrap-max=${maxBootstrapBytes}/256`);
+  console.log(
+    `[size] route-html files=${routeHtmlFiles.length} bootstrap-max=${maxBootstrapBytes}/256`,
+  );
   return failures;
 }
 
