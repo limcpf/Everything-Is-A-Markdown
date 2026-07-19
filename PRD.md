@@ -130,9 +130,10 @@ draft: false                   # 옵션 (true면 제외)
 ### 4.1 라우트 생성 규칙(Prefix Route)
 
 * frontmatter `prefix`를 Unicode NFKC로 정규화하고 공백, `_`, `/`를 `-`로 바꾼 값을 route로 사용한다.
-* 지원하지 않는 문장부호를 제거하고 연속 `-`를 하나로 합친다.
+* apostrophe(`'`, `’`)는 제거하고, 그 밖의 지원하지 않는 문장부호는 `-`로 바꾼 뒤 연속 `-`를 하나로 합친다.
 * 예: `prefix: BC-VO-02` → `/BC-VO-02/`
 * 예: `prefix: Docs / Intro` → `/Docs-Intro/`
+* 예: `prefix: A.B` → `/A-B/`
 * 정규화 결과가 충돌하면 Vault 상대경로 기반 hash suffix를 뒤 문서 route에 추가하고 경고한다.
 
 ### 4.2 문서 ID 규칙
@@ -193,9 +194,8 @@ draft: false                   # 옵션 (true면 제외)
 * 트리 노드 타입:
 
   * `folder` / `file`
-* 파일 노드 메타:
-
-  * `id`, `title`, `prefix`, `categoryPath`, `route`, `contentUrl`, `date`, `updatedDate`, `tags`, `description`, `branch`
+* schema v2 tree의 파일 노드는 `type`, `name`, `id`만 가지며 canonical 문서 메타데이터를 `id`로 참조한다.
+* `route`, `contentUrl`, 날짜, tags, branch, backlinks 같은 문서 메타데이터는 `manifest.docsById`에 한 번만 저장한다.
 
 ### 6.2 정렬 규칙(기본 ㄱㄴㄷ)
 
@@ -245,9 +245,10 @@ draft: false                   # 옵션 (true면 제외)
 * 각 route의 `index.html`은 동일한 앱 셸을 포함한다.
 * 앱 셸은 현재 location.pathname을 읽어 “현재 문서 route”를 선택한다.
 * 기본 branch는 `dev`이며 `branch`가 없는 문서도 기본 branch 뷰에 속한다.
-* 루트 홈은 기본 branch의 `/index/` 문서를 우선한다.
-* `/index/`가 없으면 수정일 계열 → 생성일 계열의 최신 문서를 사용하고, 날짜가 모두 없으면 route 가나다순 첫 문서를 사용한다.
-* 기본 branch 문서가 하나도 없으면 전체 게시 문서에 같은 홈 선택 규칙을 적용한다.
+* 정적 루트 셸은 기본 branch 문서로 만든다. 클라이언트가 시작할 때 유효한 `localStorage`의 `fsblog.branch` 값이 있으면 해당 저장 branch가 활성 branch로 우선하고, 없으면 기본 branch를 사용한다.
+* 루트 홈은 활성 branch의 `/index/` 문서를 우선한다.
+* `/index/`가 없으면 선택한 수정일 → 선택한 생성일의 최신 문서를 사용하고, 날짜가 모두 없으면 route 가나다순 첫 문서를 사용한다.
+* 활성 branch 문서가 하나도 없으면 전체 게시 문서에 같은 홈 선택 규칙을 적용하고 선택된 문서의 branch로 전환한다.
 * 문서가 없는 경로(404):
 
   * `dist/404.html` 제공(Cloudflare Pages 기본 404 처리)
@@ -263,7 +264,7 @@ draft: false                   # 옵션 (true면 제외)
 
 ### 8.1 캐시/증분 빌드(필수 권장)
 
-* `.cache/eiam/v1-<namespace>/build-index.json`에 문서별 fingerprint/mtime 저장
+* `.cache/eiam/v2-<namespace>/build-index.json`에 문서별 fingerprint/mtime 저장
 * 변경된 문서만 재변환(Shiki 비용 절감)
 * 삭제된 문서는 dist에서 정리
 
@@ -282,7 +283,7 @@ draft: false                   # 옵션 (true면 제외)
 * `blog clean`
 
   * EIAM 소유권 marker가 현재 실행 context와 일치하는 선택 output만 제거
-  * 선택한 vault/output 쌍의 `.cache/eiam/v1-<namespace>`만 제거하고 sibling namespace와 그 밖의 `.cache` 데이터는 보존
+  * 선택한 vault/output 쌍의 `.cache/eiam/v2-<namespace>`만 제거하고 sibling namespace와 그 밖의 `.cache` 데이터는 보존
 
 예시:
 

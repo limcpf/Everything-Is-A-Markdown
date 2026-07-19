@@ -215,7 +215,7 @@ Key points:
 - Route HTML embeds only a small path-aware runtime bootstrap; the shared manifest is fetched once from `manifest.json` instead of being copied into every generated page.
 - Generated files omit wall-clock build metadata and derived current-time flags, so two builds with unchanged content and config produce byte-identical output. The runtime derives each `NEW` badge from the manifest `date` and configured `newWithinDays` when the page loads.
 - Static files declared in config are copied into the same relative paths under `dist/`.
-- Build cache is stored under `.cache/eiam/v1-<namespace>/build-index.json`.
+- Build cache is stored under `.cache/eiam/v2-<namespace>/build-index.json`.
 
 CI enforces raw and gzip budgets for the generated runtime assets. After a
 sample build, run `bun run check:size` to apply the same limits locally. The
@@ -535,7 +535,7 @@ Example:
 
 ## Incremental Build and Caching
 
-The build caches source metadata and output hashes in `.cache/eiam/v1-<namespace>/build-index.json`, relative to the process working directory. The namespace is a stable hash of the canonical, resolved `vaultDir` and `outDir` pair.
+The build caches source metadata and output hashes in `.cache/eiam/v2-<namespace>/build-index.json`, relative to the process working directory. The namespace is a stable hash of the canonical vault, output, and cache-root paths.
 
 Config values are resolved first, with CLI `--vault` and `--out` values taking precedence. Changing either resolved path selects a different namespace; it does not reuse or overwrite the previous pair's cache. The cache root itself has no separate override. `clean` removes only the namespace for the selected pair, never sibling EIAM namespaces or general-purpose `.cache` files.
 

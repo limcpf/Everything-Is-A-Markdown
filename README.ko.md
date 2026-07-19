@@ -211,7 +211,7 @@ title: Work In Progress
 
 ## 캐시와 비공개 문서
 
-빌드 cache는 실행 작업 디렉터리 기준 `.cache/eiam/v1-<namespace>/build-index.json`에 저장됩니다. namespace는 canonical `vaultDir`와 `outDir` 경로 쌍의 안정적인 hash입니다. config를 먼저 해석한 다음 CLI의 `--vault`와 `--out`이 이를 덮어쓰며, 어느 경로든 달라지면 별도 namespace를 선택합니다. cache root 자체를 별도로 재지정하는 옵션은 없습니다. `clean`은 선택된 경로 쌍의 namespace만 삭제합니다.
+빌드 cache는 실행 작업 디렉터리 기준 `.cache/eiam/v2-<namespace>/build-index.json`에 저장됩니다. namespace는 canonical vault, output, cache-root 경로의 안정적인 hash입니다. config를 먼저 해석한 다음 CLI의 `--vault`와 `--out`이 이를 덮어쓰며, 어느 경로든 달라지면 별도 namespace를 선택합니다. cache root 자체를 별도로 재지정하는 옵션은 없습니다. `clean`은 선택된 경로 쌍의 namespace만 삭제합니다.
 
 증분 빌드 cache에는 `publish: true`이면서 draft가 아닌 Markdown 본문만 저장됩니다. 비공개 문서와 draft 문서는 persistent cache entry에서 완전히 제외되며, publish/draft 상태가 바뀌면 다음 빌드에서 다시 평가됩니다.
 
