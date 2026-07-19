@@ -1,4 +1,5 @@
 import { DEFAULT_MERMAID_CONFIG } from "../defaults.ts";
+import { getUiMessages } from "../i18n.ts";
 
 const MERMAID_SELECTOR = "pre.mermaid";
 const MERMAID_ERROR_CLASS = "mermaid-render-error";
@@ -15,6 +16,7 @@ const MERMAID_BLOCK_TALL_CLASS = "is-tall";
  * @typedef {import("./contracts").MermaidLibrary} MermaidLibrary
  * @typedef {import("./contracts").RuntimeManifest} RuntimeManifest
  * @typedef {import("./contracts").RuntimeWindow} RuntimeWindow
+ * @typedef {import("../i18n").UiMessages} UiMessages
  */
 
 /** @type {{ initialized: boolean; loadingPromise: Promise<MermaidLibrary | null> | null; scriptElement: HTMLScriptElement | null; lastCdnUrl: string; lastTheme: string }} */
@@ -172,10 +174,10 @@ function resetMermaidNodes(nodes) {
 
 /**
  * @param {MermaidConfig} config
- * @param {{ documentRef: Document; windowRef: RuntimeWindow }} environment
+ * @param {{ documentRef: Document; windowRef: RuntimeWindow; messages: UiMessages }} environment
  * @returns {Promise<MermaidLibrary | null>}
  */
-async function loadMermaidLibrary(config, { documentRef, windowRef }) {
+async function loadMermaidLibrary(config, { documentRef, windowRef, messages }) {
   if (!config.enabled) {
     return null;
   }
@@ -256,7 +258,7 @@ async function loadMermaidLibrary(config, { documentRef, windowRef }) {
       finalize();
     });
     script.addEventListener("error", () => {
-      finalize(new Error(`Mermaid 라이브러리 로드 실패: ${normalized.cdnUrl}`));
+      finalize(new Error(messages.mermaidLibraryLoadFailed(normalized.cdnUrl)));
     });
 
     if (!script.isConnected) {
@@ -269,12 +271,13 @@ async function loadMermaidLibrary(config, { documentRef, windowRef }) {
 
 /**
  * @param {MermaidConfig} config
- * @param {{ documentRef?: Document; windowRef?: RuntimeWindow }} [options]
+ * @param {{ documentRef?: Document; windowRef?: RuntimeWindow; messages?: UiMessages }} [options]
  * @returns {MermaidController}
  */
 export function createMermaidController(config, options = {}) {
   const documentRef = options.documentRef ?? globalThis.document;
   const windowRef = options.windowRef ?? globalThis.window;
+  const messages = options.messages ?? getUiMessages();
   let isSetup = false;
   let lifecycleGeneration = 0;
 
@@ -310,17 +313,13 @@ export function createMermaidController(config, options = {}) {
       resetMermaidNodes(blocks);
 
       try {
-        const mermaid = await loadMermaidLibrary(config, { documentRef, windowRef });
+        const mermaid = await loadMermaidLibrary(config, { documentRef, windowRef, messages });
         if (!isSetup || renderGeneration !== lifecycleGeneration) {
           return;
         }
         if (!mermaid) {
           for (const block of blocks) {
-            showMermaidError(
-              block,
-              "Mermaid 렌더링이 비활성화되어 코드 블록을 그대로 표시합니다.",
-              documentRef,
-            );
+            showMermaidError(block, messages.mermaidDisabled, documentRef);
           }
           return;
         }
@@ -340,11 +339,11 @@ export function createMermaidController(config, options = {}) {
               normalizeRenderedMermaidSvg(block, windowRef);
               continue;
             }
-            throw new Error("Mermaid 렌더러 API가 존재하지 않습니다.");
+            throw new Error(messages.mermaidApiUnavailable);
           } catch (error) {
-            const message = `Mermaid 렌더링 실패: ${
-              error instanceof Error ? error.message : String(error)
-            }`;
+            const message = messages.mermaidRenderFailed(
+              error instanceof Error ? error.message : String(error),
+            );
             showMermaidError(block, message, documentRef);
           }
         }
@@ -352,9 +351,9 @@ export function createMermaidController(config, options = {}) {
         if (!isSetup || renderGeneration !== lifecycleGeneration) {
           return;
         }
-        const message = `Mermaid 렌더링 실패: ${
-          error instanceof Error ? error.message : String(error)
-        }`;
+        const message = messages.mermaidRenderFailed(
+          error instanceof Error ? error.message : String(error),
+        );
         for (const block of blocks) {
           showMermaidError(block, message, documentRef);
         }

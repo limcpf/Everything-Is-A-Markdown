@@ -2,6 +2,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { OUTPUT_MARKER_FILE_NAME } from "./build/shared";
 import { DEFAULT_RUNTIME_CONFIG } from "./defaults";
+import { SUPPORTED_UI_LOCALES, type UiLocale } from "./i18n";
 import { normalizeSeoConfig } from "./seo";
 import type { BuildOptions, PinnedMenuOption, UserConfig, UserSeoConfig } from "./types";
 
@@ -23,6 +24,7 @@ const DEFAULTS = {
   exclude: [".obsidian/**"],
   newWithinDays: 7,
   recentLimit: 5,
+  locale: DEFAULT_RUNTIME_CONFIG.locale,
   wikilinks: true,
   imagePolicy: "omit-local" as const,
   gfm: true,
@@ -446,9 +448,27 @@ function normalizeUiConfig(
   warn: ConfigWarningHandler,
 ): NonNullable<UserConfig["ui"]> {
   const ui = requireRecord(raw, "ui");
-  warnUnknownFields(ui, ["newWithinDays", "recentLimit"], "ui", "[config]", warn);
+  warnUnknownFields(ui, ["locale", "newWithinDays", "recentLimit"], "ui", "[config]", warn);
+
+  const locale = optionalString(ui, "locale", "ui.locale", {
+    trim: true,
+    allowEmpty: false,
+  });
+  const normalizedLocale = locale?.toLowerCase();
+  if (
+    normalizedLocale !== undefined &&
+    !SUPPORTED_UI_LOCALES.includes(normalizedLocale as UiLocale)
+  ) {
+    invalidValue(
+      "[config]",
+      "ui.locale",
+      `one of ${SUPPORTED_UI_LOCALES.map((value) => JSON.stringify(value)).join(", ")}`,
+      locale,
+    );
+  }
 
   return {
+    locale: normalizedLocale as UiLocale | undefined,
     newWithinDays: optionalInteger(ui, "newWithinDays", "ui.newWithinDays", 0),
     recentLimit: optionalInteger(ui, "recentLimit", "ui.recentLimit", 1),
   };
@@ -710,6 +730,7 @@ export function resolveBuildOptions(
     staticPaths,
     newWithinDays,
     recentLimit,
+    locale: config.ui?.locale ?? DEFAULTS.locale,
     defaultBranch: config.defaultBranch ?? DEFAULTS.defaultBranch,
     siteTitle,
     pinnedMenu: resolvedPinnedMenu,

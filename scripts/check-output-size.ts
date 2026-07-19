@@ -24,7 +24,7 @@ interface SizeBudget {
 }
 
 const BUDGETS: Record<AssetKind, SizeBudget> = {
-  "app-js": { raw: 45_000, gzip: 15_000 },
+  "app-js": { raw: 50_000, gzip: 17_000 },
   "tree-js": { raw: 220_000, gzip: 60_000 },
   css: { raw: 31_000, gzip: 7_000 },
 };

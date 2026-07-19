@@ -1,4 +1,5 @@
 import { DEFAULT_BRANCH, DEFAULT_SITE_TITLE } from "./defaults";
+import { getUiMessages, type UiMessages } from "./i18n";
 import { renderAppIcon } from "./icons";
 
 export interface ViewBacklinkContract {
@@ -305,21 +306,25 @@ function renderMeta(model: ViewChromeModel["meta"]): string {
   return items.join("");
 }
 
-function renderNavLink(link: ViewLinkModel, direction: "previous" | "next"): string {
+function renderNavLink(
+  link: ViewLinkModel,
+  direction: "previous" | "next",
+  messages: UiMessages,
+): string {
   if (direction === "previous") {
-    return `<a href="${escapeViewAttribute(link.href)}" class="nav-link nav-link-prev" data-route="${escapeViewAttribute(link.route)}"><div class="nav-link-label">${renderAppIcon("arrow-left")}Previous</div><div class="nav-link-title">${escapeViewText(link.title)}</div></a>`;
+    return `<a href="${escapeViewAttribute(link.href)}" class="nav-link nav-link-prev" data-route="${escapeViewAttribute(link.route)}"><div class="nav-link-label">${renderAppIcon("arrow-left")}${escapeViewText(messages.previous)}</div><div class="nav-link-title">${escapeViewText(link.title)}</div></a>`;
   }
-  return `<a href="${escapeViewAttribute(link.href)}" class="nav-link nav-link-next" data-route="${escapeViewAttribute(link.route)}"><div class="nav-link-label">Next${renderAppIcon("arrow-right")}</div><div class="nav-link-title">${escapeViewText(link.title)}</div></a>`;
+  return `<a href="${escapeViewAttribute(link.href)}" class="nav-link nav-link-next" data-route="${escapeViewAttribute(link.route)}"><div class="nav-link-label">${escapeViewText(messages.next)}${renderAppIcon("arrow-right")}</div><div class="nav-link-title">${escapeViewText(link.title)}</div></a>`;
 }
 
-function renderNavigation(model: ViewChromeModel["navigation"]): string {
+function renderNavigation(model: ViewChromeModel["navigation"], messages: UiMessages): string {
   return [
-    model.previous ? renderNavLink(model.previous, "previous") : "",
-    model.next ? renderNavLink(model.next, "next") : "",
+    model.previous ? renderNavLink(model.previous, "previous", messages) : "",
+    model.next ? renderNavLink(model.next, "next", messages) : "",
   ].join("");
 }
 
-function renderBacklinks(model: ViewChromeModel["backlinks"]): string {
+function renderBacklinks(model: ViewChromeModel["backlinks"], messages: UiMessages): string {
   if (model.length === 0) {
     return "";
   }
@@ -331,7 +336,7 @@ function renderBacklinks(model: ViewChromeModel["backlinks"]): string {
       return `<li class="backlinks-item"><a href="${escapeViewAttribute(backlink.href)}" class="backlink-link" data-route="${escapeViewAttribute(backlink.route)}">${prefix}<span class="backlink-text">${escapeViewText(backlink.title)}</span></a></li>`;
     })
     .join("");
-  return `<h2 class="backlinks-title">Backlinks</h2><ul class="backlinks-list">${items}</ul>`;
+  return `<h2 class="backlinks-title">${escapeViewText(messages.backlinks)}</h2><ul class="backlinks-list">${items}</ul>`;
 }
 
 export function renderViewChrome(options: {
@@ -339,13 +344,15 @@ export function renderViewChrome(options: {
   doc: ViewDocContract;
   docs: readonly ViewDocContract[];
   pathBase: unknown;
+  locale?: unknown;
 }): RenderedViewChrome {
   const model = createViewChromeModel(options);
+  const messages = getUiMessages(options.locale);
   return {
     breadcrumbHtml: renderBreadcrumb(model.breadcrumb),
     metaHtml: renderMeta(model.meta),
-    backlinksHtml: renderBacklinks(model.backlinks),
-    navHtml: renderNavigation(model.navigation),
+    backlinksHtml: renderBacklinks(model.backlinks, messages),
+    navHtml: renderNavigation(model.navigation, messages),
   };
 }
 

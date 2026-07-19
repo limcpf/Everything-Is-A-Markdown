@@ -10,6 +10,7 @@ const options: BuildOptions = {
   outDir: "/output",
   exclude: [],
   staticPaths: [],
+  locale: "ko",
   newWithinDays: 7,
   recentLimit: 5,
   defaultBranch: "dev",
@@ -67,7 +68,8 @@ test.describe("build phase contracts", () => {
       { id: "source", route: "/SOURCE/", title: "Source", prefix: "SOURCE" },
     ]);
     expect(graph.wikiLookup.byTitle.get("target")).toEqual([target]);
-    expect(graph.tree[0]).toMatchObject({ type: "folder", name: "Recent", virtual: true });
+    expect(graph.tree[0]).toMatchObject({ type: "folder", name: "최근 문서", virtual: true });
+    expect(graph.manifest.locale).toBe("ko");
   });
 
   test("custom defaultBranch가 manifest, branch order, home selection에 일관되게 적용된다", () => {

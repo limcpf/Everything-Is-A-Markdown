@@ -1,5 +1,6 @@
 import { normalizeManifestPayload } from "./manifest-adapter.js";
 import { DEFAULT_SITE_TITLE } from "../defaults.ts";
+import { getUiMessages } from "../i18n.ts";
 import {
   normalizePathBase,
   normalizeRoute,
@@ -109,16 +110,17 @@ export async function loadRuntimeBootstrap(options = {}) {
     options.fetchManifest ?? ((/** @type {string} */ url) => globalThis.fetch(url));
   const initialViewData = loadInitialViewData(documentRef);
   const initialRuntimeData = loadInitialRuntimeData({ documentRef, windowRef });
+  const messages = getUiMessages(documentRef.documentElement?.lang);
   const initialPathBase = normalizePathBase(initialRuntimeData?.pathBase);
   const manifestUrl =
     initialRuntimeData?.manifestUrl ?? toPathWithBase("/manifest.json", initialPathBase);
   const response = await fetchManifest(manifestUrl);
   if (!response.ok) {
-    throw new Error(`Failed to load manifest: ${response.status}`);
+    throw new Error(messages.manifestLoadFailed(response.status));
   }
   const manifest = normalizeManifestPayload(await response.json());
   if (!manifest) {
-    throw new Error("Failed to load a supported manifest schema");
+    throw new Error(messages.unsupportedManifest);
   }
 
   return {

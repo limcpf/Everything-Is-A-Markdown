@@ -416,7 +416,7 @@ test.describe("runtime controller module contracts", () => {
     controller.setup();
     expect(branchSelect.children).toHaveLength(2);
     expect(branchSelect.children.map((option) => option.textContent)).toEqual([
-      "dev (default)",
+      "dev (기본값)",
       "main",
     ]);
     expect(branchSelect.value).toBe("dev");

@@ -14,7 +14,7 @@ test.describe("런타임 렌더링 XSS 가드", () => {
     await expect(
       page
         .locator(
-          '#tree-root [data-type="item"][data-item-type="file"][data-item-selected][data-item-path="Recent/BC-VO-02 Setup Guide"]',
+          '#tree-root [data-type="item"][data-item-type="file"][data-item-selected][data-item-path="최근 문서/BC-VO-02 Setup Guide"]',
         )
         .first(),
     ).toBeVisible();

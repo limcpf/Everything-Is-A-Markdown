@@ -1,4 +1,5 @@
 import type { RuntimeLayoutConfig } from "./defaults";
+import type { UiLocale } from "./i18n";
 
 export type ImagePolicy = "keep" | "omit-local";
 
@@ -50,6 +51,7 @@ export interface UserConfig {
     categoryPath?: string;
   };
   ui?: {
+    locale?: UiLocale;
     newWithinDays?: number;
     recentLimit?: number;
   };
@@ -78,6 +80,7 @@ export interface BuildOptions {
   staticPaths: string[];
   newWithinDays: number;
   recentLimit: number;
+  locale: UiLocale;
   defaultBranch: string;
   siteTitle?: string;
   pinnedMenu: PinnedMenuOption | null;
@@ -158,6 +161,7 @@ export interface Manifest {
   schemaVersion: 2;
   siteTitle: string;
   pathBase: string;
+  locale: UiLocale;
   defaultBranch: string;
   branches: string[];
   mermaid: {

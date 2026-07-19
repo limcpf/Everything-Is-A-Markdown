@@ -1,5 +1,6 @@
 import { createEventScope } from "./controller-lifecycle.js";
 import { pickHomeRoute, resolveRouteFromLocation, toPathWithBase } from "./navigation-state.js";
+import { getUiMessages } from "../i18n.ts";
 
 const BRANCH_KEY = "fsblog.branch";
 const TREE_RUNTIME_STATE_ATTR = "data-tree-runtime";
@@ -183,6 +184,7 @@ export function createTreeController(options) {
     treeModuleUrl,
     navigate,
     announce = () => {},
+    messages = getUiMessages(),
     isCompactLayout = () => false,
     documentRef = globalThis.document,
     windowRef = globalThis.window,
@@ -245,7 +247,8 @@ export function createTreeController(options) {
     for (const branch of navigation.availableBranches) {
       const option = documentRef.createElement("option");
       option.value = branch;
-      option.textContent = branch === navigation.defaultBranch ? `${branch} (default)` : branch;
+      option.textContent =
+        branch === navigation.defaultBranch ? messages.branchDefault(branch) : branch;
       sidebarBranchSelect.appendChild(option);
     }
     sidebarBranchSelect.disabled = navigation.availableBranches.length < 2;
@@ -272,7 +275,7 @@ export function createTreeController(options) {
       }
     }
     if (treeSearchCount) {
-      treeSearchCount.textContent = hasSearch ? `${matchCount}개 일치` : "";
+      treeSearchCount.textContent = hasSearch ? messages.searchMatches(matchCount) : "";
     }
     if (sidebarSearchActions) {
       sidebarSearchActions.hidden = !hasSearch;
@@ -404,7 +407,7 @@ export function createTreeController(options) {
     if (metadata?.kind !== "file" || metadata.isNew !== true) {
       return null;
     }
-    return { text: "NEW", title: "New document" };
+    return { text: messages.newBadge, title: messages.newDocument };
   };
 
   /**
@@ -430,7 +433,7 @@ export function createTreeController(options) {
     const link = documentRef.createElement("a");
     link.className = "tree-context-link";
     link.href = toPathWithBase(route, pathBase);
-    link.textContent = "Open";
+    link.textContent = messages.open;
     Object.assign(link.style, {
       borderRadius: "4px",
       color: "inherit",
@@ -535,7 +538,7 @@ export function createTreeController(options) {
     const status = documentRef.createElement("p");
     status.className = "tree-load-status";
     status.setAttribute("role", "status");
-    status.textContent = "문서 탐색기를 불러오는 중입니다.";
+    status.textContent = messages.treeLoading;
     treeRoot.replaceChildren(status);
   };
 
@@ -546,15 +549,15 @@ export function createTreeController(options) {
     }
     const fallback = documentRef.createElement("section");
     fallback.className = "tree-load-fallback";
-    fallback.setAttribute("aria-label", "간이 문서 탐색기");
+    fallback.setAttribute("aria-label", messages.simpleDocumentExplorer);
     const message = documentRef.createElement("p");
     message.className = "tree-load-fallback-message";
     message.setAttribute("role", "alert");
-    message.textContent = "문서 트리를 불러오지 못했습니다. 아래 링크로 계속 탐색할 수 있습니다.";
+    message.textContent = messages.treeLoadFailed;
     const retry = documentRef.createElement("button");
     retry.className = "tree-load-retry";
     retry.type = "button";
-    retry.textContent = "탐색기 다시 불러오기";
+    retry.textContent = messages.retryExplorer;
     retry.addEventListener("click", () => {
       void requestLoad("retry", { retry: true });
     });
@@ -644,7 +647,7 @@ export function createTreeController(options) {
         treeRoot?.setAttribute("aria-busy", "false");
         setTreeRuntimeState("error");
         renderTreeFallback(error);
-        announce("문서 트리를 불러오지 못했습니다. 간이 링크 탐색기를 사용할 수 있습니다.");
+        announce(messages.treeFallbackAnnouncement);
         console.error("Tree runtime load failed:", error);
         return false;
       })

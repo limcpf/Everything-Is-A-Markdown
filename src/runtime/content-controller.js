@@ -1,4 +1,5 @@
 import { toPathWithBase } from "./navigation-state.js";
+import { getUiMessages } from "../i18n.ts";
 
 /** @typedef {import("./contracts").ContentController} ContentController */
 /** @typedef {import("./contracts").ContentLifecycle} ContentLifecycle */
@@ -7,6 +8,7 @@ import { toPathWithBase } from "./navigation-state.js";
 /** @typedef {import("./contracts").NavigationState} NavigationState */
 /** @typedef {import("./contracts").RuntimeManifestDoc} RuntimeManifestDoc */
 /** @typedef {import("./contracts").ViewerElements} ViewerElements */
+/** @typedef {import("../i18n").UiMessages} UiMessages */
 
 /**
  * @param {Element | null | undefined} element
@@ -29,6 +31,20 @@ function setText(element, value) {
 }
 
 /**
+ * @param {Element | null | undefined} element
+ * @param {string} value
+ */
+function setPlaceholder(element, value) {
+  if (!element) {
+    return;
+  }
+  const paragraph = element.ownerDocument.createElement("p");
+  paragraph.className = "placeholder";
+  paragraph.textContent = value;
+  element.replaceChildren(paragraph);
+}
+
+/**
  * @param {{
  *   navigation: NavigationState;
  *   elements: ViewerElements;
@@ -36,6 +52,7 @@ function setText(element, value) {
  *   pathBase: string;
  *   siteTitle: string;
  *   renderers: ContentRenderers;
+ *   messages?: UiMessages;
  *   lifecycle?: ContentLifecycle;
  *   fetchContent?: (url: string) => Promise<Response>;
  *   historyApi?: Pick<History, "pushState"> | null;
@@ -52,6 +69,7 @@ export function createContentController(options) {
     pathBase,
     siteTitle,
     renderers,
+    messages = getUiMessages(),
     lifecycle = {},
     fetchContent = (url) => fetch(url),
     historyApi = globalThis.history,
@@ -98,7 +116,7 @@ export function createContentController(options) {
     await lifecycle.enhanceContent?.(elements.content);
     setPageTitle(renderers.documentTitle(doc.title, siteTitle));
     elements.viewer?.scrollTo?.(0, 0);
-    lifecycle.announce?.(`탐색 완료: ${doc.title} 문서를 열었습니다.`);
+    lifecycle.announce?.(messages.navigationComplete(doc.title));
   };
 
   /**
@@ -109,12 +127,12 @@ export function createContentController(options) {
     navigation.setCurrentDocId("");
     lifecycle.onMissingSelection?.();
     setHtml(elements.breadcrumb, renderers.breadcrumb(route));
-    setText(elements.title, "문서를 찾을 수 없습니다");
+    setText(elements.title, messages.missingDocumentTitle);
     setHtml(elements.meta, "");
-    setHtml(elements.content, '<p class="placeholder">요청한 경로에 해당하는 문서가 없습니다.</p>');
+    setPlaceholder(elements.content, messages.missingRouteBody);
     updateBacklinks("");
     setHtml(elements.nav, "");
-    lifecycle.announce?.("탐색 실패: 요청한 문서를 찾을 수 없습니다.");
+    lifecycle.announce?.(messages.missingRouteAnnouncement);
     if (push) {
       historyApi?.pushState?.(null, "", toPathWithBase(route, pathBase));
     }
@@ -158,10 +176,10 @@ export function createContentController(options) {
 
     const response = await fetchContent(toPathWithBase(resolved.doc.contentUrl, pathBase));
     if (!response.ok) {
-      setHtml(elements.content, '<p class="placeholder">본문을 불러오지 못했습니다.</p>');
+      setPlaceholder(elements.content, messages.contentLoadFailedBody);
       updateBacklinks("");
       setHtml(elements.nav, "");
-      lifecycle.announce?.(`탐색 실패: ${resolved.doc.title} 문서를 불러오지 못했습니다.`);
+      lifecycle.announce?.(messages.contentLoadFailedAnnouncement(resolved.doc.title));
       return false;
     }
 

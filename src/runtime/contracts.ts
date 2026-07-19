@@ -1,4 +1,5 @@
 import type { Manifest, ManifestDoc } from "../types";
+import type { UiMessages } from "../i18n";
 import type { RenderedViewChrome } from "../view-contract";
 
 export type RuntimeManifest = Manifest;
@@ -216,6 +217,7 @@ export interface TreeControllerOptions {
   treeModuleUrl: string;
   navigate: (route: string, push: boolean) => Promise<boolean>;
   announce?: (message: string) => void;
+  messages?: UiMessages;
   isCompactLayout?: () => boolean;
   documentRef?: Document;
   windowRef?: RuntimeWindow;
