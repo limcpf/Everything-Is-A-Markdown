@@ -18,6 +18,8 @@ test.describe("reader prose and wide-content lanes", () => {
         const box = document.querySelector(selector)!.getBoundingClientRect();
         return { left: box.left, right: box.right, width: box.width };
       };
+      const table = document.querySelector(".viewer-content > table")!;
+      table.querySelector("td")!.textContent = "x".repeat(1200);
 
       return {
         content: bounds(".viewer-content"),
@@ -27,6 +29,8 @@ test.describe("reader prose and wide-content lanes", () => {
         heading: bounds(".viewer-content > h2"),
         code: bounds(".viewer-content > .code-block"),
         table: bounds(".viewer-content > table"),
+        tableClientWidth: table.clientWidth,
+        tableScrollWidth: table.scrollWidth,
         navigation: bounds(".viewer-nav"),
       };
     });
@@ -50,6 +54,7 @@ test.describe("reader prose and wide-content lanes", () => {
       expect(item.width - layout.paragraph.width).toBeGreaterThanOrEqual(200);
       expect(centeredInContent(item)).toBeLessThanOrEqual(1);
     }
+    expect(layout.tableScrollWidth).toBeGreaterThan(layout.tableClientWidth);
   });
 
   test("collapses both lanes without horizontal overflow on mobile", async ({ page }) => {

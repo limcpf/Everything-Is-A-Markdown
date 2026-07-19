@@ -1316,7 +1316,9 @@ body.mobile-toggle-left .mobile-menu-toggle {
 
 /* Tables */
 .viewer-content table {
+  display: block;
   width: min(100%, var(--content-visual-max-width));
+  overflow-x: auto;
   border-collapse: collapse;
   margin: 1.5rem auto;
   font-size: var(--type-navigation);
@@ -1769,8 +1771,6 @@ body.mobile-toggle-left .mobile-menu-toggle {
   }
 
   .viewer-content table {
-    display: block;
-    overflow-x: auto;
     white-space: nowrap;
   }
 }

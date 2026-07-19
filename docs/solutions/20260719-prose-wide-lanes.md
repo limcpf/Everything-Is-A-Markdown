@@ -17,12 +17,14 @@ orientation- and diagram-specific limits.
 
 Both widths are capped at `100%`. At compact breakpoints the lanes therefore
 collapse to the viewer's available width without a second layout mode or
-horizontal page overflow; wide tables and code continue to scroll within their
-own components when necessary.
+horizontal page overflow. Tables are block-level scroll containers at every
+breakpoint, so an unbreakable cell can overflow inside the 880 px visual lane
+instead of widening the page; code retains its own inner scroller.
 
 ## Regression coverage
 
 The browser contract measures the rendered desktop lanes rather than only
 matching CSS source. It verifies 672 px prose alongside 880 px code and tables,
 checks their shared center axis, and repeats containment checks at a 390 px
-mobile viewport.
+mobile viewport. The desktop case also injects an unbreakable table cell and
+requires internal horizontal overflow while the table boundary stays fixed.
