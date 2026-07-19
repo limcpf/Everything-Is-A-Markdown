@@ -111,6 +111,58 @@ test.describe("sticky mobile reader header", () => {
     expect(state.horizontalOverflow).toBeLessThanOrEqual(1);
   });
 
+  test("non-zero safe area가 reader header와 modal drawer control을 보호한다", async ({ page }) => {
+    const viewport = { width: 390, height: 844 };
+    const safeArea = { top: 31, right: 17, bottom: 23, left: 19 };
+    await page.setViewportSize(viewport);
+    await page.goto("/BC-VO-01/");
+    await waitForAppReady(page);
+    await page.evaluate((insets) => {
+      const root = document.documentElement.style;
+      root.setProperty("--safe-area-top", `${insets.top}px`);
+      root.setProperty("--safe-area-right", `${insets.right}px`);
+      root.setProperty("--safe-area-bottom", `${insets.bottom}px`);
+      root.setProperty("--safe-area-left", `${insets.left}px`);
+    }, safeArea);
+
+    const reader = await readerHeaderState(page);
+    expect(reader.toggle.left).toBeGreaterThanOrEqual(safeArea.left);
+    expect(reader.title.right).toBeLessThanOrEqual(viewport.width - safeArea.right);
+
+    await page.getByRole("button", { name: "탐색기 열기" }).click();
+    await waitForTreeReady(page);
+    await page.locator("#settings-toggle").click();
+    await expect(page.locator("#sidebar-settings")).toBeVisible();
+
+    const drawer = await page.evaluate(() => {
+      const rect = (selector: string) => {
+        const bounds = document.querySelector(selector)!.getBoundingClientRect();
+        return {
+          bottom: bounds.bottom,
+          left: bounds.left,
+          right: bounds.right,
+          top: bounds.top,
+        };
+      };
+      return {
+        close: rect("#sidebar-close"),
+        header: rect(".sidebar-header"),
+        search: rect(".sidebar-search"),
+        settings: rect("#sidebar-settings"),
+        tools: rect(".sidebar-tools"),
+      };
+    });
+
+    for (const region of [drawer.header, drawer.search, drawer.settings, drawer.tools]) {
+      expect(region.left).toBeGreaterThanOrEqual(safeArea.left - 1);
+      expect(region.right).toBeLessThanOrEqual(viewport.width - safeArea.right + 1);
+    }
+    expect(drawer.header.top).toBeGreaterThanOrEqual(safeArea.top);
+    expect(drawer.close.top).toBeGreaterThanOrEqual(safeArea.top);
+    expect(drawer.tools.bottom).toBeLessThanOrEqual(viewport.height - safeArea.bottom + 1);
+    expect(drawer.settings.top).toBeGreaterThanOrEqual(safeArea.top);
+  });
+
   test("overlay click이 drawer를 닫고 menu control로 focus를 복원한다", async ({ page }) => {
     await page.setViewportSize({ width: 820, height: 600 });
     await page.goto("/BC-VO-01/");

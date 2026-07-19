@@ -13,10 +13,11 @@ continue to use the persistent sidebar and hide the compact reader header.
 
 ## Viewport and modal contracts
 
-The viewport metadata opts into `viewport-fit=cover`. The sticky header accounts for top, left,
-and right safe-area insets, while reader content accounts for horizontal and bottom insets. Its
-flex children can shrink without introducing horizontal overflow when the browser is zoomed or the
-viewport is narrow.
+The viewport metadata opts into `viewport-fit=cover`. Shared safe-area variables protect the sticky
+header, fixed modal drawer, skip link, and reader content. The drawer applies all four insets at its
+outer layout boundary, which keeps the title, close action, search, tree, settings tool, and settings
+popover inside the usable viewport. Header flex children can shrink without introducing horizontal
+overflow when the browser is zoomed or the viewport is narrow.
 
 The header stays below the sidebar overlay in the stacking order. Opening the explorer preserves
 the existing modal contract: the reader becomes inert, focus is trapped in the drawer, Escape or
@@ -28,6 +29,7 @@ The obsolete left/right floating-button setting, localization copy, body class, 
 are removed. Existing saved values are harmless and ignored; theme persistence remains unchanged.
 
 Browser tests cover narrow and short compact viewports, sticky positioning after reader scroll,
-client-side title updates, zoom containment, overlay dismissal and focus restoration, safe-area
-source contracts, and desktop header hiding. The existing focus-loop test continues to exercise
-Tab, Shift+Tab, and Escape behavior inside the modal sidebar.
+client-side title updates, zoom containment, simulated non-zero safe-area containment, overlay
+dismissal and focus restoration, safe-area source contracts, and desktop header hiding. The
+existing focus-loop test continues to exercise Tab, Shift+Tab, and Escape behavior inside the modal
+sidebar.

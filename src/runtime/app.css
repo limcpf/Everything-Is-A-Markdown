@@ -61,6 +61,10 @@
   --content-image-frame-bg: linear-gradient(180deg, var(--color-canvas), var(--color-surface));
   --mermaid-wide-max-width: 820px;
   --mermaid-tall-max-height: 560px;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
 }
 
 :root[data-theme="dark"] {
@@ -140,8 +144,8 @@ body.menu-open {
 
 .skip-link {
   position: fixed;
-  top: 10px;
-  left: 12px;
+  top: calc(10px + var(--safe-area-top));
+  left: calc(12px + var(--safe-area-left));
   z-index: 220;
   padding: 10px 14px;
   border-radius: 8px;
@@ -1538,6 +1542,8 @@ a:hover {
     width: 70vw;
     min-width: var(--mobile-sidebar-min);
     max-width: var(--mobile-sidebar-max);
+    padding: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom)
+      var(--safe-area-left);
     border-right: 1px solid var(--color-border);
     border-bottom: 0;
     box-shadow: var(--sidebar-mobile-shadow);
@@ -1560,7 +1566,7 @@ a:hover {
   }
 
   .viewer {
-    scroll-padding-top: calc(60px + env(safe-area-inset-top, 0px));
+    scroll-padding-top: calc(60px + var(--safe-area-top));
   }
 
   .mobile-reader-header {
@@ -1569,11 +1575,11 @@ a:hover {
     z-index: 70;
     display: flex;
     min-width: 0;
-    min-height: calc(60px + env(safe-area-inset-top, 0px));
+    min-height: calc(60px + var(--safe-area-top));
     align-items: center;
     gap: 10px;
-    padding: calc(8px + env(safe-area-inset-top, 0px)) calc(12px + env(safe-area-inset-right, 0px))
-      8px calc(12px + env(safe-area-inset-left, 0px));
+    padding: calc(8px + var(--safe-area-top)) calc(12px + var(--safe-area-right)) 8px
+      calc(12px + var(--safe-area-left));
     border-bottom: 1px solid var(--color-border);
     background: color-mix(in srgb, var(--surface-reader) 92%, transparent);
     -webkit-backdrop-filter: blur(12px);
@@ -1592,10 +1598,14 @@ a:hover {
     padding: 12px 14px 9px;
   }
 
+  .sidebar-settings {
+    max-height: calc(100dvh - 70px - var(--safe-area-top) - var(--safe-area-bottom));
+  }
+
   .viewer-container {
     width: min(100%, 860px);
-    padding: 32px calc(24px + env(safe-area-inset-right, 0px))
-      calc(64px + env(safe-area-inset-bottom, 0px)) calc(24px + env(safe-area-inset-left, 0px));
+    padding: 32px calc(24px + var(--safe-area-right)) calc(64px + var(--safe-area-bottom))
+      calc(24px + var(--safe-area-left));
   }
 
   .viewer {
@@ -1651,9 +1661,8 @@ a:hover {
 
   .viewer-container {
     width: 100%;
-    padding: 22px calc(clamp(16px, 5vw, 22px) + env(safe-area-inset-right, 0px))
-      calc(64px + env(safe-area-inset-bottom, 0px))
-      calc(clamp(16px, 5vw, 22px) + env(safe-area-inset-left, 0px));
+    padding: 22px calc(clamp(16px, 5vw, 22px) + var(--safe-area-right))
+      calc(64px + var(--safe-area-bottom)) calc(clamp(16px, 5vw, 22px) + var(--safe-area-left));
   }
 
   .viewer {
