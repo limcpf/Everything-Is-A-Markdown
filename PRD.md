@@ -19,8 +19,10 @@
 - 신규 표시: “최근 글”은 파일 트리에서 **NEW 아이콘** 표시
 - “최근 글” 전용 폴더: **실제 파일시스템과 별개인 가상 폴더**를 탐색기에 추가
 - 신규/최근 기준: 파일 `mtime`이 아니라 **frontmatter 날짜 사용**
-  - NEW: `date` → `createdDate`
-  - Recent/홈 fallback: `updatedDate` → `modifiedDate` → `lastModified`, 없으면 `date` → `createdDate`
+  - 생성일 그룹: `date`, 없으면 `createdDate`
+  - 수정일 그룹: `updatedDate`, 없으면 `modifiedDate`, 없으면 `lastModified`
+  - 각 그룹은 첫 non-empty 값을 선택하며, 선택한 값이 유효하지 않아도 같은 그룹의 다음 alias를 다시 시도하지 않는다.
+  - NEW는 선택한 생성일만 사용하고, Recent/홈은 유효한 수정일이 없으면 선택한 생성일로 fallback한다.
 
 ---
 
@@ -117,8 +119,9 @@ draft: false                   # 옵션 (true면 제외)
 * `publish` 누락: 기본 false(= 미발행)
 * `publish: true`지만 `prefix` 또는 `category_path` 누락: 경고 후 게시 대상에서 제외
 * `title` 누락: 파일명에서 자동 생성(예: `file-system-blog` → `File System Blog`)
-* `date`/`createdDate` 누락 또는 유효하지 않음: 날짜를 표시하지 않고 NEW 배지를 붙이지 않음
-* 수정일 누락 또는 유효하지 않음: Recent/홈 정렬에서 `date`/`createdDate`로 fallback
+* 날짜 alias 그룹은 위 우선순위에서 첫 non-empty 값을 선택한 뒤 유효성을 판정한다. 예를 들어 `updatedDate: invalid`가 있으면 유효한 `modifiedDate`가 있어도 다시 시도하지 않는다.
+* 선택한 생성일이 누락되거나 유효하지 않음: 날짜를 표시하지 않고 NEW 배지를 붙이지 않음
+* 선택한 수정일이 누락되거나 유효하지 않음: Recent/홈 정렬에서 선택한 생성일로 fallback
 
 ---
 
@@ -203,12 +206,12 @@ draft: false                   # 옵션 (true면 제외)
 * 파일도 동일하게 가나다 오름차순
 * 단, `Recent` 가상 폴더에서는:
 
-  * `updatedDate`/`modifiedDate`/`lastModified` 우선, `date`/`createdDate` fallback으로 내림차순
+  * 선택한 수정일 우선, 선택한 생성일 fallback으로 내림차순
   * 유효한 날짜가 없는 문서는 날짜가 있는 문서 뒤에서 Vault 상대경로 가나다순
 
 ### 6.3 NEW 표시 규칙
 
-* `date` 또는 `createdDate`가 최근 N일 이내면 NEW 표시
+* 생성일 그룹에서 선택한 `date` 또는 `createdDate`가 최근 N일 이내면 NEW 표시
 * 기본값: `newWithinDays = 7` (config로 변경 가능)
 * `updatedDate` 계열과 파일 `mtime`은 NEW 판정에 사용하지 않는다.
 * 표시 방식:
@@ -223,7 +226,7 @@ draft: false                   # 옵션 (true면 제외)
   * 기본: frontmatter 날짜 기준 최신 `recentLimit = 5`개
 * 정렬:
 
-  * 수정일 계열 우선, 생성일 계열 fallback 내림차순
+  * 선택한 수정일 우선, 선택한 생성일 fallback 내림차순
 
 ---
 
@@ -272,13 +275,14 @@ draft: false                   # 옵션 (true면 제외)
   * `--out <path>` default `dist`
   * `--exclude <glob>` 여러 번 가능
   * `--new-within-days 7`
-  * `--recent-limit 20`
+  * `--recent-limit 5`
 * `blog dev`
 
   * 로컬 dev 서버 + 파일 변경 감지(가능하면)
 * `blog clean`
 
-  * `dist/`, `.cache/` 제거
+  * EIAM 소유권 marker가 현재 실행 context와 일치하는 선택 output만 제거
+  * 선택한 vault/output 쌍의 `.cache/eiam/v1-<namespace>`만 제거하고 sibling namespace와 그 밖의 `.cache` 데이터는 보존
 
 예시:
 
@@ -364,6 +368,7 @@ export default {
 * publish/draft 필터
 * 게시 필수 메타데이터(`prefix`, `category_path`) 검증
 * 생성일/수정일 frontmatter 정규화
+* 증분 cache entry metadata용 file stat(`mtime`/size) 수집(`mtime`은 NEW/Recent 정렬에 사용하지 않음)
 
 ### M2. 라우트/ID/manifest 생성
 
