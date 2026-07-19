@@ -176,13 +176,15 @@ export function pickViewHomeRoute(
   return selected ? normalizeViewRoute(selected.route) : "/";
 }
 
-export function escapeViewHtml(value: unknown): string {
+export function escapeViewText(value: unknown): string {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    .replaceAll(">", "&gt;");
+}
+
+function escapeViewAttribute(value: unknown): string {
+  return escapeViewText(value).replaceAll('"', "&quot;");
 }
 
 export function formatViewDateTime(value: unknown): string | null {
@@ -274,8 +276,8 @@ function renderBreadcrumb(model: ViewChromeModel["breadcrumb"]): string {
   return model.items
     .map((item) =>
       item.current
-        ? `<span class="breadcrumb-current" aria-current="page">${escapeViewHtml(item.label)}</span>`
-        : `<span class="breadcrumb-item">${escapeViewHtml(item.label)}</span>`,
+        ? `<span class="breadcrumb-current" aria-current="page">${escapeViewText(item.label)}</span>`
+        : `<span class="breadcrumb-item">${escapeViewText(item.label)}</span>`,
     )
     .join('<span class="material-symbols-outlined breadcrumb-sep">chevron_right</span>');
 }
@@ -287,15 +289,15 @@ export function renderViewBreadcrumb(route: unknown): string {
 function renderMeta(model: ViewChromeModel["meta"]): string {
   const items: string[] = [];
   if (model.prefix) {
-    items.push(`<span class="meta-item meta-prefix">${escapeViewHtml(model.prefix)}</span>`);
+    items.push(`<span class="meta-item meta-prefix">${escapeViewText(model.prefix)}</span>`);
   }
   if (model.createdAt) {
     items.push(
-      `<span class="meta-item"><span class="material-symbols-outlined">calendar_today</span>${escapeViewHtml(model.createdAt)}</span>`,
+      `<span class="meta-item"><span class="material-symbols-outlined">calendar_today</span>${escapeViewText(model.createdAt)}</span>`,
     );
   }
   if (model.tags.length > 0) {
-    const tags = model.tags.map((tag) => `#${escapeViewHtml(tag)}`).join(" ");
+    const tags = model.tags.map((tag) => `#${escapeViewText(tag)}`).join(" ");
     items.push(`<span class="meta-item meta-tags">${tags}</span>`);
   }
   return items.join("");
@@ -303,9 +305,9 @@ function renderMeta(model: ViewChromeModel["meta"]): string {
 
 function renderNavLink(link: ViewLinkModel, direction: "previous" | "next"): string {
   if (direction === "previous") {
-    return `<a href="${escapeViewHtml(link.href)}" class="nav-link nav-link-prev" data-route="${escapeViewHtml(link.route)}"><div class="nav-link-label"><span class="material-symbols-outlined">arrow_back</span>Previous</div><div class="nav-link-title">${escapeViewHtml(link.title)}</div></a>`;
+    return `<a href="${escapeViewAttribute(link.href)}" class="nav-link nav-link-prev" data-route="${escapeViewAttribute(link.route)}"><div class="nav-link-label"><span class="material-symbols-outlined">arrow_back</span>Previous</div><div class="nav-link-title">${escapeViewText(link.title)}</div></a>`;
   }
-  return `<a href="${escapeViewHtml(link.href)}" class="nav-link nav-link-next" data-route="${escapeViewHtml(link.route)}"><div class="nav-link-label">Next<span class="material-symbols-outlined">arrow_forward</span></div><div class="nav-link-title">${escapeViewHtml(link.title)}</div></a>`;
+  return `<a href="${escapeViewAttribute(link.href)}" class="nav-link nav-link-next" data-route="${escapeViewAttribute(link.route)}"><div class="nav-link-label">Next<span class="material-symbols-outlined">arrow_forward</span></div><div class="nav-link-title">${escapeViewText(link.title)}</div></a>`;
 }
 
 function renderNavigation(model: ViewChromeModel["navigation"]): string {
@@ -322,9 +324,9 @@ function renderBacklinks(model: ViewChromeModel["backlinks"]): string {
   const items = model
     .map((backlink) => {
       const prefix = backlink.prefix
-        ? `<span class="backlink-prefix">${escapeViewHtml(backlink.prefix)}</span>`
+        ? `<span class="backlink-prefix">${escapeViewText(backlink.prefix)}</span>`
         : "";
-      return `<li class="backlinks-item"><a href="${escapeViewHtml(backlink.href)}" class="backlink-link" data-route="${escapeViewHtml(backlink.route)}">${prefix}<span class="backlink-text">${escapeViewHtml(backlink.title)}</span></a></li>`;
+      return `<li class="backlinks-item"><a href="${escapeViewAttribute(backlink.href)}" class="backlink-link" data-route="${escapeViewAttribute(backlink.route)}">${prefix}<span class="backlink-text">${escapeViewText(backlink.title)}</span></a></li>`;
     })
     .join("");
   return `<h2 class="backlinks-title">Backlinks</h2><ul class="backlinks-list">${items}</ul>`;

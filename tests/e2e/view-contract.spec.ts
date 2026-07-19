@@ -86,7 +86,7 @@ test.describe("shared SSR/client view contract", () => {
     );
     expect(rendered.breadcrumbHtml).toContain("Unsafe &lt;route&gt;");
     expect(rendered.metaHtml).toContain("P&lt;1&gt;");
-    expect(rendered.backlinksHtml).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
+    expect(rendered.backlinksHtml).toContain('&lt;img src=x onerror="alert(1)"&gt;');
     expect(rendered.backlinksHtml).not.toContain("<img");
     expect(formatViewDateTime("invalid")).toBeNull();
     expect(formatViewDateTime("2024-09-20T09:30:00")).toBe("2024-09-20 09:30");
@@ -95,6 +95,54 @@ test.describe("shared SSR/client view contract", () => {
       "/docs%20%ED%95%9C%EA%B8%80/A%20B/",
     );
     expect(composeViewDocumentTitle("Current", "Site")).toBe("Current - Site");
+  });
+
+  test("따옴표가 있는 chrome도 browser innerHTML과 byte-identical하다", async ({ page }) => {
+    const docs = [
+      {
+        id: "previous",
+        route: `/Alice's "Notes"/`,
+        title: `Alice's "Notes"`,
+      },
+      {
+        id: "current",
+        route: "/Current/",
+        title: "Current",
+        prefix: `P's "Q"`,
+        tags: [`tag's`, `"quoted"`],
+        backlinks: [
+          {
+            route: `/Backlink's "Route"/`,
+            title: `Backlink's "Title"`,
+            prefix: `B's "P"`,
+          },
+        ],
+      },
+    ];
+    const rendered = renderViewChrome({
+      route: docs[1].route,
+      doc: docs[1],
+      docs,
+      pathBase: "",
+    });
+
+    await page.setContent(
+      `<div id="viewer-breadcrumb">${rendered.breadcrumbHtml}</div>` +
+        `<div id="viewer-meta">${rendered.metaHtml}</div>` +
+        `<div id="viewer-backlinks">${rendered.backlinksHtml}</div>` +
+        `<div id="viewer-nav">${rendered.navHtml}</div>`,
+    );
+
+    const canonical = await page.evaluate((ids) => {
+      const read = (id: string) => document.getElementById(id)?.innerHTML ?? "";
+      return {
+        breadcrumbHtml: read(ids[0]),
+        metaHtml: read(ids[1]),
+        backlinksHtml: read(ids[2]),
+        navHtml: read(ids[3]),
+      };
+    }, CHROME_IDS);
+    expect(canonical).toEqual(rendered);
   });
 
   test("SSR nav와 client navigation은 같은 branch projection과 home 선택을 사용한다", () => {
