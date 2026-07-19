@@ -580,11 +580,16 @@ Options:
 
 What it checks:
 
-- only notes with `publish: true`
-- skips docs missing `prefix`
+- uses the same vault scanner, exclusions, and frontmatter parser as the build
+- selects only `publish: true`, non-draft notes that have both `prefix` and `category_path`
+- reports malformed frontmatter and missing publication metadata separately from Markdown style findings
 - runs `markdownlint`
 - adds a custom rule that forbids H1 in the Markdown body after frontmatter
-- writes a JSON report file
+- writes a JSON report with `targetFiles`, `publicationDiagnostics`, `markdownStyleIssues`, and a backward-compatible combined `issues` list
+
+Publication metadata diagnostics are warnings in the report, while frontmatter parse and Markdown
+style findings are errors. `--strict` exits with status `1` when any of those diagnostics or findings
+exists, including a publication warning.
 
 ## Example Vault
 

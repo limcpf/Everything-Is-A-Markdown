@@ -3,7 +3,8 @@ import path from "node:path";
 import type { BuildCache, BuildOptions, DocRecord } from "../types";
 import { ensureDir, fileExists, makeHash, removeEmptyParents, removeFileIfExists } from "../utils";
 import type { BuildStorageState, CacheLocation } from "./contracts";
-import { parseBranch, parseStringArray, normalizeCategoryPath } from "./source";
+import { normalizeCategoryPath } from "../publication";
+import { parseBranch, parseStringArray } from "./source";
 import { OUTPUT_MARKER_FILE_NAME, toContentFileName } from "./shared";
 
 const CACHE_VERSION = 6;

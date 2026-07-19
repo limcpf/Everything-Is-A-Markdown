@@ -71,6 +71,13 @@ bun run lint:md:publish -- --out-dir ./reports --strict
 - `--vault <path>`: Markdown 루트 디렉터리 재지정 (선택)
 - `--exclude <glob>`: 제외 패턴 추가 (반복 가능)
 
+build와 같은 vault scanner, 제외 규칙, frontmatter parser를 사용하므로 `publish: true`이고
+draft가 아니며 `prefix`와 `category_path`가 모두 있는 문서만 동일하게 선택합니다. JSON
+리포트는 잘못된 publication metadata와 frontmatter parse 진단을 `publicationDiagnostics`에,
+Markdown 규칙 위반을 `markdownStyleIssues`에 분리하고, 호환용 통합 `issues`도 제공합니다.
+publication metadata 진단은 warning이지만 `--strict`에서는 Markdown style finding이나 parse
+error와 마찬가지로 종료 코드 `1`을 반환합니다.
+
 ## 개발 품질 검사
 
 브라우저 설치나 E2E 실행 전에 빠른 source gate를 로컬에서 그대로 실행할 수 있습니다.
