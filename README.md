@@ -602,6 +602,7 @@ Scripts from `package.json`:
 
 ```bash
 bun install
+bun run typecheck
 bun run build -- --vault ./test-vault --out ./dist
 bun run dev -- --vault ./test-vault --out ./dist
 bun run test:e2e

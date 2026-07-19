@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Typecheck TypeScript and browser runtime
+        run: bun run typecheck
+
       - name: Install Playwright browser
         run: bunx playwright install --with-deps chromium
 

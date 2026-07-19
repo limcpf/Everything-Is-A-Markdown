@@ -4,6 +4,15 @@ const MENU_TOGGLE_POSITION_KEY = "fsblog.menuTogglePosition";
 const THEME_MODE_KEY = "fsblog.themeMode";
 const DARK_MODE_QUERY = "(prefers-color-scheme: dark)";
 
+/** @typedef {import("./contracts").EventScope} EventScope */
+/** @typedef {import("./contracts").RuntimeWindow} RuntimeWindow */
+/** @typedef {import("./contracts").SettingsController} SettingsController */
+/** @typedef {"light" | "dark" | "system"} ThemeMode */
+
+/**
+ * @param {unknown} mode
+ * @returns {ThemeMode}
+ */
 export function normalizeThemeMode(mode) {
   if (mode === "light" || mode === "dark" || mode === "system") {
     return mode;
@@ -11,6 +20,11 @@ export function normalizeThemeMode(mode) {
   return "system";
 }
 
+/**
+ * @param {ThemeMode} mode
+ * @param {boolean} prefersDark
+ * @returns {"light" | "dark"}
+ */
 export function resolveAppliedTheme(mode, prefersDark) {
   if (mode === "system") {
     return prefersDark ? "dark" : "light";
@@ -18,6 +32,10 @@ export function resolveAppliedTheme(mode, prefersDark) {
   return mode;
 }
 
+/**
+ * @param {{ documentRef?: Document; windowRef?: RuntimeWindow; storage?: Storage }} [options]
+ * @returns {SettingsController}
+ */
 export function createSettingsController(options = {}) {
   const documentRef = options.documentRef ?? globalThis.document;
   const windowRef = options.windowRef ?? globalThis.window;
@@ -30,9 +48,12 @@ export function createSettingsController(options = {}) {
   );
   const themeModeInputs = Array.from(documentRef.querySelectorAll('input[name="theme-mode"]'));
   const darkModeMediaQuery = windowRef.matchMedia(DARK_MODE_QUERY);
+  /** @type {EventScope | null} */
   let events = null;
+  /** @type {ThemeMode} */
   let themeMode = "system";
 
+  /** @param {boolean} expanded */
   const setSettingsExpanded = (expanded) => {
     settingsToggle?.setAttribute("aria-expanded", String(expanded));
   };
@@ -54,7 +75,9 @@ export function createSettingsController(options = {}) {
     const checkedInput = settingsPanel.querySelector(
       'input[name="theme-mode"]:checked, input[name="menu-toggle-position"]:checked',
     );
-    checkedInput?.focus?.();
+    if (checkedInput instanceof windowRef.HTMLElement) {
+      checkedInput.focus();
+    }
   };
 
   const toggle = () => {
@@ -68,6 +91,7 @@ export function createSettingsController(options = {}) {
     }
   };
 
+  /** @param {"left" | "right"} position */
   const applyMenuTogglePosition = (position) => {
     documentRef.body?.classList.toggle("mobile-toggle-left", position === "left");
   };
@@ -78,6 +102,7 @@ export function createSettingsController(options = {}) {
     documentRef.documentElement.style.colorScheme = appliedTheme;
   };
 
+  /** @param {Event} event */
   const handleMenuTogglePositionChange = (event) => {
     const input = event.currentTarget;
     if (!(input instanceof windowRef.HTMLInputElement) || !input.checked) {
@@ -88,6 +113,7 @@ export function createSettingsController(options = {}) {
     storage.setItem(MENU_TOGGLE_POSITION_KEY, nextPosition);
   };
 
+  /** @param {Event} event */
   const handleThemeModeChange = (event) => {
     const input = event.currentTarget;
     if (!(input instanceof windowRef.HTMLInputElement) || !input.checked) {
@@ -104,6 +130,7 @@ export function createSettingsController(options = {}) {
     }
   };
 
+  /** @param {Event} event */
   const handleOutsideClick = (event) => {
     if (!settingsPanel || settingsPanel.hidden) {
       return;

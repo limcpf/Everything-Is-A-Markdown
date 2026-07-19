@@ -24,6 +24,7 @@
 		"check:size": "bun run scripts/check-output-size.ts --out ./dist",
 		"check:reproducible": "bun run scripts/check-build-reproducibility.ts --vault ./test-vault --out ./dist",
 		"lint:md:publish": "bun run scripts/lint-published-markdown.ts --out-dir dist",
+		"typecheck": "tsc --noEmit",
 		"test:e2e": "playwright test",
 		"test:e2e:focus-trap": "playwright test tests/e2e/mobile-sidebar-focus-trap.spec.ts"
 	},
@@ -45,6 +46,7 @@
 		"@types/picomatch": "^4.0.3",
 		"@types/sanitize-html": "2.16.1",
 		"bun-types": "^1.3.14",
-		"markdownlint": "^0.40.0"
+		"markdownlint": "^0.40.0",
+		"typescript": "7.0.2"
 	}
 }

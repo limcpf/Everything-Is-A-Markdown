@@ -34,6 +34,7 @@ bun run blog [build|dev|clean] [options]
 - `bun run build`: 정적 파일 빌드
 - `bun run dev`: 로컬 개발 서버 실행 (기본 `http://localhost:3000`)
 - `bun run clean`: EIAM 소유권 마커가 확인된 `dist`와 일치하는 EIAM cache namespace만 삭제
+- `bun run typecheck`: TypeScript와 브라우저 런타임 JavaScript 정적 타입 검사
 
 빌드는 vault를 검증하고 읽은 뒤 전용 출력 디렉터리에 `.eiam-output.json` 소유권 마커를 기록하고 canonical vault/output/cache-root 경로에서 파생한 cache namespace에 결속합니다. 비어 있지 않은 미소유 또는 namespace 불일치 디렉터리, cache root를 포함하거나 그 안에 놓인 경로는 출력으로 사용하지 않으며, symlink인 cache path component, namespace, index도 거부합니다. `staticPaths`는 output 밖으로 벗어나거나 예약된 `.eiam-output.json` 마커와 충돌할 수 없습니다. `dev`는 초기 build가 이 안전 검사를 통과하지 못하면 watcher와 server를 시작하지 않고 종료하며, 안전하게 시작된 뒤의 rebuild 실패만 로그로 남깁니다. `clean`도 광범위한 경로나 선택한 실행 context와 마커가 일치하지 않는 디렉터리를 삭제하지 않습니다. build migration과 `clean`은 과거 EIAM cache schema로 확인된 `.cache/build-index.json`만 제거하며, pre-marker output과 예약 static path를 거부하는 경로에서도 이 migration을 수행합니다. sibling EIAM cache namespace와 일반 `.cache`의 다른 파일은 보존합니다.
 
