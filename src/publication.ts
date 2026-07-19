@@ -46,7 +46,7 @@ export type PublicationEvaluation =
   | { status: "target" };
 
 export interface PublicationScanResult {
-  sources: ScannedMarkdownSource[];
+  sourceFiles: string[];
   targets: ParsedPublicationSource[];
   diagnostics: PublicationDiagnostic[];
   ignored: Array<{
@@ -55,14 +55,13 @@ export interface PublicationScanResult {
   }>;
 }
 
-async function walkMarkdownFiles(
+async function* walkMarkdownFiles(
   dir: string,
   vaultDir: string,
   isExcluded: (relPath: string, isDirectory: boolean) => boolean,
-): Promise<string[]> {
+): AsyncGenerator<string> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   entries.sort((left, right) => left.name.localeCompare(right.name, "ko-KR"));
-  const files: string[] = [];
 
   for (const entry of entries) {
     const absolutePath = path.join(dir, entry.name);
@@ -73,39 +72,35 @@ async function walkMarkdownFiles(
     }
 
     if (entry.isDirectory()) {
-      files.push(...(await walkMarkdownFiles(absolutePath, vaultDir, isExcluded)));
+      for await (const nestedPath of walkMarkdownFiles(absolutePath, vaultDir, isExcluded)) {
+        yield nestedPath;
+      }
       continue;
     }
 
     if (entry.isFile() && /\.md$/i.test(entry.name)) {
-      files.push(absolutePath);
+      yield absolutePath;
     }
   }
-
-  return files;
 }
 
-export async function scanMarkdownSources(
+export async function* scanMarkdownSources(
   vaultDir: string,
   excludePatterns: string[],
-): Promise<ScannedMarkdownSource[]> {
+): AsyncGenerator<ScannedMarkdownSource> {
   const isExcluded = buildExcluder(excludePatterns);
-  const sourcePaths = await walkMarkdownFiles(vaultDir, vaultDir, isExcluded);
-  const sources = await Promise.all(
-    sourcePaths.map(async (sourcePath): Promise<ScannedMarkdownSource> => {
-      const [raw, stat] = await Promise.all([Bun.file(sourcePath).text(), fs.stat(sourcePath)]);
-      return {
-        sourcePath,
-        relPath: relativePosix(vaultDir, sourcePath),
-        raw,
-        rawHash: crypto.createHash("sha256").update(raw).digest("hex"),
-        mtimeMs: stat.mtimeMs,
-        size: stat.size,
-      };
-    }),
-  );
-
-  return sources.sort((left, right) => left.relPath.localeCompare(right.relPath, "ko-KR"));
+  for await (const sourcePath of walkMarkdownFiles(vaultDir, vaultDir, isExcluded)) {
+    const raw = await Bun.file(sourcePath).text();
+    const stat = await fs.stat(sourcePath);
+    yield {
+      sourcePath,
+      relPath: relativePosix(vaultDir, sourcePath),
+      raw,
+      rawHash: crypto.createHash("sha256").update(raw).digest("hex"),
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+    };
+  }
 }
 
 export function normalizeCategoryPath(value: unknown): string | undefined {
@@ -285,12 +280,13 @@ export async function scanPublicationTargets(
   vaultDir: string,
   excludePatterns: string[],
 ): Promise<PublicationScanResult> {
-  const sources = await scanMarkdownSources(vaultDir, excludePatterns);
+  const sourceFiles: string[] = [];
   const targets: ParsedPublicationSource[] = [];
   const diagnostics: PublicationDiagnostic[] = [];
   const ignored: PublicationScanResult["ignored"] = [];
 
-  for (const source of sources) {
+  for await (const source of scanMarkdownSources(vaultDir, excludePatterns)) {
+    sourceFiles.push(source.relPath);
     const parsed = parsePublicationSource(source);
     if (!parsed.ok) {
       diagnostics.push(parsed.diagnostic);
@@ -312,5 +308,5 @@ export async function scanPublicationTargets(
     targets.push(parsed.value);
   }
 
-  return { sources, targets, diagnostics, ignored };
+  return { sourceFiles, targets, diagnostics, ignored };
 }

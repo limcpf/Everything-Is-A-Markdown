@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 import {
   evaluatePublication,
   formatPublicationDiagnostic,
+  scanMarkdownSources,
   scanPublicationTargets,
 } from "../../src/publication";
 
@@ -56,7 +57,7 @@ category_path: excluded`),
 
       const result = await scanPublicationTargets(vaultDir, ["excluded/**"]);
 
-      expect(result.sources.map(({ relPath }) => relPath)).toEqual([
+      expect(result.sourceFiles).toEqual([
         "draft.md",
         "missing-category.md",
         "missing-prefix.md",
@@ -83,6 +84,26 @@ category_path: excluded`),
         { file: "missing-prefix.md", reason: "invalid-metadata" },
         { file: "private.md", reason: "not-published" },
       ]);
+    } finally {
+      fs.rmSync(vaultDir, { recursive: true, force: true });
+    }
+  });
+
+  test("reads source bodies lazily instead of retaining every vault file", async () => {
+    const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), "eiam-publication-stream-"));
+
+    try {
+      writeText(path.join(vaultDir, "a.md"), markdown("publish: false"));
+      const secondPath = path.join(vaultDir, "b.md");
+      writeText(secondPath, markdown("publish: false"));
+
+      const iterator = scanMarkdownSources(vaultDir, [])[Symbol.asyncIterator]();
+      const first = await iterator.next();
+      expect(first.done).toBe(false);
+      expect(first.value?.relPath).toBe("a.md");
+
+      fs.rmSync(secondPath);
+      await expect(iterator.next()).rejects.toThrow();
     } finally {
       fs.rmSync(vaultDir, { recursive: true, force: true });
     }

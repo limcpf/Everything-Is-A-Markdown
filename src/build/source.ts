@@ -288,11 +288,10 @@ export async function readPublishedDocs(
   options: BuildOptions,
   previousSources: BuildCache["sources"],
 ): Promise<ReadDocsResult> {
-  const sources = await scanMarkdownSources(options.vaultDir, options.exclude);
   const docs: DocRecord[] = [];
   const nextSources: BuildCache["sources"] = {};
 
-  for (const source of sources) {
+  for await (const source of scanMarkdownSources(options.vaultDir, options.exclude)) {
     const prev = previousSources[source.relPath];
 
     let entry: CachedSourceEntry;
