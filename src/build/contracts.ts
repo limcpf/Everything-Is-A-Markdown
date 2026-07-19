@@ -1,4 +1,4 @@
-import type { BuildCache, DocRecord } from "../types";
+import type { BuildCache, DocRecord, Manifest, TreeNode } from "../types";
 
 export interface BuildResult {
   totalDocs: number;
@@ -35,4 +35,30 @@ export interface RuntimeAssets {
   cssRelPath: string;
   jsRelPath: string;
   treeJsRelPath: string;
+}
+
+export interface BuildStorageState {
+  cacheLocation: CacheLocation;
+  outputRoot: string;
+  previousCache: BuildCache;
+  previousDocs: BuildCache["docs"];
+  previousOutputHashes: BuildCache["outputHashes"];
+}
+
+export interface DocumentGraphResult {
+  tree: TreeNode[];
+  manifest: Manifest;
+  wikiLookup: WikiLookup;
+}
+
+export interface RenderDocumentsResult {
+  contentByDocId: Map<string, string>;
+  nextDocs: BuildCache["docs"];
+  renderedDocs: number;
+  skippedDocs: number;
+}
+
+export interface OutputPhaseState {
+  context: OutputWriteContext;
+  runtimeAssets: RuntimeAssets;
 }
