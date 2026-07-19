@@ -12,6 +12,10 @@ bundle's shared view renderer from embedding a second copy of every SVG path.
 The existing deferred file tree keeps its own five-symbol sprite because it is
 loaded and rendered inside the tree component's shadow root.
 
+The content hash includes a renderer version salt. The SVG migration bumps that
+version so an incremental build upgrades cached code-block fragments instead of
+reusing the former font-ligature markup beside the new CSS and copy controller.
+
 ## Accessibility contract
 
 - Every app icon is decorative and carries `aria-hidden="true"` and
@@ -49,4 +53,5 @@ Unit coverage fixes the symbol inventory and budgets the sprite at 3,700 raw /
 750 gzip bytes. Browser coverage disables JavaScript, verifies a non-zero icon
 box, rejects Google Fonts requests and ligature text, validates decorative SVG
 semantics, checks accessible names for interactive controls, and exercises the
-copy-to-check feedback state.
+copy-to-check feedback state. A build regression seeds a legacy content hash
+and fragment, then verifies that the renderer version forces a clean upgrade.
