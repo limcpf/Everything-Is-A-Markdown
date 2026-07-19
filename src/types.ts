@@ -1,3 +1,5 @@
+import type { RuntimeLayoutConfig } from "./defaults";
+
 export type ImagePolicy = "keep" | "omit-local";
 
 export interface UserSeoConfig {
@@ -39,6 +41,7 @@ export interface PinnedMenuOption {
 export interface UserConfig {
   vaultDir?: string;
   outDir?: string;
+  defaultBranch?: string;
   exclude?: string[];
   staticPaths?: string[];
   pinnedMenu?: {
@@ -75,6 +78,7 @@ export interface BuildOptions {
   staticPaths: string[];
   newWithinDays: number;
   recentLimit: number;
+  defaultBranch: string;
   siteTitle?: string;
   pinnedMenu: PinnedMenuOption | null;
   wikilinks: boolean;
@@ -87,6 +91,7 @@ export interface BuildOptions {
     cdnUrl: string;
     theme: string;
   };
+  layout: RuntimeLayoutConfig;
   seo: BuildSeoOptions | null;
 }
 
@@ -160,6 +165,7 @@ export interface Manifest {
     cdnUrl: string;
     theme: string;
   };
+  layout: RuntimeLayoutConfig;
   ui: {
     newWithinDays: number;
     recentLimit: number;

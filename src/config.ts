@@ -1,6 +1,7 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { OUTPUT_MARKER_FILE_NAME } from "./build/shared";
+import { DEFAULT_RUNTIME_CONFIG } from "./defaults";
 import { normalizeSeoConfig } from "./seo";
 import type { BuildOptions, PinnedMenuOption, UserConfig, UserSeoConfig } from "./types";
 
@@ -27,11 +28,8 @@ const DEFAULTS = {
   gfm: true,
   allowUnsafeHtml: false,
   shikiTheme: "github-dark",
-  mermaid: {
-    enabled: true,
-    cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
-    theme: "default",
-  },
+  defaultBranch: DEFAULT_RUNTIME_CONFIG.defaultBranch,
+  mermaid: DEFAULT_RUNTIME_CONFIG.mermaid,
 };
 
 const MERMAID_URL_MAX_LENGTH = 1024;
@@ -589,7 +587,17 @@ export function validateUserConfig(
   const config = requireRecord(raw, "<root>");
   warnUnknownFields(
     config,
-    ["vaultDir", "outDir", "exclude", "staticPaths", "pinnedMenu", "ui", "markdown", "seo"],
+    [
+      "vaultDir",
+      "outDir",
+      "defaultBranch",
+      "exclude",
+      "staticPaths",
+      "pinnedMenu",
+      "ui",
+      "markdown",
+      "seo",
+    ],
     "",
     "[config]",
     warn,
@@ -598,9 +606,14 @@ export function validateUserConfig(
   const normalized: ValidatedUserConfig = {};
   const vaultDir = optionalString(config, "vaultDir", "vaultDir");
   const outDir = optionalString(config, "outDir", "outDir");
+  const defaultBranch = optionalString(config, "defaultBranch", "defaultBranch", {
+    trim: true,
+    allowEmpty: false,
+  });
 
   if (vaultDir !== undefined) normalized.vaultDir = vaultDir;
   if (outDir !== undefined) normalized.outDir = outDir;
+  if (defaultBranch !== undefined) normalized.defaultBranch = defaultBranch.toLowerCase();
   if (config.exclude !== undefined)
     normalized.exclude = normalizeStringArray(config.exclude, "exclude");
   if (config.staticPaths !== undefined) {
@@ -697,6 +710,7 @@ export function resolveBuildOptions(
     staticPaths,
     newWithinDays,
     recentLimit,
+    defaultBranch: config.defaultBranch ?? DEFAULTS.defaultBranch,
     siteTitle,
     pinnedMenu: resolvedPinnedMenu,
     wikilinks: config.markdown?.wikilinks ?? DEFAULTS.wikilinks,
@@ -709,6 +723,7 @@ export function resolveBuildOptions(
       cdnUrl: config.markdown?.mermaid?.cdnUrl ?? DEFAULTS.mermaid.cdnUrl,
       theme: config.markdown?.mermaid?.theme ?? DEFAULTS.mermaid.theme,
     },
+    layout: { ...DEFAULT_RUNTIME_CONFIG.layout },
     seo,
   };
 }

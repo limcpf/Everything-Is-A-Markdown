@@ -121,6 +121,7 @@ async function start() {
   /** @type {TreeController | null} */
   let treeController = null;
   const layoutController = createSidebarLayoutController({
+    layout: bootstrap.manifest.layout,
     closeSettings: () => settingsController.close(),
     requestTreeLoad: (reason) => treeController?.requestLoad(reason) ?? Promise.resolve(false),
   });

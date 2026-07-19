@@ -1,7 +1,6 @@
 import type { BuildOptions } from "../types";
+import { DEFAULT_SITE_TITLE } from "../defaults";
 import { makeHash } from "../utils";
-
-const DEFAULT_SITE_TITLE = "File-System Blog";
 
 export const OUTPUT_MARKER_FILE_NAME = ".eiam-output.json";
 

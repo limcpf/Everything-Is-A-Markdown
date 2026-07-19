@@ -101,6 +101,7 @@ SEO/UI/정적 파일 설정은 config 파일에서 관리할 수 있습니다.
 const config = {
   vaultDir: "./vault",
   outDir: "./dist",
+  defaultBranch: "dev",
   staticPaths: ["assets", "public/favicon.ico"],
   pinnedMenu: {
     label: "NOTICE",
@@ -123,6 +124,10 @@ const config = {
 
 export default config;
 ```
+
+`defaultBranch`는 런타임이 처음 선택하는 브랜치이며 기본값은 `"dev"`입니다. 값은 앞뒤
+공백을 제거하고 소문자로 정규화하며, frontmatter에 `branch`가 없는 문서는 이 기본 브랜치에
+포함됩니다.
 
 Config module은 신뢰되지 않은 런타임 입력으로 취급합니다. 지원하는 모든 필드를 검증하고
 정규화한 뒤에만 `build`, `dev`, `clean`이 output/cache 경로를 생성·변경·삭제할 수 있습니다.
