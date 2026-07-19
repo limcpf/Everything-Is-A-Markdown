@@ -228,6 +228,8 @@ test.describe("sticky mobile reader header", () => {
         };
       };
       return {
+        header: rect(".sidebar-header"),
+        search: rect(".sidebar-search"),
         settings: rect("#sidebar-settings"),
         sidebar: rect("#sidebar-panel"),
         sidebarWidth: getComputedStyle(document.querySelector(".app-root")!).getPropertyValue(
@@ -236,19 +238,54 @@ test.describe("sticky mobile reader header", () => {
         splitterMax: document.querySelector("#app-splitter")!.getAttribute("aria-valuemax"),
         splitterNow: document.querySelector("#app-splitter")!.getAttribute("aria-valuenow"),
         tools: rect(".sidebar-tools"),
-        viewer: rect("#viewer-panel"),
+        viewerTitle: rect("#viewer-title"),
       };
     });
 
-    expect(desktop.sidebar.top).toBeGreaterThanOrEqual(safeArea.top);
-    expect(desktop.sidebar.left).toBeGreaterThanOrEqual(safeArea.left);
-    expect(desktop.sidebar.bottom).toBeLessThanOrEqual(viewport.height - safeArea.bottom + 1);
+    for (const region of [desktop.header, desktop.search, desktop.settings, desktop.tools]) {
+      expect(region.left).toBeGreaterThanOrEqual(desktop.sidebar.left + safeArea.left - 1);
+      expect(region.right).toBeLessThanOrEqual(desktop.sidebar.right - safeArea.right + 1);
+    }
+    expect(desktop.header.top).toBeGreaterThanOrEqual(safeArea.top);
     expect(desktop.tools.bottom).toBeLessThanOrEqual(viewport.height - safeArea.bottom + 1);
     expect(desktop.settings.top).toBeGreaterThanOrEqual(safeArea.top);
-    expect(desktop.viewer.right).toBeLessThanOrEqual(viewport.width - safeArea.right + 1);
-    const safeMax = maxBeforeInsets - safeArea.left - safeArea.right;
-    expect(desktop.sidebarWidth.trim()).toBe(`${safeMax}px`);
-    expect(desktop.splitterMax).toBe(String(safeMax));
-    expect(desktop.splitterNow).toBe(String(safeMax));
+    expect(desktop.viewerTitle.right).toBeLessThanOrEqual(viewport.width - safeArea.right + 1);
+    expect(desktop.sidebarWidth.trim()).toBe(`${maxBeforeInsets}px`);
+    expect(desktop.splitterMax).toBe(String(maxBeforeInsets));
+    expect(desktop.splitterNow).toBe(String(maxBeforeInsets));
+  });
+
+  test("desktop breakpoint 인접 safe area가 grid overflow를 만들지 않는다", async ({ page }) => {
+    const viewport = { width: 1030, height: 640 };
+    const safeArea = { top: 24, right: 28, bottom: 20, left: 28 };
+    await page.setViewportSize(viewport);
+    await page.goto("/BC-VO-01/");
+    await waitForAppReady(page);
+    await page.evaluate((insets) => {
+      const root = document.documentElement.style;
+      root.setProperty("--safe-area-top", `${insets.top}px`);
+      root.setProperty("--safe-area-right", `${insets.right}px`);
+      root.setProperty("--safe-area-bottom", `${insets.bottom}px`);
+      root.setProperty("--safe-area-left", `${insets.left}px`);
+      window.dispatchEvent(new Event("resize"));
+    }, safeArea);
+
+    const state = await page.evaluate(() => {
+      const app = document.querySelector<HTMLElement>(".app-root")!;
+      const header = document.querySelector(".sidebar-header")!.getBoundingClientRect();
+      const sidebar = document.querySelector("#sidebar-panel")!.getBoundingClientRect();
+      return {
+        appClientWidth: app.clientWidth,
+        appScrollWidth: app.scrollWidth,
+        headerLeft: header.left,
+        headerRight: header.right,
+        sidebarLeft: sidebar.left,
+        sidebarRight: sidebar.right,
+      };
+    });
+
+    expect(state.appScrollWidth).toBeLessThanOrEqual(state.appClientWidth);
+    expect(state.headerLeft).toBeGreaterThanOrEqual(state.sidebarLeft + safeArea.left - 1);
+    expect(state.headerRight).toBeLessThanOrEqual(state.sidebarRight - safeArea.right + 1);
   });
 });

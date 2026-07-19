@@ -14,14 +14,12 @@ continue to use the persistent sidebar and hide the compact reader header.
 ## Viewport and modal contracts
 
 The viewport metadata opts into `viewport-fit=cover`. Shared safe-area variables protect the sticky
-header, fixed modal drawer, skip link, reader content, and persistent desktop chrome. Desktop applies
-all four insets at the app-shell boundary before laying out its grid. Compact mode resets that shell
-padding and applies the insets at the drawer boundary instead, which avoids double spacing while
-keeping the title, close action, search, tree, settings tool, and settings popover inside the usable
-viewport. Desktop sidebar resizing measures the padded shell's content width, so its active width,
-drag behavior, and separator ARIA range stay synchronized; previously stored values are clamped on
-load. Header flex children can shrink without introducing horizontal overflow when the browser is
-zoomed or the viewport is narrow.
+header, fixed modal drawer, skip link, reader content, and persistent desktop chrome. The sidebar
+applies all four insets at its own outer layout boundary in both persistent and modal modes. This
+keeps the title, close action, search, tree, settings tool, and settings popover inside the usable
+viewport without shrinking the desktop grid or changing its resize coordinate system. Header flex
+children can shrink without introducing horizontal overflow when the browser is zoomed or the
+viewport is narrow.
 
 The header stays below the sidebar overlay in the stacking order. Opening the explorer preserves
 the existing modal contract: the reader becomes inert, focus is trapped in the drawer, Escape or

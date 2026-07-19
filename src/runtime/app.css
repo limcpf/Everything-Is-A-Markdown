@@ -221,7 +221,6 @@ a:hover {
   height: 100dvh;
   min-height: 0;
   width: 100vw;
-  padding: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom) var(--safe-area-left);
 }
 
 .app-root.is-resizing,
@@ -280,6 +279,7 @@ a:hover {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  padding: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom) var(--safe-area-left);
 }
 
 .sidebar-overlay {
@@ -1526,7 +1526,6 @@ a:hover {
 @media (max-width: 0px /* eiam-compact-breakpoint */) {
   .app-root {
     grid-template-columns: 1fr;
-    padding: 0;
   }
 
   .app-splitter {
@@ -1544,8 +1543,6 @@ a:hover {
     width: 70vw;
     min-width: var(--mobile-sidebar-min);
     max-width: var(--mobile-sidebar-max);
-    padding: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom)
-      var(--safe-area-left);
     border-right: 1px solid var(--color-border);
     border-bottom: 0;
     box-shadow: var(--sidebar-mobile-shadow);
