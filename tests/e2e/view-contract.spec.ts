@@ -136,6 +136,37 @@ test.describe("shared SSR/client view contract", () => {
     expect(pickHomeRoute(navigation.view)).toBe("/MAIN/");
   });
 
+  test("offset 없는 datetime도 실행 timezone과 무관하게 같은 home을 선택한다", () => {
+    const originalTimezone = process.env.TZ;
+    const docs = [
+      {
+        id: "offsetless",
+        route: "/OFFSETLESS/",
+        title: "Offsetless",
+        updatedDate: "2024-09-20T00:30:00",
+      },
+      {
+        id: "qualified",
+        route: "/QUALIFIED/",
+        title: "Qualified",
+        updatedDate: "2024-09-20T05:00:00Z",
+      },
+    ];
+
+    try {
+      for (const timezone of ["UTC", "America/Los_Angeles", "Asia/Seoul"]) {
+        process.env.TZ = timezone;
+        expect(pickViewHomeRoute(docs), timezone).toBe("/QUALIFIED/");
+      }
+    } finally {
+      if (originalTimezone == null) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = originalTimezone;
+      }
+    }
+  });
+
   test("default branch에 문서가 없어도 root SSR은 non-empty branch home을 사용한다", () => {
     test.setTimeout(60_000);
     const repoRoot = process.cwd();

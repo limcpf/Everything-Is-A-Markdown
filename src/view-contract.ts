@@ -132,11 +132,27 @@ export function filterViewDocsByBranch<T extends { branch?: unknown }>(
   });
 }
 
-function parseDateToEpochMs(value: unknown): number | null {
+function normalizeViewDateInput(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) {
     return null;
   }
-  const parsed = Date.parse(value);
+  const normalized = value.trim();
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(normalized);
+  const offsetlessDateTime =
+    /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(normalized);
+  return dateOnly
+    ? `${normalized}T00:00:00Z`
+    : offsetlessDateTime
+      ? `${normalized.replace(" ", "T")}Z`
+      : normalized;
+}
+
+function parseDateToEpochMs(value: unknown): number | null {
+  const normalized = normalizeViewDateInput(value);
+  if (normalized == null) {
+    return null;
+  }
+  const parsed = Date.parse(normalized);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
@@ -170,22 +186,11 @@ export function escapeViewHtml(value: unknown): string {
 }
 
 export function formatViewDateTime(value: unknown): string | null {
-  if (typeof value !== "string" || !value.trim()) {
+  const epoch = parseDateToEpochMs(value);
+  if (epoch == null) {
     return null;
   }
-  const normalized = value.trim();
-  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(normalized);
-  const offsetlessDateTime =
-    /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(normalized);
-  const deterministicInput = dateOnly
-    ? `${normalized}T00:00:00Z`
-    : offsetlessDateTime
-      ? `${normalized.replace(" ", "T")}Z`
-      : normalized;
-  const parsed = new Date(deterministicInput);
-  if (!Number.isFinite(parsed.getTime())) {
-    return null;
-  }
+  const parsed = new Date(epoch);
   const yyyy = parsed.getUTCFullYear();
   const mm = String(parsed.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(parsed.getUTCDate()).padStart(2, "0");
