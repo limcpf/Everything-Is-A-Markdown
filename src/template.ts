@@ -248,20 +248,16 @@ ${headMeta}
       <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true" hidden></div>
       <aside id="sidebar-panel" class="sidebar" role="complementary" aria-label="문서 탐색기 패널">
         <div class="sidebar-header">
-          <h1 class="sidebar-title">
-            <span class="material-symbols-outlined icon-terminal">terminal</span>
-            ${escapeHtmlAttribute(appTitle)}
-          </h1>
-          <button id="sidebar-close" class="sidebar-close" type="button" aria-label="탐색기 닫기">
-            <span class="material-symbols-outlined">close</span>
-          </button>
-          <div class="sidebar-branch">
-            <span class="branch-badge" aria-hidden="true">
-              <span class="material-symbols-outlined icon-branch">call_split</span>branch
-            </span>
-            <div id="sidebar-branch-pills" class="branch-pills" role="group" aria-label="브랜치 선택"></div>
-            <span id="sidebar-branch-info" class="branch-info">publish: true</span>
+          <div class="sidebar-heading">
+            <h1 class="sidebar-title">${escapeHtmlAttribute(appTitle)}</h1>
+            <button id="sidebar-close" class="sidebar-close" type="button" aria-label="탐색기 닫기">
+              <span class="material-symbols-outlined">close</span>
+            </button>
           </div>
+          <label class="sidebar-branch" for="sidebar-branch-select">
+            <span class="branch-label">Branch</span>
+            <select id="sidebar-branch-select" class="branch-select"></select>
+          </label>
         </div>
         <div class="sidebar-search">
           <div class="sidebar-search-box">
@@ -279,7 +275,7 @@ ${headMeta}
               <span class="material-symbols-outlined">close</span>
             </button>
           </div>
-          <div class="sidebar-search-actions" aria-live="polite">
+          <div id="sidebar-search-actions" class="sidebar-search-actions" aria-live="polite" hidden>
             <span id="tree-search-count" class="tree-search-count"></span>
             <div class="tree-search-nav">
               <button id="tree-search-prev" class="tree-search-step" type="button" aria-label="이전 검색 결과" title="이전 검색 결과" disabled>
@@ -292,24 +288,17 @@ ${headMeta}
           </div>
         </div>
         <nav id="tree-root" class="tree-root" aria-label="문서 탐색기" tabindex="0"></nav>
-        <div class="sidebar-footer">
-          <div class="status-online">
-            <span class="status-dot"></span>
-            <span>Online</span>
-          </div>
-          <div class="sidebar-footer-actions">
-            <div class="status-encoding">UTF-8</div>
-            <button
-              id="settings-toggle"
-              class="settings-toggle"
-              type="button"
-              aria-controls="sidebar-settings"
-              aria-expanded="false"
-              aria-label="탐색기 설정 열기"
-            >
-              <span class="material-symbols-outlined">tune</span>
-            </button>
-          </div>
+        <div class="sidebar-tools">
+          <button
+            id="settings-toggle"
+            class="settings-toggle"
+            type="button"
+            aria-controls="sidebar-settings"
+            aria-expanded="false"
+            aria-label="탐색기 설정 열기"
+          >
+            <span class="material-symbols-outlined">tune</span>
+          </button>
           <section id="sidebar-settings" class="sidebar-settings" hidden aria-label="탐색기 설정">
             <p class="sidebar-settings-title">탐색기 설정</p>
             <fieldset class="settings-group">

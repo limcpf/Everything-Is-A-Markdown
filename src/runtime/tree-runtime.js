@@ -38,28 +38,28 @@ const TREE_UNSAFE_CSS = `
   white-space: nowrap;
 }
 
+[data-type='item'][data-item-type='file'] > [data-item-section='icon'] {
+  display: none;
+}
+
 .tree-item-label {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
 }
 
-.tree-item-prefix-badge {
+.tree-item-prefix {
   flex: 0 0 auto;
   max-width: 6.5rem;
   overflow: hidden;
-  padding: 2px 6px;
-  border: 1px solid var(--trees-prefix-badge-border, rgba(203, 166, 247, 0.38));
-  border-radius: 999px;
-  background: var(--trees-prefix-badge-bg, rgba(203, 166, 247, 0.14));
-  color: var(--trees-prefix-badge-fg, currentColor);
+  color: var(--trees-fg-muted, currentColor);
+  font-family: var(--font-mono, monospace);
   font-size: 0.66rem;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.15;
-  letter-spacing: 0.02em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

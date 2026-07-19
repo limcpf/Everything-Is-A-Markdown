@@ -81,7 +81,7 @@ function decorateTreeLabels(host, documentRef) {
     label.className = "tree-item-label";
     if (prefix) {
       const prefixBadge = documentRef.createElement("span");
-      prefixBadge.className = "tree-item-prefix-badge";
+      prefixBadge.className = "tree-item-prefix";
       prefixBadge.textContent = prefix;
       label.appendChild(prefixBadge);
     }
@@ -202,8 +202,10 @@ export function createTreeController(options) {
     documentRef.getElementById("tree-search-next")
   );
   const treeSearchCount = documentRef.getElementById("tree-search-count");
-  const sidebarBranchPills = documentRef.getElementById("sidebar-branch-pills");
-  const sidebarBranchInfo = documentRef.getElementById("sidebar-branch-info");
+  const sidebarSearchActions = documentRef.getElementById("sidebar-search-actions");
+  const sidebarBranchSelect = /** @type {HTMLSelectElement | null} */ (
+    documentRef.getElementById("sidebar-branch-select")
+  );
   /** @type {EventScope | null} */
   let events = null;
   /** @type {FileTree | null} */
@@ -235,36 +237,23 @@ export function createTreeController(options) {
     documentRef.documentElement?.setAttribute(TREE_RUNTIME_STATE_ATTR, state);
   };
 
-  const renderBranchPills = () => {
-    if (!sidebarBranchPills) {
+  const renderBranchOptions = () => {
+    if (!sidebarBranchSelect) {
       return;
     }
-    sidebarBranchPills.replaceChildren();
+    sidebarBranchSelect.replaceChildren();
     for (const branch of navigation.availableBranches) {
-      const pill = documentRef.createElement("button");
-      pill.type = "button";
-      pill.className = "branch-pill";
-      pill.dataset.branch = branch;
-      pill.textContent = branch;
-      pill.setAttribute("aria-pressed", "false");
-      sidebarBranchPills.appendChild(pill);
+      const option = documentRef.createElement("option");
+      option.value = branch;
+      option.textContent = branch === navigation.defaultBranch ? `${branch} (default)` : branch;
+      sidebarBranchSelect.appendChild(option);
     }
+    sidebarBranchSelect.disabled = navigation.availableBranches.length < 2;
   };
 
-  const updateBranchInfo = () => {
-    if (sidebarBranchInfo) {
-      sidebarBranchInfo.textContent =
-        navigation.activeBranch === navigation.defaultBranch
-          ? `publish: true · ${navigation.activeBranch} + unclassified`
-          : `publish: true · ${navigation.activeBranch} only`;
-    }
-    for (const pill of sidebarBranchPills?.querySelectorAll(".branch-pill") ?? []) {
-      if (!(pill instanceof windowRef.HTMLElement)) {
-        continue;
-      }
-      const isActive = pill.dataset.branch === navigation.activeBranch;
-      pill.classList.toggle("is-active", isActive);
-      pill.setAttribute("aria-pressed", String(isActive));
+  const updateBranchControl = () => {
+    if (sidebarBranchSelect) {
+      sidebarBranchSelect.value = navigation.activeBranch;
     }
   };
 
@@ -284,6 +273,9 @@ export function createTreeController(options) {
     }
     if (treeSearchCount) {
       treeSearchCount.textContent = hasSearch ? `${matchCount}개 일치` : "";
+    }
+    if (sidebarSearchActions) {
+      sidebarSearchActions.hidden = !hasSearch;
     }
   };
 
@@ -682,7 +674,7 @@ export function createTreeController(options) {
   /** @param {string} branch */
   const handleBranchChange = (branch) => {
     storage.setItem(BRANCH_KEY, branch);
-    updateBranchInfo();
+    updateBranchControl();
     if (treeRuntime) {
       renderTree();
     }
@@ -704,17 +696,8 @@ export function createTreeController(options) {
     return true;
   };
 
-  /** @param {Event} event */
-  const handleBranchPillClick = (event) => {
-    const target = event.target;
-    if (!(target instanceof windowRef.Element)) {
-      return;
-    }
-    const pill = target.closest(".branch-pill");
-    if (!(pill instanceof windowRef.HTMLElement) || !sidebarBranchPills?.contains(pill)) {
-      return;
-    }
-    void setActiveBranch(pill.dataset.branch);
+  const handleBranchSelectChange = () => {
+    void setActiveBranch(sidebarBranchSelect?.value);
   };
 
   const handleSearchFocus = () => {
@@ -818,7 +801,7 @@ export function createTreeController(options) {
         return;
       }
       events = createEventScope();
-      events.listen(sidebarBranchPills, "click", handleBranchPillClick);
+      events.listen(sidebarBranchSelect, "change", handleBranchSelectChange);
       events.listen(treeSearchInput, "focus", handleSearchFocus);
       events.listen(treeSearchInput, "input", handleSearchInput);
       events.listen(treeSearchInput, "keydown", handleSearchKeydown);
@@ -828,8 +811,8 @@ export function createTreeController(options) {
       });
       events.listen(treeSearchPrev, "click", () => moveTreeSearchFocus(-1));
       events.listen(treeSearchNext, "click", () => moveTreeSearchFocus(1));
-      renderBranchPills();
-      updateBranchInfo();
+      renderBranchOptions();
+      updateBranchControl();
       updateTreeSearchControls();
       if (treeRuntime) {
         renderTree();

@@ -197,16 +197,15 @@ test.describe("responsive Trees sidebar layout", () => {
       const header = await getRect(page, ".sidebar-header");
       const search = await getRect(page, ".sidebar-search");
       const tree = await getRect(page, "#tree-root");
-      const footer = await getRect(page, ".sidebar-footer");
+      const tools = await getRect(page, ".sidebar-tools");
       const sidebar = await getRect(page, "#sidebar-panel");
 
       expect(header.top).toBeGreaterThanOrEqual(sidebar.top);
       expect(search.top).toBeGreaterThanOrEqual(header.bottom - 1);
       expect(tree.top).toBeGreaterThanOrEqual(search.bottom - 1);
-      expect(footer.top).toBeGreaterThanOrEqual(tree.bottom - 1);
-      expect(footer.bottom).toBeLessThanOrEqual(Math.min(sidebar.bottom, viewport.height) + 1);
+      expect(tools.top).toBeGreaterThanOrEqual(tree.bottom - 1);
+      expect(tools.bottom).toBeLessThanOrEqual(Math.min(sidebar.bottom, viewport.height) + 1);
       expect(tree.height).toBeGreaterThan(80);
-      expect(footer.top).toBeGreaterThanOrEqual(tree.top + 80);
 
       const rowState = await page.locator("#tree-root").evaluate(() => {
         const host = document.querySelector("#tree-root file-tree-container");
@@ -224,7 +223,14 @@ test.describe("responsive Trees sidebar layout", () => {
         const rowRect = firstRow?.getBoundingClientRect();
         const contentRect = content?.getBoundingClientRect();
         const decorationRect = decoration?.getBoundingClientRect();
+        const fileIcon = firstRow?.querySelector(
+          '[data-item-section="icon"]',
+        ) as HTMLElement | null;
         return {
+          fileIconDisplay: fileIcon ? getComputedStyle(fileIcon).display : "missing",
+          itemPadding: host
+            ? getComputedStyle(host).getPropertyValue("--trees-item-padding-x-override")
+            : "",
           path: firstRow?.dataset.itemPath ?? "",
           text: firstRow?.textContent ?? "",
           rowWithinTree:
@@ -239,6 +245,8 @@ test.describe("responsive Trees sidebar layout", () => {
 
       expect(rowState.path).not.toContain(".md");
       expect(rowState.text).not.toContain(".md");
+      expect(rowState.fileIconDisplay).toBe("none");
+      expect(rowState.itemPadding.trim()).toBe("8px");
       expect(rowState.rowWithinTree).toBe(true);
       expect(rowState.lanesDoNotOverlap).toBe(true);
 
