@@ -4,6 +4,17 @@ const CONTROL_CHARS_RE = /[\u0000-\u001f\u007f]/g;
 const PATH_SEPARATOR_RE = /[\\/]+/g;
 const WHITESPACE_RE = /\s+/g;
 
+/** @typedef {import("./contracts").RuntimeManifestDoc} RuntimeManifestDoc */
+/** @typedef {import("./contracts").RuntimeTreeFileNode} RuntimeTreeFileNode */
+/** @typedef {import("./contracts").RuntimeTreeNode} RuntimeTreeNode */
+/** @typedef {import("./contracts").TreePathMetadata} TreePathMetadata */
+/** @typedef {import("./contracts").TreesAdapterInput} TreesAdapterInput */
+
+/**
+ * @param {unknown} value
+ * @param {string} fallback
+ * @returns {string}
+ */
 function normalizeTreeSegment(value, fallback) {
   const normalized = String(value ?? "")
     .replace(CONTROL_CHARS_RE, "")
@@ -14,10 +25,16 @@ function normalizeTreeSegment(value, fallback) {
   return normalized || fallback;
 }
 
+/** @param {string} value */
 function trimFileExtension(value) {
   return value.replace(/\.md$/i, "");
 }
 
+/**
+ * @param {string} parentPath
+ * @param {unknown} segment
+ * @param {boolean} isDirectory
+ */
 function joinTreePath(parentPath, segment, isDirectory) {
   const cleanParent = parentPath.replace(/\/+$/, "");
   const cleanSegment = normalizeTreeSegment(segment, "Untitled");
@@ -25,6 +42,10 @@ function joinTreePath(parentPath, segment, isDirectory) {
   return isDirectory ? `${joined}${DIRECTORY_SUFFIX}` : joined;
 }
 
+/**
+ * @param {string} pathValue
+ * @param {number} counter
+ */
 function appendCollisionSuffix(pathValue, counter) {
   const suffix = ` (${counter})`;
   if (pathValue.endsWith(DIRECTORY_SUFFIX)) {
@@ -39,6 +60,10 @@ function appendCollisionSuffix(pathValue, counter) {
   return `${pathValue}${suffix}`;
 }
 
+/**
+ * @param {string} pathValue
+ * @param {Set<string>} usedPaths
+ */
 function makeUniquePath(pathValue, usedPaths) {
   if (!usedPaths.has(pathValue)) {
     return pathValue;
@@ -53,6 +78,10 @@ function makeUniquePath(pathValue, usedPaths) {
   return candidate;
 }
 
+/**
+ * @param {RuntimeTreeFileNode} node
+ * @param {RuntimeManifestDoc | undefined} doc
+ */
 export function formatTreesFileBasename(node, doc) {
   const fallbackTitle = trimFileExtension(node?.name ? String(node.name) : "Untitled");
   const rawTitle = typeof node?.title === "string" && node.title.trim() ? node.title : doc?.title;
@@ -61,7 +90,13 @@ export function formatTreesFileBasename(node, doc) {
   return `${prefix ? `${prefix} ` : ""}${title}`;
 }
 
+/**
+ * @param {RuntimeTreeNode[]} treeNodes
+ * @param {RuntimeManifestDoc[]} [docs]
+ * @returns {TreesAdapterInput}
+ */
 export function buildTreesAdapterInput(treeNodes, docs = []) {
+  /** @type {Map<string, RuntimeManifestDoc>} */
   const docById = new Map();
   for (const doc of Array.isArray(docs) ? docs : []) {
     if (typeof doc?.id === "string" && doc.id) {
@@ -69,14 +104,25 @@ export function buildTreesAdapterInput(treeNodes, docs = []) {
     }
   }
 
+  /** @type {string[]} */
   const paths = [];
+  /** @type {Set<string>} */
   const usedPaths = new Set();
+  /** @type {Map<string, TreePathMetadata>} */
   const metadataByTreePath = new Map();
+  /** @type {Map<string, string>} */
   const treePathToDocId = new Map();
+  /** @type {Map<string, string>} */
   const treePathToRoute = new Map();
+  /** @type {Map<string, string[]>} */
   const docIdToTreePaths = new Map();
+  /** @type {Map<string, string>} */
   const docIdToPrimaryTreePath = new Map();
 
+  /**
+   * @param {string} pathValue
+   * @param {TreePathMetadata} metadata
+   */
   const registerPath = (pathValue, metadata) => {
     const treePath = makeUniquePath(pathValue, usedPaths);
     usedPaths.add(treePath);
@@ -85,6 +131,11 @@ export function buildTreesAdapterInput(treeNodes, docs = []) {
     return treePath;
   };
 
+  /**
+   * @param {string} treePath
+   * @param {RuntimeTreeFileNode} node
+   * @param {RuntimeManifestDoc | undefined} doc
+   */
   const registerDocPath = (treePath, node, doc) => {
     const docId = typeof node?.id === "string" ? node.id : "";
     if (!docId) {
@@ -109,6 +160,10 @@ export function buildTreesAdapterInput(treeNodes, docs = []) {
     }
   };
 
+  /**
+   * @param {RuntimeTreeNode[]} nodes
+   * @param {string} [parentPath]
+   */
   const walk = (nodes, parentPath = "") => {
     if (!Array.isArray(nodes)) {
       return;

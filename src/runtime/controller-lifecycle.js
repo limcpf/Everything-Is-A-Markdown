@@ -1,4 +1,8 @@
+/** @typedef {import("./contracts").EventScope} EventScope */
+
+/** @returns {EventScope} */
 export function createEventScope() {
+  /** @type {Array<{ target: EventTarget; type: string; listener: EventListenerOrEventListenerObject; options?: boolean | AddEventListenerOptions }>} */
   const subscriptions = [];
 
   return {
@@ -12,6 +16,9 @@ export function createEventScope() {
     cleanup() {
       while (subscriptions.length > 0) {
         const subscription = subscriptions.pop();
+        if (!subscription) {
+          continue;
+        }
         subscription.target.removeEventListener(
           subscription.type,
           subscription.listener,

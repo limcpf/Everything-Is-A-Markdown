@@ -10,12 +10,23 @@ const DESKTOP_SPLITTER_STEP = 24;
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** @typedef {import("./contracts").EventScope} EventScope */
+/** @typedef {import("./contracts").RuntimeWindow} RuntimeWindow */
+/** @typedef {import("./contracts").SidebarLayoutController} SidebarLayoutController */
+
+/**
+ * @param {ParentNode | null} container
+ * @param {RuntimeWindow} windowRef
+ * @returns {HTMLElement[]}
+ */
 function getFocusableElements(container, windowRef) {
   if (!container) {
     return [];
   }
 
+  /** @type {HTMLElement[]} */
   const candidates = [];
+  /** @param {ParentNode} root */
   const collect = (root) => {
     for (const element of root.querySelectorAll("*")) {
       if (!(element instanceof windowRef.HTMLElement)) {
@@ -49,6 +60,10 @@ function getFocusableElements(container, windowRef) {
   });
 }
 
+/**
+ * @param {number} width
+ * @param {number} viewportWidth
+ */
 export function clampDesktopSidebarWidth(width, viewportWidth) {
   const max = Math.max(
     DESKTOP_SIDEBAR_MIN,
@@ -57,6 +72,16 @@ export function clampDesktopSidebarWidth(width, viewportWidth) {
   return Math.min(Math.max(width, DESKTOP_SIDEBAR_MIN), max);
 }
 
+/**
+ * @param {{
+ *   documentRef?: Document;
+ *   windowRef?: RuntimeWindow;
+ *   storage?: Storage;
+ *   requestTreeLoad?: (reason: string) => Promise<boolean>;
+ *   closeSettings?: () => void;
+ * }} [options]
+ * @returns {SidebarLayoutController & { open(): void }}
+ */
 export function createSidebarLayoutController(options = {}) {
   const documentRef = options.documentRef ?? globalThis.document;
   const windowRef = options.windowRef ?? globalThis.window;
@@ -71,8 +96,10 @@ export function createSidebarLayoutController(options = {}) {
   const sidebarOverlay = documentRef.getElementById("sidebar-overlay");
   const viewer = documentRef.querySelector(".viewer");
   const compactMediaQuery = windowRef.matchMedia(COMPACT_LAYOUT_QUERY);
+  /** @type {EventScope | null} */
   let events = null;
   let desktopSidebarWidth = DESKTOP_SIDEBAR_DEFAULT;
+  /** @type {number | null} */
   let activeResizePointerId = null;
   let resizeStartX = 0;
   let resizeStartWidth = desktopSidebarWidth;
@@ -94,6 +121,7 @@ export function createSidebarLayoutController(options = {}) {
     splitter.setAttribute("aria-disabled", String(isCompact()));
   };
 
+  /** @param {boolean} persist */
   const syncDesktopSidebarWidth = (persist) => {
     desktopSidebarWidth = clampDesktopSidebarWidth(desktopSidebarWidth, windowRef.innerWidth);
     if (appRoot instanceof windowRef.HTMLElement) {
@@ -109,6 +137,7 @@ export function createSidebarLayoutController(options = {}) {
     }
   };
 
+  /** @param {boolean} isInteractive */
   const setViewerInteractiveState = (isInteractive) => {
     if (!(viewer instanceof windowRef.HTMLElement)) {
       return;
@@ -122,6 +151,7 @@ export function createSidebarLayoutController(options = {}) {
     }
   };
 
+  /** @param {boolean} isOpen */
   const syncSidebarA11y = (isOpen) => {
     sidebarToggle?.setAttribute("aria-expanded", String(isOpen));
     sidebarOverlay?.setAttribute("aria-hidden", String(!isOpen));
@@ -183,6 +213,7 @@ export function createSidebarLayoutController(options = {}) {
     }
   };
 
+  /** @param {boolean} requestDesktopTreeLoad */
   const syncLayout = (requestDesktopTreeLoad) => {
     close();
     if (!isCompact()) {
@@ -203,7 +234,11 @@ export function createSidebarLayoutController(options = {}) {
     syncLayout(true);
   };
 
+  /** @param {Event} event */
   const beginSplitterResize = (event) => {
+    if (!(event instanceof windowRef.PointerEvent)) {
+      return;
+    }
     if (
       !(splitter instanceof windowRef.HTMLElement) ||
       !(appRoot instanceof windowRef.HTMLElement) ||
@@ -222,7 +257,11 @@ export function createSidebarLayoutController(options = {}) {
     splitter.setPointerCapture(event.pointerId);
   };
 
+  /** @param {Event} event */
   const updateSplitterResize = (event) => {
+    if (!(event instanceof windowRef.PointerEvent)) {
+      return;
+    }
     if (event.pointerId !== activeResizePointerId) {
       return;
     }
@@ -230,7 +269,11 @@ export function createSidebarLayoutController(options = {}) {
     syncDesktopSidebarWidth(false);
   };
 
+  /** @param {Event} event */
   const endSplitterResize = (event) => {
+    if (!(event instanceof windowRef.PointerEvent)) {
+      return;
+    }
     if (event.pointerId !== activeResizePointerId) {
       return;
     }
@@ -242,7 +285,11 @@ export function createSidebarLayoutController(options = {}) {
     syncDesktopSidebarWidth(true);
   };
 
+  /** @param {Event} event */
   const handleSplitterKeydown = (event) => {
+    if (!(event instanceof windowRef.KeyboardEvent)) {
+      return;
+    }
     if (isCompact()) {
       return;
     }
@@ -267,7 +314,11 @@ export function createSidebarLayoutController(options = {}) {
     syncDesktopSidebarWidth(true);
   };
 
+  /** @param {Event} event */
   const handleDocumentKeydown = (event) => {
+    if (!(event instanceof windowRef.KeyboardEvent)) {
+      return;
+    }
     if (event.key === "Escape" && appRoot?.classList?.contains("sidebar-open")) {
       close();
       return;

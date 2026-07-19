@@ -8,6 +8,23 @@ import {
 
 const DEFAULT_SITE_TITLE = "File-System Blog";
 
+/** @typedef {import("./contracts").InitialRuntimeData} InitialRuntimeData */
+/** @typedef {import("./contracts").InitialViewData} InitialViewData */
+/** @typedef {import("./contracts").RuntimeBootstrap} RuntimeBootstrap */
+/** @typedef {import("./contracts").RuntimeManifest} RuntimeManifest */
+
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
+function isRecord(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * @param {Document} [documentRef]
+ * @returns {InitialViewData | null}
+ */
 export function loadInitialViewData(documentRef = globalThis.document) {
   const script = documentRef.getElementById("initial-view-data");
   const raw = script?.textContent;
@@ -16,8 +33,9 @@ export function loadInitialViewData(documentRef = globalThis.document) {
   }
 
   try {
+    /** @type {unknown} */
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") {
+    if (!isRecord(parsed)) {
       return null;
     }
     const route = typeof parsed.route === "string" ? normalizeRoute(parsed.route) : null;
@@ -29,6 +47,10 @@ export function loadInitialViewData(documentRef = globalThis.document) {
   }
 }
 
+/**
+ * @param {{ documentRef?: Document; windowRef?: Window }} [options]
+ * @returns {InitialRuntimeData | null}
+ */
 export function loadInitialRuntimeData(options = {}) {
   const documentRef = options.documentRef ?? globalThis.document;
   const windowRef = options.windowRef ?? globalThis.window;
@@ -39,8 +61,9 @@ export function loadInitialRuntimeData(options = {}) {
   }
 
   try {
+    /** @type {unknown} */
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") {
+    if (!isRecord(parsed)) {
       return null;
     }
     const pathBase = normalizePathBase(parsed.pathBase);
@@ -50,6 +73,7 @@ export function loadInitialRuntimeData(options = {}) {
       return null;
     }
 
+    /** @type {URL} */
     let resolvedTreeModuleUrl;
     try {
       resolvedTreeModuleUrl = new URL(treeModuleUrl, documentRef.baseURI);
@@ -69,15 +93,20 @@ export function loadInitialRuntimeData(options = {}) {
   }
 }
 
+/** @param {RuntimeManifest} manifest */
 export function resolveSiteTitle(manifest) {
   const value = typeof manifest?.siteTitle === "string" ? manifest.siteTitle.trim() : "";
   return value || DEFAULT_SITE_TITLE;
 }
 
+/**
+ * @param {{ documentRef?: Document; windowRef?: Window; fetchManifest?: (url: string) => Promise<Response> }} [options]
+ * @returns {Promise<RuntimeBootstrap>}
+ */
 export async function loadRuntimeBootstrap(options = {}) {
   const documentRef = options.documentRef ?? globalThis.document;
   const windowRef = options.windowRef ?? globalThis.window;
-  const fetchManifest = options.fetchManifest ?? ((url) => globalThis.fetch(url));
+  const fetchManifest = options.fetchManifest ?? ((/** @type {string} */ url) => globalThis.fetch(url));
   const initialViewData = loadInitialViewData(documentRef);
   const initialRuntimeData = loadInitialRuntimeData({ documentRef, windowRef });
   const initialPathBase = normalizePathBase(initialRuntimeData?.pathBase);

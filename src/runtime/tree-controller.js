@@ -4,15 +4,42 @@ import { pickHomeRoute, resolveRouteFromLocation, toPathWithBase } from "./navig
 const BRANCH_KEY = "fsblog.branch";
 const TREE_RUNTIME_STATE_ATTR = "data-tree-runtime";
 
+/**
+ * @typedef {import("@pierre/trees").ContextMenuItem} ContextMenuItem
+ * @typedef {import("@pierre/trees").ContextMenuOpenContext} ContextMenuOpenContext
+ * @typedef {import("@pierre/trees").FileTree} FileTree
+ * @typedef {import("@pierre/trees").FileTreeRowDecorationContext} FileTreeRowDecorationContext
+ * @typedef {import("@pierre/trees").FileTreeSortEntry} FileTreeSortEntry
+ * @typedef {import("./contracts").EventScope} EventScope
+ * @typedef {import("./contracts").TreeController} TreeController
+ * @typedef {import("./contracts").TreeControllerOptions} TreeControllerOptions
+ * @typedef {import("./contracts").TreeLabelHost} TreeLabelHost
+ * @typedef {import("./contracts").TreePathMetadata} TreePathMetadata
+ * @typedef {import("./contracts").TreeRuntimeModule} TreeRuntimeModule
+ * @typedef {import("./contracts").RuntimeWindow} RuntimeWindow
+ */
+
+/**
+ * @param {unknown} value
+ * @param {string} [fallback]
+ */
 function normalizeTreeLabelText(value, fallback = "") {
   const normalized = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
   return normalized || fallback;
 }
 
+/**
+ * @param {TreeLabelHost | null | undefined} host
+ * @returns {ParentNode | null}
+ */
 function getTreeLabelRenderRoot(host) {
   return host?.shadowRoot || host || null;
 }
 
+/**
+ * @param {TreeLabelHost | null | undefined} host
+ * @param {Document} documentRef
+ */
 function decorateTreeLabels(host, documentRef) {
   const metadataByTreePath = host?.__eiamMetadataByTreePath;
   if (!(metadataByTreePath instanceof Map)) {
@@ -42,6 +69,7 @@ function decorateTreeLabels(host, documentRef) {
         : fallbackName;
     const title = normalizeTreeLabelText(metadata.title, fallbackTitle);
     const labelKey = JSON.stringify([prefix, title]);
+    /** @type {HTMLElement | null} */
     const content = row.querySelector("[data-item-section='content']");
     if (!content || content.dataset.eiamTreeLabel === labelKey) {
       continue;
@@ -66,6 +94,11 @@ function decorateTreeLabels(host, documentRef) {
   }
 }
 
+/**
+ * @param {TreeLabelHost | null | undefined} host
+ * @param {Document} documentRef
+ * @param {RuntimeWindow} windowRef
+ */
 function queueTreeLabelDecoration(host, documentRef, windowRef) {
   if (!host) {
     return;
@@ -79,6 +112,12 @@ function queueTreeLabelDecoration(host, documentRef, windowRef) {
   });
 }
 
+/**
+ * @param {TreeLabelHost | null | undefined} host
+ * @param {Map<string, TreePathMetadata>} metadataByTreePath
+ * @param {Document} documentRef
+ * @param {RuntimeWindow} windowRef
+ */
 function setupTreeLabelDecorations(host, metadataByTreePath, documentRef, windowRef) {
   if (!host) {
     return;
@@ -99,6 +138,10 @@ function setupTreeLabelDecorations(host, metadataByTreePath, documentRef, window
   queueTreeLabelDecoration(host, documentRef, windowRef);
 }
 
+/**
+ * @param {TreeLabelHost | null | undefined} host
+ * @param {RuntimeWindow} windowRef
+ */
 function cleanupTreeLabelDecorations(host, windowRef) {
   if (!host) {
     return;
@@ -113,6 +156,26 @@ function cleanupTreeLabelDecorations(host, windowRef) {
   delete host.__eiamMetadataByTreePath;
 }
 
+/**
+ * @param {unknown} value
+ * @returns {value is TreeRuntimeModule}
+ */
+function isTreeRuntimeModule(value) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = /** @type {Record<string, unknown>} */ (value);
+  return (
+    typeof candidate.FileTree === "function" &&
+    typeof candidate.prepareFileTreeInput === "function" &&
+    typeof candidate.TREE_UNSAFE_CSS === "string"
+  );
+}
+
+/**
+ * @param {TreeControllerOptions} options
+ * @returns {TreeController}
+ */
 export function createTreeController(options) {
   const {
     navigation,
@@ -126,30 +189,48 @@ export function createTreeController(options) {
     storage = globalThis.localStorage,
   } = options;
   const treeRoot = documentRef.getElementById("tree-root");
-  const treeSearchInput = documentRef.getElementById("tree-search-input");
-  const treeSearchClear = documentRef.getElementById("tree-search-clear");
-  const treeSearchPrev = documentRef.getElementById("tree-search-prev");
-  const treeSearchNext = documentRef.getElementById("tree-search-next");
+  const treeSearchInput = /** @type {HTMLInputElement | null} */ (
+    documentRef.getElementById("tree-search-input")
+  );
+  const treeSearchClear = /** @type {HTMLButtonElement | null} */ (
+    documentRef.getElementById("tree-search-clear")
+  );
+  const treeSearchPrev = /** @type {HTMLButtonElement | null} */ (
+    documentRef.getElementById("tree-search-prev")
+  );
+  const treeSearchNext = /** @type {HTMLButtonElement | null} */ (
+    documentRef.getElementById("tree-search-next")
+  );
   const treeSearchCount = documentRef.getElementById("tree-search-count");
   const sidebarBranchPills = documentRef.getElementById("sidebar-branch-pills");
   const sidebarBranchInfo = documentRef.getElementById("sidebar-branch-info");
+  /** @type {EventScope | null} */
   let events = null;
+  /** @type {FileTree | null} */
   let fileTree = null;
   let isSyncingTreeSelection = false;
+  /** @type {Map<string, number>} */
   let treePathOrder = new Map();
   let treeSearchValue = "";
   let renderedTreeBranch = "";
+  /** @type {TreeRuntimeModule | null} */
   let treeRuntime = null;
+  /** @type {Promise<boolean> | null} */
   let treeLoadPromise = null;
   let treeRetryCount = 0;
   let treeLoadAllowed = false;
   let pendingTreeLoadReason = "";
   let lifecycleGeneration = 0;
+  /** @type {number | null} */
   let deferredFrame = null;
+  /** @type {number | null} */
   let paintFrame = null;
+  /** @type {number | null} */
   let idleHandle = null;
+  /** @type {number | null} */
   let idleFallbackTimer = null;
 
+  /** @param {string} state */
   const setTreeRuntimeState = (state) => {
     documentRef.documentElement?.setAttribute(TREE_RUNTIME_STATE_ATTR, state);
   };
@@ -178,6 +259,9 @@ export function createTreeController(options) {
           : `publish: true · ${navigation.activeBranch} only`;
     }
     for (const pill of sidebarBranchPills?.querySelectorAll(".branch-pill") ?? []) {
+      if (!(pill instanceof windowRef.HTMLElement)) {
+        continue;
+      }
       const isActive = pill.dataset.branch === navigation.activeBranch;
       pill.classList.toggle("is-active", isActive);
       pill.setAttribute("aria-pressed", String(isActive));
@@ -203,6 +287,7 @@ export function createTreeController(options) {
     }
   };
 
+  /** @param {string} value */
   const applyTreeSearch = (value) => {
     treeSearchValue = value;
     if (treeSearchInput && treeSearchInput.value !== value) {
@@ -223,6 +308,7 @@ export function createTreeController(options) {
     updateTreeSearchControls();
   };
 
+  /** @param {number} direction */
   const moveTreeSearchFocus = (direction) => {
     if (!fileTree || !fileTree.isSearchOpen() || fileTree.getSearchMatchingPaths().length === 0) {
       return;
@@ -235,6 +321,10 @@ export function createTreeController(options) {
     updateTreeSearchControls();
   };
 
+  /**
+   * @param {string} docId
+   * @param {{ scroll?: boolean }} [options]
+   */
   const syncActiveSelection = (docId, { scroll = true } = {}) => {
     if (!fileTree || !docId) {
       return;
@@ -281,7 +371,9 @@ export function createTreeController(options) {
   };
 
   const destroyFileTree = () => {
-    const host = treeRoot?.querySelector("file-tree-container");
+    const host = /** @type {TreeLabelHost | null} */ (
+      treeRoot?.querySelector("file-tree-container") ?? null
+    );
     cleanupTreeLabelDecorations(host, windowRef);
     fileTree?.cleanUp?.();
     fileTree = null;
@@ -289,6 +381,10 @@ export function createTreeController(options) {
     host?.remove();
   };
 
+  /**
+   * @param {FileTreeSortEntry} left
+   * @param {FileTreeSortEntry} right
+   */
   const compareTreesByBranchOrder = (left, right) => {
     const leftIndex = treePathOrder.get(left.path) ?? Number.MAX_SAFE_INTEGER;
     const rightIndex = treePathOrder.get(right.path) ?? Number.MAX_SAFE_INTEGER;
@@ -310,6 +406,7 @@ export function createTreeController(options) {
     });
   };
 
+  /** @param {FileTreeRowDecorationContext} context */
   const renderTreeRowDecoration = ({ item }) => {
     const metadata = navigation.view.trees.metadataByTreePath.get(item.path);
     if (metadata?.kind !== "file" || metadata.isNew !== true) {
@@ -318,6 +415,10 @@ export function createTreeController(options) {
     return { text: "NEW", title: "New document" };
   };
 
+  /**
+   * @param {ContextMenuItem} item
+   * @param {ContextMenuOpenContext} context
+   */
   const renderTreeContextMenu = (item, context) => {
     const route = navigation.view.trees.treePathToRoute.get(item.path);
     if (!route) {
@@ -428,7 +529,9 @@ export function createTreeController(options) {
     syncActiveSelection(navigation.currentDocId || "");
     applyTreeSearch(treeSearchValue);
     setupTreeLabelDecorations(
-      treeRoot.querySelector("file-tree-container"),
+      /** @type {TreeLabelHost | null} */ (
+        treeRoot.querySelector("file-tree-container")
+      ),
       navigation.view.trees.metadataByTreePath,
       documentRef,
       windowRef,
@@ -446,6 +549,7 @@ export function createTreeController(options) {
     treeRoot.replaceChildren(status);
   };
 
+  /** @param {unknown} error */
   const renderTreeFallback = (error) => {
     if (!treeRoot) {
       return;
@@ -494,6 +598,10 @@ export function createTreeController(options) {
     treeRoot.replaceChildren(fallback);
   };
 
+  /**
+   * @param {{ reason: string; retry?: boolean }} loadOptions
+   * @returns {Promise<boolean>}
+   */
   function loadTreeRuntime({ reason, retry = false }) {
     if (treeRuntime) {
       renderTree();
@@ -522,16 +630,13 @@ export function createTreeController(options) {
     renderTreeLoadingState();
     windowRef.performance?.mark?.("eiam-tree-load-start");
     const generationAtLoad = lifecycleGeneration;
+    /** @type {Promise<boolean>} */
     const pending = import(importUrl.href)
-      .then((module) => {
+      .then((/** @type {unknown} */ module) => {
         if (!events || generationAtLoad !== lifecycleGeneration) {
           return false;
         }
-        if (
-          typeof module.FileTree !== "function" ||
-          typeof module.prepareFileTreeInput !== "function" ||
-          typeof module.TREE_UNSAFE_CSS !== "string"
-        ) {
+        if (!isTreeRuntimeModule(module)) {
           throw new Error("Tree runtime exports are invalid");
         }
         treeRuntime = module;
@@ -541,7 +646,7 @@ export function createTreeController(options) {
         windowRef.performance?.mark?.("eiam-tree-ready");
         return true;
       })
-      .catch((error) => {
+      .catch((/** @type {unknown} */ error) => {
         if (!events || generationAtLoad !== lifecycleGeneration) {
           return false;
         }
@@ -563,6 +668,11 @@ export function createTreeController(options) {
     return pending;
   }
 
+  /**
+   * @param {string} reason
+   * @param {{ retry?: boolean }} [requestOptions]
+   * @returns {Promise<boolean>}
+   */
   function requestLoad(reason, requestOptions = {}) {
     if (!treeLoadAllowed) {
       pendingTreeLoadReason = reason;
@@ -572,6 +682,7 @@ export function createTreeController(options) {
     return loadTreeRuntime({ reason, retry: requestOptions.retry === true });
   }
 
+  /** @param {string} branch */
   const handleBranchChange = (branch) => {
     storage.setItem(BRANCH_KEY, branch);
     updateBranchInfo();
@@ -580,6 +691,7 @@ export function createTreeController(options) {
     }
   };
 
+  /** @param {unknown} nextBranch */
   const setActiveBranch = async (nextBranch) => {
     if (!navigation.setActiveBranch(nextBranch)) {
       return false;
@@ -595,13 +707,14 @@ export function createTreeController(options) {
     return true;
   };
 
+  /** @param {Event} event */
   const handleBranchPillClick = (event) => {
     const target = event.target;
     if (!(target instanceof windowRef.Element)) {
       return;
     }
     const pill = target.closest(".branch-pill");
-    if (!pill || !sidebarBranchPills?.contains(pill)) {
+    if (!(pill instanceof windowRef.HTMLElement) || !sidebarBranchPills?.contains(pill)) {
       return;
     }
     void setActiveBranch(pill.dataset.branch);
@@ -611,14 +724,18 @@ export function createTreeController(options) {
     void requestLoad("tree-search");
   };
   const handleSearchInput = () => {
-    applyTreeSearch(treeSearchInput.value);
+    applyTreeSearch(treeSearchInput?.value ?? "");
     void requestLoad("tree-search");
   };
+  /** @param {Event} event */
   const handleSearchKeydown = (event) => {
+    if (!(event instanceof windowRef.KeyboardEvent)) {
+      return;
+    }
     if (event.key === "Enter") {
       event.preventDefault();
       moveTreeSearchFocus(event.shiftKey ? -1 : 1);
-    } else if (event.key === "Escape" && treeSearchInput.value.trim()) {
+    } else if (event.key === "Escape" && treeSearchInput?.value.trim()) {
       event.preventDefault();
       event.stopPropagation();
       applyTreeSearch("");

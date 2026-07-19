@@ -1,37 +1,62 @@
 const CURRENT_SCHEMA_VERSION = 2;
 
+/** @typedef {import("./contracts").RuntimeManifest} RuntimeManifest */
+/** @typedef {import("./contracts").RuntimeManifestDoc} RuntimeManifestDoc */
+/** @typedef {{ docIds: string[]; docsById: Record<string, Record<string, unknown> & { id: string }> }} NormalizedDocIndex */
+
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
 function isRecord(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown> & { tree: unknown[]; routeMap: Record<string, unknown> }}
+ */
 function hasManifestEnvelope(value) {
   return isRecord(value) && Array.isArray(value.tree) && isRecord(value.routeMap);
 }
 
+/**
+ * @param {unknown} docs
+ * @returns {NormalizedDocIndex | null}
+ */
 function collectLegacyDocs(docs) {
   if (!Array.isArray(docs)) {
     return null;
   }
 
+  /** @type {string[]} */
   const docIds = [];
+  /** @type {Record<string, Record<string, unknown> & { id: string }>} */
   const docsById = Object.create(null);
   for (const doc of docs) {
     if (!isRecord(doc) || typeof doc.id !== "string" || !doc.id || Object.hasOwn(docsById, doc.id)) {
       return null;
     }
     docIds.push(doc.id);
-    docsById[doc.id] = doc;
+    docsById[doc.id] = /** @type {Record<string, unknown> & { id: string }} */ (doc);
   }
 
   return { docIds, docsById };
 }
 
+/**
+ * @param {unknown} docIdsInput
+ * @param {unknown} docsByIdInput
+ * @returns {NormalizedDocIndex | null}
+ */
 function collectCurrentDocs(docIdsInput, docsByIdInput) {
   if (!Array.isArray(docIdsInput) || !isRecord(docsByIdInput)) {
     return null;
   }
 
+  /** @type {string[]} */
   const docIds = [];
+  /** @type {Record<string, Record<string, unknown> & { id: string }>} */
   const docsById = Object.create(null);
   for (const id of docIdsInput) {
     if (
@@ -48,7 +73,7 @@ function collectCurrentDocs(docIdsInput, docsByIdInput) {
       return null;
     }
     docIds.push(id);
-    docsById[id] = doc;
+    docsById[id] = /** @type {Record<string, unknown> & { id: string }} */ (doc);
   }
 
   if (Object.keys(docsByIdInput).length !== docIds.length) {
@@ -58,6 +83,10 @@ function collectCurrentDocs(docIdsInput, docsByIdInput) {
   return { docIds, docsById };
 }
 
+/**
+ * @param {unknown} value
+ * @returns {RuntimeManifest | null}
+ */
 export function normalizeManifestPayload(value) {
   if (!hasManifestEnvelope(value)) {
     return null;
@@ -77,13 +106,19 @@ export function normalizeManifestPayload(value) {
   }
 
   const { docs: _legacyDocs, ...manifest } = value;
-  return {
-    ...manifest,
-    schemaVersion: CURRENT_SCHEMA_VERSION,
-    ...normalizedDocs,
-  };
+  return /** @type {RuntimeManifest} */ (
+    /** @type {unknown} */ ({
+      ...manifest,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      ...normalizedDocs,
+    })
+  );
 }
 
+/**
+ * @param {RuntimeManifest | null | undefined} manifest
+ * @returns {import("../types").ManifestDoc[]}
+ */
 export function getManifestDocs(manifest) {
   if (!manifest || !Array.isArray(manifest.docIds) || !isRecord(manifest.docsById)) {
     return [];
@@ -91,9 +126,15 @@ export function getManifestDocs(manifest) {
   return manifest.docIds.map((id) => manifest.docsById[id]).filter(Boolean);
 }
 
+/**
+ * @param {RuntimeManifest | null | undefined} manifest
+ * @param {number} [nowMs]
+ * @returns {RuntimeManifestDoc[]}
+ */
 export function getRuntimeManifestDocs(manifest, nowMs = Date.now()) {
-  const newWithinDays = Number.isFinite(manifest?.ui?.newWithinDays)
-    ? Math.max(0, Number(manifest.ui.newWithinDays))
+  const configuredNewWithinDays = manifest?.ui?.newWithinDays;
+  const newWithinDays = Number.isFinite(configuredNewWithinDays)
+    ? Math.max(0, Number(configuredNewWithinDays))
     : 0;
   const threshold = nowMs - newWithinDays * 24 * 60 * 60 * 1000;
 
