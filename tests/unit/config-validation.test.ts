@@ -22,6 +22,7 @@ describe("user config validation", () => {
       {
         vaultDir: "./vault",
         outDir: "./site",
+        defaultBranch: " Main ",
         exclude: ["private/**"],
         staticPaths: ["./assets/", "assets", "public/favicon.ico"],
         pinnedMenu: {
@@ -70,6 +71,7 @@ describe("user config validation", () => {
     expect(config).toMatchObject({
       vaultDir: "./vault",
       outDir: "./site",
+      defaultBranch: "main",
       exclude: ["private/**"],
       staticPaths: ["assets", "public/favicon.ico"],
       pinnedMenu: {
@@ -149,6 +151,12 @@ export const ui = { newWithinDays: 2, recentLimit: 9 };
     },
     { name: "vaultDir", config: { vaultDir: 42 }, field: "vaultDir", receivedType: "number" },
     { name: "outDir", config: { outDir: null }, field: "outDir", receivedType: "null" },
+    {
+      name: "defaultBranch",
+      config: { defaultBranch: 42 },
+      field: "defaultBranch",
+      receivedType: "number",
+    },
     {
       name: "exclude array",
       config: { exclude: "private/**" },
@@ -421,6 +429,15 @@ export const ui = { newWithinDays: 2, recentLimit: 9 };
     });
   });
 
+  test("rejects an empty defaultBranch and normalizes a configured branch", () => {
+    expect(() => validateUserConfig({ defaultBranch: "   " }, () => {})).toThrow(
+      '"defaultBranch" must be a non-empty string',
+    );
+    expect(validateUserConfig({ defaultBranch: " Release " }, () => {})).toEqual({
+      defaultBranch: "release",
+    });
+  });
+
   test("validates the complete user config even when CLI values would override it", () => {
     expect(() =>
       resolveBuildOptions(
@@ -448,7 +465,12 @@ export const ui = { newWithinDays: 2, recentLimit: 9 };
     expect(options.vaultDir).toBe(path.join("/workspace", "vault"));
     expect(options.outDir).toBe(path.join("/workspace", "site"));
     expect(options.exclude).toEqual([".obsidian/**", "private/**", "drafts/**"]);
+    expect(options.defaultBranch).toBe("dev");
     expect(options.siteTitle).toBe("Notes without canonical URLs");
+    expect(options.layout).toMatchObject({
+      compactBreakpointPx: 1024,
+      desktopSidebarDefaultPx: 420,
+    });
     expect(options.seo).toBeNull();
   });
 });

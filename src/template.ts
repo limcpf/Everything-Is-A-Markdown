@@ -1,8 +1,8 @@
 import { escapeHtmlAttribute } from "./seo";
+import { DEFAULT_SITE_TITLE } from "./defaults";
 import type { Manifest } from "./types";
 import { toViewPathWithBase } from "./view-contract";
 
-const DEFAULT_TITLE = "File-System Blog";
 const DEFAULT_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
 
 export interface AppShellMeta {
@@ -77,7 +77,7 @@ function stringifyJsonLd(value: unknown): string {
 }
 
 function renderHeadMeta(meta: AppShellMeta): string {
-  const title = (meta.title ?? DEFAULT_TITLE).trim() || DEFAULT_TITLE;
+  const title = (meta.title ?? DEFAULT_SITE_TITLE).trim() || DEFAULT_SITE_TITLE;
   const description = typeof meta.description === "string" ? meta.description.trim() : "";
   const fallbackDescription = description || DEFAULT_DESCRIPTION;
   const canonicalUrl = typeof meta.canonicalUrl === "string" ? meta.canonicalUrl.trim() : "";
@@ -218,7 +218,7 @@ export function renderAppShellHtml(
   const appTitle =
     typeof manifest?.siteTitle === "string" && manifest.siteTitle.trim().length > 0
       ? manifest.siteTitle.trim()
-      : DEFAULT_TITLE;
+      : DEFAULT_SITE_TITLE;
   const initialTitle = initialView ? escapeHtmlAttribute(initialView.title) : "문서를 선택하세요";
   const initialBreadcrumb = initialView ? initialView.breadcrumbHtml : "";
   const initialMeta = initialView ? initialView.metaHtml : "";
@@ -386,7 +386,11 @@ ${runtimeBootstrapScript}
 `;
 }
 
-export function render404Html(assets: AppShellAssets = DEFAULT_ASSETS, homeHref = "/"): string {
+export function render404Html(
+  assets: AppShellAssets = DEFAULT_ASSETS,
+  homeHref = "/",
+  siteTitle = DEFAULT_SITE_TITLE,
+): string {
   const symbolFontStylesheet =
     "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap";
 
@@ -395,7 +399,7 @@ export function render404Html(assets: AppShellAssets = DEFAULT_ASSETS, homeHref 
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>404 - File-System Blog</title>
+    <title>404 - ${escapeHtmlAttribute(siteTitle.trim() || DEFAULT_SITE_TITLE)}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preload" as="style" href="${escapeHtmlAttribute(symbolFontStylesheet)}" />

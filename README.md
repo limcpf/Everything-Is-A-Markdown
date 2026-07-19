@@ -251,6 +251,7 @@ Example:
 export default {
   vaultDir: "./vault",
   outDir: "./dist",
+  defaultBranch: "dev",
   exclude: [".obsidian/**", "private/**"],
   staticPaths: ["assets", "public/favicon.ico"],
   pinnedMenu: {
@@ -297,6 +298,8 @@ export default {
 
 - `vaultDir`: default vault root.
 - `outDir`: default output directory.
+- `defaultBranch`: initial runtime branch, default `"dev"`; values are trimmed and normalized to
+  lowercase. Notes without a `branch` belong to this branch.
 - `exclude`: extra exclude globs.
 - `staticPaths`: vault-relative files or directories copied into output.
 - `pinnedMenu`: optional virtual folder shown above `Recent`.

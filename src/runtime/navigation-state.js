@@ -1,5 +1,6 @@
 import { getRuntimeManifestDocs } from "./manifest-adapter.js";
 import { buildTreesAdapterInput } from "./tree-adapter.js";
+import { DEFAULT_BRANCH } from "../defaults.ts";
 import {
   filterViewDocsByBranch,
   normalizeViewBranch as normalizeBranch,
@@ -10,8 +11,6 @@ import {
   stripViewPathBase as stripPathBase,
   toViewPathWithBase as toPathWithBase,
 } from "../view-contract.ts";
-
-const DEFAULT_BRANCH = "dev";
 
 /** @typedef {import("./contracts").BranchView} BranchView */
 /** @typedef {import("./contracts").NavigationState} NavigationState */

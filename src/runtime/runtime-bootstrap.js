@@ -1,12 +1,11 @@
 import { normalizeManifestPayload } from "./manifest-adapter.js";
+import { DEFAULT_SITE_TITLE } from "../defaults.ts";
 import {
   normalizePathBase,
   normalizeRoute,
   stripPathBase,
   toPathWithBase,
 } from "./navigation-state.js";
-
-const DEFAULT_SITE_TITLE = "File-System Blog";
 
 /** @typedef {import("./contracts").InitialRuntimeData} InitialRuntimeData */
 /** @typedef {import("./contracts").InitialViewData} InitialViewData */

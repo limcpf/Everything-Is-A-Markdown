@@ -75,10 +75,6 @@
   --content-image-frame-bg: linear-gradient(180deg, var(--latte-base), var(--latte-mantle));
   --mermaid-wide-max-width: 820px;
   --mermaid-tall-max-height: 560px;
-  --desktop-sidebar-default: 420px;
-  --desktop-sidebar-min: 320px;
-  --desktop-viewer-min: 680px;
-  --splitter-width: 10px;
 }
 
 :root[data-theme="dark"] {
@@ -1646,7 +1642,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 }
 
 /* Responsive */
-@media (max-width: 1024px) {
+@media (max-width: 0px /* eiam-compact-breakpoint */) {
   .app-root {
     grid-template-columns: 1fr;
   }
@@ -1664,8 +1660,8 @@ body.mobile-toggle-left .mobile-menu-toggle {
     height: 100dvh;
     max-height: 100dvh;
     width: 70vw;
-    min-width: 300px;
-    max-width: 560px;
+    min-width: var(--mobile-sidebar-min);
+    max-width: var(--mobile-sidebar-max);
     border-right: 1px solid var(--latte-surface0);
     border-bottom: 0;
     box-shadow: var(--sidebar-mobile-shadow);
@@ -1811,7 +1807,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   }
 }
 
-@media (max-width: 1024px) and (max-height: 640px) {
+@media (max-width: 0px /* eiam-compact-breakpoint */) and (max-height: 640px) {
   .sidebar-header {
     padding-top: 12px;
     padding-bottom: 10px;

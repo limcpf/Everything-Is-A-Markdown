@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { BuildOptions, DocRecord, Manifest } from "../types";
+import { DEFAULT_BRANCH, type RuntimeLayoutConfig } from "../defaults";
 import { buildCanonicalUrl } from "../seo";
 import { render404Html, renderAppShellHtml } from "../template";
 import type { AppShellAssets, AppShellInitialView, AppShellMeta } from "../template";
@@ -18,7 +19,6 @@ import type { OutputPhaseState, OutputWriteContext, RuntimeAssets } from "./cont
 import { OUTPUT_MARKER_FILE_NAME, resolveSiteTitle } from "./shared";
 
 const DEFAULT_SITE_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
-const DEFAULT_SITE_TITLE = "File-System Blog";
 
 function pickSeoImageDefaults(seo: BuildOptions["seo"]): {
   social: string | null;
@@ -61,7 +61,7 @@ function buildStructuredData(
   options: BuildOptions,
 ): unknown[] {
   const canonicalUrl = options.seo ? buildCanonicalUrl(route, options.seo) : undefined;
-  const siteName = options.seo?.siteName ?? options.seo?.defaultTitle ?? DEFAULT_SITE_TITLE;
+  const siteName = resolveSiteTitle(options);
 
   if (!doc) {
     const websiteSchema: Record<string, string> = {
@@ -267,6 +267,48 @@ function createMinimalTreeIconPlugin(): { plugin: Bun.BunPlugin; replacementCoun
   };
 }
 
+const COMPACT_BREAKPOINT_MARKER = "0px /* eiam-compact-breakpoint */";
+
+function createRuntimeCssDefaultsPlugin(layout: RuntimeLayoutConfig): {
+  plugin: Bun.BunPlugin;
+  replacementCount: () => number;
+} {
+  let replacements = 0;
+  const generatedDefaults = `:root {
+  --desktop-sidebar-default: ${layout.desktopSidebarDefaultPx}px;
+  --desktop-sidebar-min: ${layout.desktopSidebarMinPx}px;
+  --desktop-viewer-min: ${layout.desktopViewerMinPx}px;
+  --splitter-width: ${layout.splitterWidthPx}px;
+  --mobile-sidebar-min: ${layout.mobileSidebarMinPx}px;
+  --mobile-sidebar-max: ${layout.mobileSidebarMaxPx}px;
+}`;
+
+  return {
+    plugin: {
+      name: "eiam-runtime-css-defaults",
+      setup(builder) {
+        builder.onLoad({ filter: /app[.]css$/ }, async (args) => {
+          const source = await fs.readFile(args.path, "utf8");
+          replacements = source.split(COMPACT_BREAKPOINT_MARKER).length - 1;
+          if (replacements !== 2) {
+            throw new Error(
+              `Expected 2 compact breakpoint markers in app.css, found ${replacements}`,
+            );
+          }
+          return {
+            contents: `${generatedDefaults}\n${source.replaceAll(
+              COMPACT_BREAKPOINT_MARKER,
+              `${layout.compactBreakpointPx}px`,
+            )}`,
+            loader: "css",
+          };
+        });
+      },
+    },
+    replacementCount: () => replacements,
+  };
+}
+
 async function bundleRuntimeJs(
   entrypoint: string,
   options: { label: string; replaceTreeIcons: boolean },
@@ -307,12 +349,14 @@ async function bundleRuntimeJs(
   return runtimeJs;
 }
 
-async function bundleRuntimeCss(entrypoint: string): Promise<string> {
+async function bundleRuntimeCss(entrypoint: string, layout: RuntimeLayoutConfig): Promise<string> {
+  const runtimeCssDefaults = createRuntimeCssDefaultsPlugin(layout);
   const result = await Bun.build({
     entrypoints: [entrypoint],
     target: "browser",
     sourcemap: "none",
     minify: true,
+    plugins: [runtimeCssDefaults.plugin],
   });
 
   if (!result.success) {
@@ -328,11 +372,17 @@ async function bundleRuntimeCss(entrypoint: string): Promise<string> {
   if (!output) {
     throw new Error("Failed to bundle runtime app.css: no CSS output was produced");
   }
+  if (runtimeCssDefaults.replacementCount() !== 2) {
+    throw new Error("Failed to generate runtime CSS defaults");
+  }
 
   return output.text();
 }
 
-async function writeRuntimeAssets(context: OutputWriteContext): Promise<RuntimeAssets> {
+async function writeRuntimeAssets(
+  context: OutputWriteContext,
+  layout: RuntimeLayoutConfig,
+): Promise<RuntimeAssets> {
   const runtimeDir = path.join(import.meta.dir, "..", "runtime");
   const [runtimeJs, treeRuntimeJs, runtimeCss] = await Promise.all([
     bundleRuntimeJs(path.join(runtimeDir, "app.js"), {
@@ -343,7 +393,7 @@ async function writeRuntimeAssets(context: OutputWriteContext): Promise<RuntimeA
       label: "tree-runtime.js",
       replaceTreeIcons: true,
     }),
-    bundleRuntimeCss(path.join(runtimeDir, "app.css")),
+    bundleRuntimeCss(path.join(runtimeDir, "app.css"), layout),
   ]);
 
   const jsRelPath = `assets/app.${makeHash(runtimeJs).slice(0, 12)}.js`;
@@ -375,8 +425,8 @@ async function writeRuntimeAssets(context: OutputWriteContext): Promise<RuntimeA
 }
 
 function buildShellMeta(route: string, doc: DocRecord | null, options: BuildOptions): AppShellMeta {
-  const defaultTitle = options.seo?.defaultTitle ?? options.siteTitle ?? DEFAULT_SITE_TITLE;
   const siteTitle = resolveSiteTitle(options);
+  const defaultTitle = options.seo?.defaultTitle ?? siteTitle;
   const defaultDescription = options.seo?.defaultDescription ?? DEFAULT_SITE_DESCRIPTION;
   const description =
     typeof doc?.description === "string" && doc.description.trim().length > 0
@@ -420,7 +470,7 @@ function buildInitialView(
 ): AppShellInitialView {
   const manifestDoc = manifestDocById.get(doc.id);
   const activeBranch =
-    normalizeViewBranch(doc.branch) ?? normalizeViewBranch(defaultBranch) ?? "dev";
+    normalizeViewBranch(doc.branch) ?? normalizeViewBranch(defaultBranch) ?? DEFAULT_BRANCH;
   const visibleDocs = filterViewDocsByBranch(docs, activeBranch, defaultBranch);
   const chrome = renderViewChrome({
     route: doc.route,
@@ -480,6 +530,7 @@ async function writeShellPages(
     render404Html(
       buildAppShellAssetsForOutput("404.html", runtimeAssets),
       toViewPathWithBase("/", pathBase),
+      resolveSiteTitle(options),
     ),
   );
 
@@ -569,7 +620,7 @@ export async function prepareOutputPhase(
     previousHashes,
     nextHashes: {},
   };
-  const runtimeAssets = await writeRuntimeAssets(context);
+  const runtimeAssets = await writeRuntimeAssets(context, options.layout);
   await copyStaticPaths(context, options);
   return { context, runtimeAssets };
 }

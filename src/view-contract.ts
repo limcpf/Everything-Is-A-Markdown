@@ -1,5 +1,4 @@
-const DEFAULT_BRANCH = "dev";
-const DEFAULT_SITE_TITLE = "File-System Blog";
+import { DEFAULT_BRANCH, DEFAULT_SITE_TITLE } from "./defaults";
 
 export interface ViewBacklinkContract {
   route?: unknown;

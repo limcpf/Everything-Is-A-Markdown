@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { inspectBuildStorage } from "../../src/build/storage";
+import { DEFAULT_RUNTIME_LAYOUT } from "../../src/defaults";
 import type { BuildOptions } from "../../src/types";
 
 const temporaryRoots: string[] = [];
@@ -27,6 +28,7 @@ async function createTemporaryRoot(): Promise<string> {
 function createBuildOptions(vaultDir: string, outDir: string): BuildOptions {
   return {
     allowUnsafeHtml: false,
+    defaultBranch: "dev",
     exclude: [],
     gfm: true,
     imagePolicy: "omit-local",
@@ -35,6 +37,7 @@ function createBuildOptions(vaultDir: string, outDir: string): BuildOptions {
       enabled: true,
       theme: "default",
     },
+    layout: { ...DEFAULT_RUNTIME_LAYOUT },
     newWithinDays: 7,
     outDir,
     pinnedMenu: null,
