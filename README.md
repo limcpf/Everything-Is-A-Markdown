@@ -119,7 +119,7 @@ Notes:
 - Invalid numeric options fail fast.
 - Builds validate and read the vault before marking a dedicated output directory with `.eiam-output.json`, bind that marker to a cache namespace derived from the canonical vault, output, and cache-root paths, and refuse to claim a non-empty unmarked or mismatched directory.
 - `dev` aborts before starting its watcher or server when the initial build cannot claim the output safely; later rebuild failures are logged without stopping an already-safe server.
-- Build migration and `clean` remove `.cache/build-index.json` only when it matches a historical EIAM cache schema, including when either command must reject a pre-marker output directory or reserved static path. Outputs that contain or sit inside the cache root, symlinked cache components/namespaces/indexes, and static paths that collide with the reserved `.eiam-output.json` marker are rejected; `clean` otherwise removes only the marked output directory and its matching EIAM cache namespace, preserving sibling namespaces and unrelated `.cache` data.
+- Build migration and `clean` remove `.cache/build-index.json` only when it matches a historical EIAM cache schema, including when either command must reject a pre-marker output directory. Config validation rejects reserved static paths before migration or storage inspection. Outputs that contain or sit inside the cache root, symlinked cache components/namespaces/indexes, and static paths that collide with the reserved `.eiam-output.json` marker are rejected; `clean` otherwise removes only the marked output directory and its matching EIAM cache namespace, preserving sibling namespaces and unrelated `.cache` data.
 
 ## Frontmatter
 
@@ -312,13 +312,20 @@ export default {
 - `markdown.mermaid.*`: Mermaid runtime settings.
 - `seo.*`: canonical URL, social metadata, sitemap, robots, and path-base behavior.
 
+Config modules are treated as untrusted runtime input. Every supported field is validated and
+normalized before `build`, `dev`, or `clean` can create, modify, or remove output/cache paths. An
+invalid value stops the command with its exact dotted field path and received runtime type.
+Unknown fields are ignored after a warning so spelling mistakes remain visible without breaking
+forward-compatible configs. Unsafe Mermaid URL/theme strings keep their documented safe-default
+fallback; values with the wrong runtime type are rejected.
+
 ### `staticPaths`
 
 - Must be vault-relative
 - Can point to either a file or a directory
 - Are copied as-is into the output directory
 - Must not normalize to the vault root, escape the output directory, or collide with the reserved `.eiam-output.json` ownership marker
-- Invalid or missing paths are skipped with a warning
+- Invalid configured path values fail config validation; valid paths that are missing from the vault are skipped with a warning
 
 ### `pinnedMenu`
 

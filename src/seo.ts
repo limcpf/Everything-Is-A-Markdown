@@ -33,17 +33,18 @@ export function normalizeSeoConfig(raw: UserSeoConfig | undefined): BuildSeoOpti
     );
   }
 
+  const siteUrl = raw.siteUrl.trim();
   let parsed: URL;
   try {
-    parsed = new URL(raw.siteUrl.trim());
+    parsed = new URL(siteUrl);
   } catch {
     throw new Error(
-      '[config] "seo.siteUrl" must be a valid absolute URL origin (for example: "https://example.com")',
+      '[config] "seo.siteUrl" must be a valid absolute URL origin (for example: "https://example.com"); received string',
     );
   }
 
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error('[config] "seo.siteUrl" must use http:// or https://');
+    throw new Error('[config] "seo.siteUrl" must use http:// or https://; received string');
   }
 
   if (
@@ -54,7 +55,7 @@ export function normalizeSeoConfig(raw: UserSeoConfig | undefined): BuildSeoOpti
     parsed.password
   ) {
     throw new Error(
-      '[config] "seo.siteUrl" must be an origin only, without path, query, hash, or credentials (for example: "https://example.com")',
+      '[config] "seo.siteUrl" must be an origin only, without path, query, hash, or credentials (for example: "https://example.com"); received string',
     );
   }
 

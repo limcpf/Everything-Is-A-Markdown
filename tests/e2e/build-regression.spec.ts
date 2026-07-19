@@ -771,7 +771,7 @@ PRIVATE_STATIC_SOURCE_SECRET
         expect(rejectedBuild.output).toContain(expectedError);
         expect(fs.existsSync(outDir)).toBe(false);
         expect(findCacheIndexPaths(workDir)).toEqual([]);
-        expect(fs.existsSync(legacyCacheFile)).toBe(false);
+        expect(fs.readFileSync(legacyCacheFile, "utf8")).toBe(legacyCacheContents);
         expect(fs.readFileSync(sourceMarker, "utf8")).toBe('{"foreign":"marker"}\n');
         expect(fs.readFileSync(path.join(vaultDir, "private.md"), "utf8")).toContain(
           "PRIVATE_STATIC_SOURCE_SECRET",
@@ -794,6 +794,23 @@ PRIVATE_STATIC_SOURCE_SECRET
         format: string;
       };
       expect(outputMarker.format).toBe("everything-is-a-markdown-output");
+
+      const cachePathsBeforeInvalidClean = findCacheIndexPaths(workDir);
+      expect(cachePathsBeforeInvalidClean).toHaveLength(1);
+      writeText(configPath, 'export default { staticPaths: [".eiam-output.json"] };\n');
+      const rejectedClean = runCli(workDir, [
+        cliPath,
+        "clean",
+        "--vault",
+        vaultDir,
+        "--out",
+        outDir,
+      ]);
+      expect(rejectedClean.status).not.toBe(0);
+      expect(rejectedClean.output).toContain('"staticPaths[0]"');
+      expect(rejectedClean.output).toContain("Refusing reserved static output path");
+      expect(fs.existsSync(path.join(outDir, ".eiam-output.json"))).toBe(true);
+      expect(findCacheIndexPaths(workDir)).toEqual(cachePathsBeforeInvalidClean);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
@@ -1922,6 +1939,34 @@ title: Menu Config Guide
       ]);
       expect(rootCategory.status).not.toBe(0);
       expect(rootCategory.output).toContain('"pinnedMenu.categoryPath" must not be root');
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("사용자 config 전체를 output/cache 변경 전에 검증한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-invalid-user-config-"));
+    const outDir = path.join(workDir, "dist");
+    const cacheDir = path.join(workDir, ".cache");
+
+    try {
+      writeText(
+        path.join(workDir, "blog.config.mjs"),
+        `export default {
+  exclude: ["private/**", 42],
+  markdown: {
+    wikilinks: "yes",
+  },
+};
+`,
+      );
+
+      const build = runCli(workDir, [cliPath, "build", "--vault", "./vault", "--out", "./dist"]);
+
+      expect(build.status).not.toBe(0);
+      expect(build.output).toContain('"exclude[1]" must be a string; received number (42)');
+      expect(fs.existsSync(outDir)).toBe(false);
+      expect(fs.existsSync(cacheDir)).toBe(false);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
