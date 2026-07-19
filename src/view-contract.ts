@@ -173,7 +173,16 @@ export function formatViewDateTime(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) {
     return null;
   }
-  const parsed = new Date(value);
+  const normalized = value.trim();
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(normalized);
+  const offsetlessDateTime =
+    /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(normalized);
+  const deterministicInput = dateOnly
+    ? `${normalized}T00:00:00Z`
+    : offsetlessDateTime
+      ? `${normalized.replace(" ", "T")}Z`
+      : normalized;
+  const parsed = new Date(deterministicInput);
   if (!Number.isFinite(parsed.getTime())) {
     return null;
   }

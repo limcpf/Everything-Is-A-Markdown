@@ -419,12 +419,13 @@ async function writeShellPages(
 ): Promise<void> {
   const manifestDocById = new Map(Object.entries(manifest.docsById));
   const pathBase = options.seo?.pathBase ?? "";
-  const defaultViewDocs = filterViewDocsByBranch(
+  const defaultBranchDocs = filterViewDocsByBranch(
     docs,
     manifest.defaultBranch,
     manifest.defaultBranch,
   );
-  const indexRoute = pickViewHomeRoute(defaultViewDocs);
+  const homeCandidates = defaultBranchDocs.length > 0 ? defaultBranchDocs : docs;
+  const indexRoute = pickViewHomeRoute(homeCandidates);
   const indexDoc = docs.find((doc) => doc.route === indexRoute) ?? null;
   const indexOutputPath = "index.html";
   const indexInitialView = indexDoc

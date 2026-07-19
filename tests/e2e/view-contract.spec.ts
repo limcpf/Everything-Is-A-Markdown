@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import {
   composeViewDocumentTitle,
@@ -9,6 +13,7 @@ import {
   renderViewChrome,
   toViewPathWithBase,
 } from "../../src/view-contract";
+import { createNavigationState, pickHomeRoute } from "../../src/runtime/navigation-state.js";
 import { waitForAppReady } from "./utils/app-ready";
 
 const CHROME_IDS = ["viewer-breadcrumb", "viewer-meta", "viewer-backlinks", "viewer-nav"];
@@ -84,6 +89,7 @@ test.describe("shared SSR/client view contract", () => {
     expect(rendered.backlinksHtml).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
     expect(rendered.backlinksHtml).not.toContain("<img");
     expect(formatViewDateTime("invalid")).toBeNull();
+    expect(formatViewDateTime("2024-09-20T09:30:00")).toBe("2024-09-20 09:30");
     expect(normalizeViewTags("not-an-array")).toEqual([]);
     expect(toViewPathWithBase("/A B/", "/docs 한글")).toBe(
       "/docs%20%ED%95%9C%EA%B8%80/A%20B/",
@@ -106,6 +112,78 @@ test.describe("shared SSR/client view contract", () => {
       "main",
     ]);
     expect(pickViewHomeRoute(filterViewDocsByBranch(docs, "dev", "dev"))).toBe("/DEV/");
+
+    const mainDoc = {
+      id: "main",
+      route: "/MAIN/",
+      title: "Main",
+      contentUrl: "/content/main.html",
+      date: "2026-07-20",
+      tags: [],
+      branch: "main",
+      backlinks: [],
+    };
+    const navigation = createNavigationState({
+      defaultBranch: "dev",
+      branches: ["dev", "main"],
+      ui: { newWithinDays: 0 },
+      docIds: [mainDoc.id],
+      docsById: { [mainDoc.id]: mainDoc },
+      routeMap: { [mainDoc.route]: mainDoc.id },
+      tree: [{ type: "file", name: "main.md", id: mainDoc.id }],
+    });
+    expect(navigation.activeBranch).toBe("main");
+    expect(pickHomeRoute(navigation.view)).toBe("/MAIN/");
+  });
+
+  test("default branch에 문서가 없어도 root SSR은 non-empty branch home을 사용한다", () => {
+    test.setTimeout(60_000);
+    const repoRoot = process.cwd();
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "eiam-view-fallback-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+    fs.mkdirSync(vaultDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(vaultDir, "main-only.md"),
+      `---
+publish: true
+prefix: MAIN-ONLY
+category_path: fallback
+branch: main
+title: Main Only
+date: "2026-07-19"
+tags: []
+---
+
+Main-only content.
+`,
+      "utf8",
+    );
+
+    try {
+      const result = spawnSync(
+        "bun",
+        [path.join(repoRoot, "src/cli.ts"), "build", "--vault", vaultDir, "--out", outDir],
+        { cwd: workDir, encoding: "utf8" },
+      );
+      const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+      expect(result.status, output).toBe(0);
+      const indexHtml = fs.readFileSync(path.join(outDir, "index.html"), "utf8");
+      const initialViewPayload = indexHtml.match(
+        /<script id="initial-view-data" type="application\/json">([^<]+)<\/script>/,
+      )?.[1];
+      expect(initialViewPayload).toBeTruthy();
+      expect(JSON.parse(initialViewPayload ?? "null")).toEqual({
+        route: "/MAIN-ONLY/",
+        docId: "main-only",
+        title: "Main Only",
+      });
+      expect(indexHtml).toContain(
+        '<h1 id="viewer-title" class="viewer-title">Main Only</h1>',
+      );
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
   });
 
   test("동일한 SSR chrome은 초기 hydration에서 다시 쓰지 않는다", async ({ page }) => {

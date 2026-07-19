@@ -115,6 +115,15 @@ export function createNavigationState(manifest, options = {}) {
   };
 
   let view = getBranchView(activeBranch);
+  if (view.docs.length === 0 && docs.length > 0) {
+    const fallbackRoute = pickViewHomeRoute(docs);
+    const fallbackDoc = docs.find((doc) => doc.route === fallbackRoute);
+    const fallbackBranch = normalizeBranch(fallbackDoc?.branch) ?? defaultBranch;
+    if (availableBranchSet.has(fallbackBranch)) {
+      activeBranch = fallbackBranch;
+      view = getBranchView(activeBranch);
+    }
+  }
 
   const setActiveBranch = (value) => {
     const branch = normalizeBranch(value);

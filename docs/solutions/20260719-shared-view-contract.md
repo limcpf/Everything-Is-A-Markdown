@@ -13,7 +13,7 @@ build output과 browser runtime이 breadcrumb, metadata, previous/next, backlink
 - route/pathBase를 정규화하고 각 path segment를 한 번만 encode한다.
 - branch 이름과 branch별 visible docs projection을 정규화한다.
 - home route 선택을 date와 route 기준으로 결정한다.
-- metadata date를 UTC `YYYY-MM-DD HH:mm`으로 렌더링해 server/browser timezone 차이를 제거한다.
+- metadata date를 UTC `YYYY-MM-DD HH:mm`으로 렌더링하고 offset 없는 ISO datetime도 UTC로 고정해 server/browser timezone 차이를 제거한다.
 - prefix, tag, backlink를 presentation model로 정규화한다.
 - model의 모든 text와 attribute 값을 동일한 escaping 함수로 렌더링한다.
 - breadcrumb, metadata, nav, backlinks HTML을 `RenderedViewChrome` 한 객체로 반환한다.
@@ -33,6 +33,7 @@ content controller는 SSR chrome과 다음 render 결과를 비교한다. `inner
 
 - date/tag/pathBase/escaping model contract
 - default와 non-default branch projection 및 home route
+- default branch projection이 비었을 때 build/runtime의 non-empty branch fallback
 - default/unclassified 문서와 non-default branch 문서의 hydration chrome write 0회
 - direct-load와 client-navigation의 breadcrumb/meta/backlinks/nav snapshot 동등성
 
