@@ -656,7 +656,7 @@ a:hover {
   position: absolute;
   right: 12px;
   bottom: calc(100% + 8px);
-  width: min(300px, calc(100vw - 24px));
+  width: min(300px, calc(100% - 24px));
   max-height: calc(100dvh - 70px - var(--safe-area-top) - var(--safe-area-bottom));
   overflow: auto;
   background: var(--color-canvas);

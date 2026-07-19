@@ -17,7 +17,8 @@ The viewport metadata opts into `viewport-fit=cover`. Shared safe-area variables
 header, fixed modal drawer, skip link, reader content, and persistent desktop chrome. The sidebar
 applies all four insets at its own outer layout boundary in both persistent and modal modes. This
 keeps the title, close action, search, tree, settings tool, and settings popover inside the usable
-viewport without shrinking the desktop grid or changing its resize coordinate system. Header flex
+viewport without shrinking the desktop grid or changing its resize coordinate system. The settings
+popover clamps against its containing sidebar tooling rather than the full viewport. Header flex
 children can shrink without introducing horizontal overflow when the browser is zoomed or the
 viewport is narrow.
 

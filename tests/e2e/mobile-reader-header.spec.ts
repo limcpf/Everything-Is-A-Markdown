@@ -112,7 +112,7 @@ test.describe("sticky mobile reader header", () => {
   });
 
   test("non-zero safe area가 reader header와 modal drawer control을 보호한다", async ({ page }) => {
-    const viewport = { width: 390, height: 844 };
+    const viewport = { width: 320, height: 568 };
     const safeArea = { top: 31, right: 17, bottom: 23, left: 19 };
     await page.setViewportSize(viewport);
     await page.goto("/BC-VO-01/");
