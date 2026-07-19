@@ -2,10 +2,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
-import matter from "gray-matter";
 import { lint as lintMarkdown } from "markdownlint/promise";
 import { loadUserConfig, resolveBuildOptions, type CliArgs } from "../src/config";
-import { buildExcluder, relativePosix } from "../src/utils";
+import {
+  formatPublicationDiagnostic,
+  scanPublicationTargets,
+  type PublicationDiagnostic,
+} from "../src/publication";
 
 const require = createRequire(import.meta.url);
 const lintConfigModule = require("../.markdownlint.cjs") as { config: Record<string, unknown> };
@@ -25,24 +28,18 @@ interface LintCliArgs {
 }
 
 interface TargetDoc {
-  absPath: string;
   relPath: string;
   raw: string;
 }
 
 interface LintIssue {
+  category: "publication" | "markdown-style";
   file: string;
   line: number;
   column: number;
   rule: string;
   message: string;
-  severity: "error";
-}
-
-interface TargetScanResult {
-  docs: TargetDoc[];
-  issues: LintIssue[];
-  skippedWithoutPrefix: string[];
+  severity: "error" | "warning";
 }
 
 function printHelp(): void {
@@ -106,76 +103,6 @@ function parseCliArgs(argv: string[]): LintCliArgs {
   return parsed;
 }
 
-async function walkMarkdownFiles(
-  rootDir: string,
-  currentDir: string,
-  isExcluded: (relPath: string, isDirectory: boolean) => boolean,
-  output: string[],
-): Promise<void> {
-  const entries = await fs.readdir(currentDir, { withFileTypes: true });
-  for (const entry of entries) {
-    const absPath = path.join(currentDir, entry.name);
-    const relPath = relativePosix(rootDir, absPath);
-    if (isExcluded(relPath, entry.isDirectory())) {
-      continue;
-    }
-    if (entry.isDirectory()) {
-      await walkMarkdownFiles(rootDir, absPath, isExcluded, output);
-      continue;
-    }
-    if (entry.isFile() && /\.md$/i.test(entry.name)) {
-      output.push(absPath);
-    }
-  }
-}
-
-async function collectPublishedDocs(
-  vaultDir: string,
-  excludePatterns: string[],
-): Promise<TargetScanResult> {
-  const files: string[] = [];
-  const issues: LintIssue[] = [];
-  const skippedWithoutPrefix: string[] = [];
-  const isExcluded = buildExcluder(excludePatterns);
-  await walkMarkdownFiles(vaultDir, vaultDir, isExcluded, files);
-  files.sort((left, right) => left.localeCompare(right, "ko-KR"));
-
-  const docs: TargetDoc[] = [];
-  for (const absPath of files) {
-    const relPath = relativePosix(vaultDir, absPath);
-    const raw = await Bun.file(absPath).text();
-
-    let parsed: matter.GrayMatterFile<string>;
-    try {
-      parsed = matter(raw);
-    } catch (error) {
-      issues.push({
-        file: relPath,
-        line: 1,
-        column: 1,
-        rule: "frontmatter/parse",
-        message: `Frontmatter parse failed: ${(error as Error).message}`,
-        severity: "error",
-      });
-      continue;
-    }
-
-    if (parsed.data.publish !== true || parsed.data.draft === true) {
-      continue;
-    }
-    const hasPrefix =
-      typeof parsed.data.prefix === "string" && parsed.data.prefix.trim().length > 0;
-    if (!hasPrefix) {
-      skippedWithoutPrefix.push(relPath);
-      continue;
-    }
-
-    docs.push({ absPath, relPath, raw });
-  }
-
-  return { docs, issues, skippedWithoutPrefix };
-}
-
 function findFrontmatterEndLine(lines: string[]): number {
   if (lines.length === 0 || lines[0].trim() !== "---") {
     return 0;
@@ -217,6 +144,7 @@ function collectBodyH1Issues(doc: TargetDoc): LintIssue[] {
     const trimmedStart = line.trimStart();
     if (!trimmedStart.startsWith("\\#") && ATX_H1_RE.test(line)) {
       issues.push({
+        category: "markdown-style",
         file: doc.relPath,
         line: i + 1,
         column: 1,
@@ -230,6 +158,7 @@ function collectBodyH1Issues(doc: TargetDoc): LintIssue[] {
       const next = lines[i + 1];
       if (line.trim().length > 0 && SETEXT_H1_UNDERLINE_RE.test(next.trim())) {
         issues.push({
+          category: "markdown-style",
           file: doc.relPath,
           line: i + 2,
           column: 1,
@@ -265,6 +194,7 @@ function mapMarkdownlintIssues(
           : "";
 
       issues.push({
+        category: "markdown-style",
         file,
         line,
         column,
@@ -275,6 +205,18 @@ function mapMarkdownlintIssues(
     }
   }
   return issues;
+}
+
+function mapPublicationDiagnostics(diagnostics: PublicationDiagnostic[]): LintIssue[] {
+  return diagnostics.map((diagnostic) => ({
+    category: "publication",
+    file: diagnostic.file,
+    line: diagnostic.line,
+    column: diagnostic.column,
+    rule: diagnostic.code,
+    message: diagnostic.message,
+    severity: diagnostic.severity,
+  }));
 }
 
 function sortIssues(issues: LintIssue[]): LintIssue[] {
@@ -309,11 +251,15 @@ async function main(): Promise<void> {
   };
   const buildOptions = resolveBuildOptions(buildCli, userConfig, null);
 
-  const scanResult = await collectPublishedDocs(buildOptions.vaultDir, buildOptions.exclude);
-  const lintStrings = Object.fromEntries(scanResult.docs.map((doc) => [doc.relPath, doc.raw]));
+  const scanResult = await scanPublicationTargets(buildOptions.vaultDir, buildOptions.exclude);
+  const targetDocs: TargetDoc[] = scanResult.targets.map(({ source }) => ({
+    relPath: source.relPath,
+    raw: source.raw,
+  }));
+  const lintStrings = Object.fromEntries(targetDocs.map((doc) => [doc.relPath, doc.raw]));
 
   const lintResults =
-    scanResult.docs.length > 0
+    targetDocs.length > 0
       ? ((await lintMarkdown({
           strings: lintStrings,
           config: lintConfigModule.config,
@@ -322,8 +268,19 @@ async function main(): Promise<void> {
       : {};
 
   const markdownlintIssues = mapMarkdownlintIssues(lintResults);
-  const bodyHeadingIssues = scanResult.docs.flatMap((doc) => collectBodyH1Issues(doc));
-  const allIssues = sortIssues([...scanResult.issues, ...markdownlintIssues, ...bodyHeadingIssues]);
+  const bodyHeadingIssues = targetDocs.flatMap((doc) => collectBodyH1Issues(doc));
+  const publicationIssues = sortIssues(mapPublicationDiagnostics(scanResult.diagnostics));
+  const markdownStyleIssues = sortIssues([...markdownlintIssues, ...bodyHeadingIssues]);
+  const allIssues = sortIssues([...publicationIssues, ...markdownStyleIssues]);
+  const missingPrefixCount = scanResult.diagnostics.filter(
+    ({ code }) => code === "publication/missing-prefix",
+  ).length;
+  const missingCategoryPathCount = scanResult.diagnostics.filter(
+    ({ code }) => code === "publication/missing-category-path",
+  ).length;
+  const frontmatterParseErrorCount = scanResult.diagnostics.filter(
+    ({ code }) => code === "frontmatter/parse",
+  ).length;
 
   const outDir = path.resolve(process.cwd(), cli.outDir);
   await fs.mkdir(outDir, { recursive: true });
@@ -332,21 +289,29 @@ async function main(): Promise<void> {
   const report = {
     generatedAt: new Date().toISOString(),
     vaultDir: buildOptions.vaultDir,
-    targetCount: scanResult.docs.length,
-    skippedWithoutPrefixCount: scanResult.skippedWithoutPrefix.length,
+    targetCount: targetDocs.length,
+    targetFiles: targetDocs.map(({ relPath }) => relPath),
+    skippedWithoutPrefixCount: missingPrefixCount,
+    skippedWithoutCategoryPathCount: missingCategoryPathCount,
+    frontmatterParseErrorCount,
+    publicationDiagnosticCount: scanResult.diagnostics.length,
+    markdownStyleIssueCount: markdownStyleIssues.length,
     issueCount: allIssues.length,
     strict: cli.strict,
+    publicationDiagnostics: scanResult.diagnostics.map((diagnostic) => ({
+      ...diagnostic,
+      formatted: formatPublicationDiagnostic(diagnostic),
+    })),
+    markdownStyleIssues,
     issues: allIssues,
   };
   await Bun.write(reportPath, `${JSON.stringify(report, null, 2)}\n`);
 
   console.log(
-    `[lint:md:publish] targets=${scanResult.docs.length} issues=${allIssues.length} out=${reportPath}`,
+    `[lint:md:publish] targets=${targetDocs.length} publication=${scanResult.diagnostics.length} markdown=${markdownStyleIssues.length} issues=${allIssues.length} out=${reportPath}`,
   );
-  if (scanResult.skippedWithoutPrefix.length > 0) {
-    console.warn(
-      `[lint:md:publish] skipped without prefix: ${scanResult.skippedWithoutPrefix.length}`,
-    );
+  for (const diagnostic of scanResult.diagnostics) {
+    console.warn(formatPublicationDiagnostic(diagnostic));
   }
 
   if (cli.strict && allIssues.length > 0) {
