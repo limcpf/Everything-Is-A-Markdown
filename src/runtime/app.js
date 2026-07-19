@@ -1,5 +1,14 @@
-import { getRuntimeManifestDocs, normalizeManifestPayload } from "./manifest-adapter.js";
-import { buildTreesAdapterInput } from "./tree-adapter.js";
+import { normalizeManifestPayload } from "./manifest-adapter.js";
+import { createContentController } from "./content-controller.js";
+import {
+  createNavigationState,
+  normalizePathBase,
+  normalizeRoute,
+  pickHomeRoute,
+  resolveRouteFromLocation,
+  stripPathBase,
+  toPathWithBase,
+} from "./navigation-state.js";
 
 const COMPACT_LAYOUT_QUERY = "(max-width: 1024px)";
 const MENU_TOGGLE_POSITION_KEY = "fsblog.menuTogglePosition";
@@ -11,7 +20,6 @@ const DESKTOP_SIDEBAR_MIN = 320;
 const DESKTOP_VIEWER_MIN = 680;
 const DESKTOP_SPLITTER_WIDTH = 10;
 const DESKTOP_SPLITTER_STEP = 24;
-const DEFAULT_BRANCH = "dev";
 const DEFAULT_SITE_TITLE = "File-System Blog";
 const BRANCH_KEY = "fsblog.branch";
 const APP_READY_STATE_ATTR = "data-app-ready";
@@ -479,78 +487,6 @@ async function renderMermaidBlocks(config) {
   }
 }
 
-function toSafeUrlPath(input) {
-  const value = String(input);
-  return value
-    .split("/")
-    .map((segment, index) => {
-      if (index === 0 && segment === "") {
-        return "";
-      }
-      return encodeURIComponent(segment);
-    })
-    .join("/");
-}
-
-function normalizePathname(pathname) {
-  let normalized = "/";
-  try {
-    normalized = decodeURIComponent(pathname || "/");
-  } catch {
-    normalized = String(pathname || "/");
-  }
-  if (!normalized.startsWith("/")) {
-    normalized = `/${normalized}`;
-  }
-  return normalized.replace(/\/+/g, "/") || "/";
-}
-
-function normalizeRoute(pathname) {
-  const normalized = normalizePathname(pathname);
-  if (normalized.endsWith("/")) {
-    return normalized;
-  }
-  return `${normalized}/`;
-}
-
-function normalizePathBase(pathBase) {
-  if (typeof pathBase !== "string") {
-    return "";
-  }
-
-  const cleaned = pathBase.trim().replace(/\\/g, "/");
-  if (!cleaned || cleaned === "/") {
-    return "";
-  }
-
-  return `/${cleaned.replace(/^\/+/, "").replace(/\/+$/, "")}`;
-}
-
-function stripPathBase(pathname, pathBase) {
-  const normalizedPath = normalizePathname(pathname);
-  if (!pathBase) {
-    return normalizedPath;
-  }
-  if (normalizedPath === pathBase) {
-    return "/";
-  }
-  if (normalizedPath.startsWith(`${pathBase}/`)) {
-    return normalizedPath.slice(pathBase.length) || "/";
-  }
-  return normalizedPath;
-}
-
-function toPathWithBase(pathname, pathBase) {
-  const normalizedPath = normalizePathname(pathname);
-  if (!pathBase) {
-    return toSafeUrlPath(normalizedPath);
-  }
-  if (normalizedPath === "/") {
-    return toSafeUrlPath(`${pathBase}/`);
-  }
-  return toSafeUrlPath(`${pathBase}${normalizedPath}`);
-}
-
 function loadInitialViewData() {
   const script = document.getElementById("initial-view-data");
   if (!(script instanceof HTMLScriptElement)) {
@@ -630,11 +566,6 @@ function loadInitialRuntimeData() {
   }
 }
 
-function resolveRouteFromLocation(routeMap, pathBase) {
-  const direct = normalizeRoute(stripPathBase(location.pathname, pathBase));
-  return routeMap[direct] ? direct : direct;
-}
-
 function resolveSiteTitle(manifest) {
   const value = typeof manifest?.siteTitle === "string" ? manifest.siteTitle.trim() : "";
   return value || DEFAULT_SITE_TITLE;
@@ -674,110 +605,6 @@ function normalizeTags(tags) {
   return tags
     .map((tag) => String(tag).trim().replace(/^#+/, ""))
     .filter(Boolean);
-}
-
-function normalizeBranch(value) {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  return normalized.length > 0 ? normalized : null;
-}
-
-function isDocVisibleInBranch(doc, branch, defaultBranch) {
-  const docBranch = normalizeBranch(doc.branch);
-  if (!docBranch) {
-    return branch === defaultBranch;
-  }
-  return docBranch === branch;
-}
-
-function parseDateToEpochMs(value) {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return null;
-  }
-
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function getRecentSortEpochMs(doc) {
-  return parseDateToEpochMs(doc.updatedDate) ?? parseDateToEpochMs(doc.date);
-}
-
-function compareDocsByRecentDateThenRoute(left, right) {
-  const leftEpoch = getRecentSortEpochMs(left);
-  const rightEpoch = getRecentSortEpochMs(right);
-
-  if (leftEpoch != null && rightEpoch != null) {
-    const byDate = rightEpoch - leftEpoch;
-    if (byDate !== 0) {
-      return byDate;
-    }
-  } else if (leftEpoch != null && rightEpoch == null) {
-    return -1;
-  } else if (leftEpoch == null && rightEpoch != null) {
-    return 1;
-  }
-
-  return left.route.localeCompare(right.route, "ko-KR");
-}
-
-function cloneFilteredTree(nodes, visibleDocIds) {
-  const filteredNodes = [];
-
-  for (const node of nodes) {
-    if (node.type === "file") {
-      if (visibleDocIds.has(node.id)) {
-        filteredNodes.push(node);
-      }
-      continue;
-    }
-
-    const children = cloneFilteredTree(node.children, visibleDocIds);
-    if (children.length === 0 && !node.virtual) {
-      continue;
-    }
-
-    filteredNodes.push({
-      ...node,
-      children,
-    });
-  }
-
-  return filteredNodes;
-}
-
-function buildBranchView(manifest, manifestDocs, branch, defaultBranch) {
-  const docs = manifestDocs.filter((doc) => isDocVisibleInBranch(doc, branch, defaultBranch));
-  const visibleDocIds = new Set(docs.map((doc) => doc.id));
-  const tree = cloneFilteredTree(manifest.tree, visibleDocIds);
-  const trees = buildTreesAdapterInput(tree, docs);
-  const routeMap = {};
-  const docIndexById = new Map();
-  for (const doc of docs) {
-    routeMap[doc.route] = doc.id;
-  }
-  for (let i = 0; i < docs.length; i += 1) {
-    docIndexById.set(docs[i].id, i);
-  }
-
-  return {
-    docs,
-    visibleDocIds,
-    tree,
-    trees,
-    routeMap,
-    docIndexById,
-  };
-}
-
-function pickHomeRoute(view) {
-  if (view.routeMap["/index/"]) {
-    return "/index/";
-  }
-  return [...view.docs].sort(compareDocsByRecentDateThenRoute)[0]?.route || "/";
 }
 
 function loadMenuTogglePosition() {
@@ -1134,7 +961,7 @@ async function start() {
   const a11yStatusEl = document.getElementById("a11y-status");
   const viewerEl = document.querySelector(".viewer");
   const initialViewData = loadInitialViewData();
-  let hasHydratedInitialView = false;
+  let contentController = null;
 
   let desktopSidebarWidth = clampDesktopSidebarWidth(loadDesktopSidebarWidth());
   let activeResizePointerId = null;
@@ -1546,33 +1373,11 @@ async function start() {
   const mermaidConfig = resolveMermaidConfig(manifest);
   const pathBase = normalizePathBase(manifest.pathBase);
   const siteTitle = resolveSiteTitle(manifest);
-  const defaultBranch = normalizeBranch(manifest.defaultBranch) || DEFAULT_BRANCH;
-  const availableBranchSet = new Set([defaultBranch]);
-  const manifestDocs = getRuntimeManifestDocs(manifest);
-  for (const doc of manifestDocs) {
-    const docBranch = normalizeBranch(doc.branch);
-    if (docBranch) {
-      availableBranchSet.add(docBranch);
-    }
-  }
-  if (Array.isArray(manifest.branches)) {
-    for (const branch of manifest.branches) {
-      const normalized = normalizeBranch(branch);
-      if (normalized) {
-        availableBranchSet.add(normalized);
-      }
-    }
-  }
-
-  const availableBranches = Array.from(availableBranchSet).sort((left, right) => {
-    if (left === defaultBranch) {
-      return -1;
-    }
-    if (right === defaultBranch) {
-      return 1;
-    }
-    return left.localeCompare(right, "ko-KR");
+  const navigation = createNavigationState(manifest, {
+    savedBranch: localStorage.getItem(BRANCH_KEY),
+    initialDocId: initialViewData?.docId,
   });
+  const availableBranches = navigation.availableBranches;
 
   const renderBranchPills = () => {
     if (!(sidebarBranchPills instanceof HTMLElement)) {
@@ -1594,35 +1399,19 @@ async function start() {
     }
   };
 
-  const savedBranch = normalizeBranch(localStorage.getItem(BRANCH_KEY));
-  let activeBranch = savedBranch && availableBranchSet.has(savedBranch) ? savedBranch : defaultBranch;
-  const branchViewCache = new Map();
-  const getBranchView = (branch) => {
-    const cached = branchViewCache.get(branch);
-    if (cached) {
-      return cached;
-    }
-    const nextView = buildBranchView(manifest, manifestDocs, branch, defaultBranch);
-    branchViewCache.set(branch, nextView);
-    return nextView;
-  };
-  let view = getBranchView(activeBranch);
-
-  const docsById = new Map(manifestDocs.map((doc) => [doc.id, doc]));
-
   const updateBranchInfo = () => {
     if (sidebarBranchInfo instanceof HTMLElement) {
       sidebarBranchInfo.textContent =
-        activeBranch === defaultBranch
-          ? `publish: true · ${activeBranch} + unclassified`
-          : `publish: true · ${activeBranch} only`;
+        navigation.activeBranch === navigation.defaultBranch
+          ? `publish: true · ${navigation.activeBranch} + unclassified`
+          : `publish: true · ${navigation.activeBranch} only`;
     }
     if (sidebarBranchPills instanceof HTMLElement) {
       for (const pill of sidebarBranchPills.querySelectorAll(".branch-pill")) {
         if (!(pill instanceof HTMLButtonElement)) {
           continue;
         }
-        const isActive = pill.dataset.branch === activeBranch;
+        const isActive = pill.dataset.branch === navigation.activeBranch;
         pill.classList.toggle("is-active", isActive);
         pill.setAttribute("aria-pressed", String(isActive));
       }
@@ -1731,7 +1520,7 @@ async function start() {
       return;
     }
 
-    const treePath = view.trees.docIdToPrimaryTreePath.get(docId);
+    const treePath = navigation.view.trees.docIdToPrimaryTreePath.get(docId);
     if (!treePath) {
       return;
     }
@@ -1815,12 +1604,12 @@ async function start() {
     if (!treeRuntime) {
       throw new Error("Tree runtime is not loaded");
     }
-    treePathOrder = new Map(view.trees.paths.map((treePath, index) => [treePath, index]));
-    return treeRuntime.prepareFileTreeInput(view.trees.paths, { sort: compareTreesByBranchOrder });
+    treePathOrder = new Map(navigation.view.trees.paths.map((treePath, index) => [treePath, index]));
+    return treeRuntime.prepareFileTreeInput(navigation.view.trees.paths, { sort: compareTreesByBranchOrder });
   };
 
   const renderTreeRowDecoration = ({ item }) => {
-    const metadata = view.trees.metadataByTreePath.get(item.path);
+    const metadata = navigation.view.trees.metadataByTreePath.get(item.path);
     if (metadata?.kind !== "file" || metadata.isNew !== true) {
       return null;
     }
@@ -1832,7 +1621,7 @@ async function start() {
   };
 
   const renderTreeContextMenu = (item, context) => {
-    const route = view.trees.treePathToRoute.get(item.path);
+    const route = navigation.view.trees.treePathToRoute.get(item.path);
     if (!route) {
       return null;
     }
@@ -1865,25 +1654,25 @@ async function start() {
       }
       event.preventDefault();
       context.close();
-      void state.navigate(route, true);
+      void contentController?.navigate(route, true);
     });
 
     menu.appendChild(link);
     return menu;
   };
 
-  const renderTree = (state) => {
+  const renderTree = () => {
     if (!(treeRoot instanceof HTMLElement) || !treeRuntime) {
       return;
     }
 
-    if (fileTree && renderedTreeBranch !== activeBranch) {
+    if (fileTree && renderedTreeBranch !== navigation.activeBranch) {
       destroyFileTree();
     }
 
     const preparedInput = prepareTreesInput();
-    const selectedTreePath = state.currentDocId
-      ? view.trees.docIdToPrimaryTreePath.get(state.currentDocId)
+    const selectedTreePath = navigation.currentDocId
+      ? navigation.view.trees.docIdToPrimaryTreePath.get(navigation.currentDocId)
       : null;
 
     if (!fileTree) {
@@ -1908,13 +1697,13 @@ async function start() {
           }
 
           const selectedPath = selectedPaths.at(-1);
-          const route = selectedPath ? view.trees.treePathToRoute.get(selectedPath) : null;
+          const route = selectedPath ? navigation.view.trees.treePathToRoute.get(selectedPath) : null;
           if (!route) {
-            window.queueMicrotask(() => syncActiveTreeSelection(state.currentDocId, { scroll: false }));
+            window.queueMicrotask(() => syncActiveTreeSelection(navigation.currentDocId, { scroll: false }));
             return;
           }
 
-          void state.navigate(route, true);
+          void contentController?.navigate(route, true);
         },
         preparedInput,
         renderRowDecoration: renderTreeRowDecoration,
@@ -1934,10 +1723,10 @@ async function start() {
       }
     }
 
-    renderedTreeBranch = activeBranch;
-    syncActiveTreeSelection(state.currentDocId || "");
+    renderedTreeBranch = navigation.activeBranch;
+    syncActiveTreeSelection(navigation.currentDocId || "");
     applyTreeSearch(treeSearchValue);
-    setupTreeLabelDecorations(treeRoot, view.trees.metadataByTreePath);
+    setupTreeLabelDecorations(treeRoot, navigation.view.trees.metadataByTreePath);
   };
 
   const renderTreeLoadingState = () => {
@@ -1975,7 +1764,7 @@ async function start() {
 
     const links = document.createElement("ul");
     links.className = "tree-load-fallback-links";
-    for (const doc of view.docs) {
+    for (const doc of navigation.view.docs) {
       const item = document.createElement("li");
       const link = document.createElement("a");
       link.href = toPathWithBase(doc.route, pathBase);
@@ -1992,7 +1781,7 @@ async function start() {
           return;
         }
         event.preventDefault();
-        void state.navigate(doc.route, true);
+        void contentController?.navigate(doc.route, true);
       });
       item.appendChild(link);
       links.appendChild(item);
@@ -2005,7 +1794,7 @@ async function start() {
 
   const loadTreeRuntime = ({ reason, retry = false }) => {
     if (treeRuntime) {
-      renderTree(state);
+      renderTree();
       return Promise.resolve(true);
     }
     if (treeLoadPromise) {
@@ -2042,7 +1831,7 @@ async function start() {
           throw new Error("Tree runtime exports are invalid");
         }
         treeRuntime = module;
-        renderTree(state);
+        renderTree();
         if (treeRoot instanceof HTMLElement) {
           treeRoot.setAttribute("aria-busy", "false");
         }
@@ -2067,125 +1856,55 @@ async function start() {
     return treeLoadPromise;
   };
 
-  const updateBacklinks = (doc) => {
-    if (!(backlinksEl instanceof HTMLElement)) {
-      return;
-    }
-    if (!doc) {
-      backlinksEl.innerHTML = "";
-      backlinksEl.hidden = true;
-      return;
-    }
-    const html = renderBacklinks(doc, pathBase);
-    backlinksEl.innerHTML = html;
-    backlinksEl.hidden = html.length === 0;
-  };
-
-  const state = {
-    currentDocId: initialViewData?.docId ?? "",
-    async navigate(rawRoute, push) {
-      if (isCompactLayout()) {
-        closeSidebar();
-      }
-
-      const route = normalizeRoute(rawRoute);
-      let id = view.routeMap[route];
-
-      if (!id) {
-        const globalId = manifest.routeMap?.[route];
-        const globalDoc = globalId ? docsById.get(globalId) : null;
-        const globalDocBranch = normalizeBranch(globalDoc?.branch);
-        const targetBranch = globalDocBranch ?? defaultBranch;
-        if (globalDoc && targetBranch !== activeBranch && availableBranchSet.has(targetBranch)) {
-          activeBranch = targetBranch;
-          view = getBranchView(activeBranch);
-          updateBranchInfo();
-          if (treeRuntime) {
-            renderTree(state);
-          }
-          localStorage.setItem(BRANCH_KEY, activeBranch);
-          id = view.routeMap[route];
-        }
-      }
-      
-      if (!id) {
-        state.currentDocId = "";
-        clearTreeSelection();
-        breadcrumbEl.innerHTML = renderBreadcrumb(route);
-        titleEl.textContent = "문서를 찾을 수 없습니다";
-        metaEl.innerHTML = "";
-        contentEl.innerHTML = '<p class="placeholder">요청한 경로에 해당하는 문서가 없습니다.</p>';
-        updateBacklinks(null);
-        navEl.innerHTML = "";
-        announceA11yStatus("탐색 실패: 요청한 문서를 찾을 수 없습니다.");
-        if (push) {
-          history.pushState(null, "", toPathWithBase(route, pathBase));
-        }
-        return;
-      }
-
-      const doc = docsById.get(id);
-      if (!doc) {
-        return;
-      }
-
-      if (push) {
-        history.pushState(null, "", toPathWithBase(route, pathBase));
-      }
-
-      state.currentDocId = id;
-      syncActiveTreeSelection(id);
-
-      const shouldUseInitialView =
-        !hasHydratedInitialView &&
-        initialViewData &&
-        initialViewData.docId === id &&
-        initialViewData.route === route;
-
-      if (shouldUseInitialView) {
-        hasHydratedInitialView = true;
-        breadcrumbEl.innerHTML = renderBreadcrumb(route);
-        titleEl.textContent = doc.title;
-        metaEl.innerHTML = renderMeta(doc);
-        updateBacklinks(doc);
-        navEl.innerHTML = renderNav(view.docs, view.docIndexById, id, pathBase);
-        enhanceContentImages(contentEl);
-        await renderMermaidBlocks(mermaidConfig);
-        document.title = composeDocumentTitle(doc.title, siteTitle);
-        if (viewerEl instanceof HTMLElement) {
-          viewerEl.scrollTo(0, 0);
-        }
-        announceA11yStatus(`탐색 완료: ${doc.title} 문서를 열었습니다.`);
-        return;
-      }
-
-      breadcrumbEl.innerHTML = renderBreadcrumb(route);
-      titleEl.textContent = doc.title;
-      metaEl.innerHTML = renderMeta(doc);
-
-      const res = await fetch(toPathWithBase(doc.contentUrl, pathBase));
-      if (!res.ok) {
-        contentEl.innerHTML = '<p class="placeholder">본문을 불러오지 못했습니다.</p>';
-        updateBacklinks(null);
-        navEl.innerHTML = "";
-        announceA11yStatus(`탐색 실패: ${doc.title} 문서를 불러오지 못했습니다.`);
-        return;
-      }
-
-      contentEl.innerHTML = await res.text();
-
-      updateBacklinks(doc);
-      navEl.innerHTML = renderNav(view.docs, view.docIndexById, id, pathBase);
-      enhanceContentImages(contentEl);
-      await renderMermaidBlocks(mermaidConfig);
-
-      document.title = composeDocumentTitle(doc.title, siteTitle);
-      if (viewerEl instanceof HTMLElement) {
-        viewerEl.scrollTo(0, 0);
-      }
-      announceA11yStatus(`탐색 완료: ${doc.title} 문서를 열었습니다.`);
+  contentController = createContentController({
+    navigation,
+    elements: {
+      breadcrumb: breadcrumbEl,
+      title: titleEl,
+      meta: metaEl,
+      content: contentEl,
+      backlinks: backlinksEl,
+      nav: navEl,
+      viewer: viewerEl,
     },
-  };
+    initialViewData,
+    pathBase,
+    siteTitle,
+    renderers: {
+      breadcrumb: renderBreadcrumb,
+      meta: renderMeta,
+      backlinks: renderBacklinks,
+      nav: (currentView, docId, base) => renderNav(currentView.docs, currentView.docIndexById, docId, base),
+      documentTitle: composeDocumentTitle,
+    },
+    lifecycle: {
+      beforeNavigate() {
+        if (isCompactLayout()) {
+          closeSidebar();
+        }
+      },
+      onBranchChange(branch) {
+        updateBranchInfo();
+        if (treeRuntime) {
+          renderTree();
+        }
+        localStorage.setItem(BRANCH_KEY, branch);
+      },
+      onCurrentDocChange(docId) {
+        syncActiveTreeSelection(docId);
+      },
+      onMissingSelection: clearTreeSelection,
+      async enhanceContent(target) {
+        enhanceContentImages(target);
+        await renderMermaidBlocks(mermaidConfig);
+      },
+      announce: announceA11yStatus,
+      resolveLocationRoute(pathname) {
+        return resolveRouteFromLocation(pathBase, pathname);
+      },
+    },
+  });
+  contentController.setup();
 
   requestTreeLoad = (reason, options = {}) => {
     if (!treeLoadAllowed) {
@@ -2259,90 +1978,37 @@ async function start() {
     });
   }
 
-  if (navEl instanceof HTMLElement) {
-    navEl.addEventListener("click", (event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
-        return;
-      }
-
-      const link = target.closest(".nav-link");
-      if (!(link instanceof HTMLAnchorElement) || !navEl.contains(link)) {
-        return;
-      }
-
-      event.preventDefault();
-      const route = link.dataset.route;
-      if (!route) {
-        return;
-      }
-      state.navigate(route, true);
-      if (viewerEl instanceof HTMLElement) {
-        viewerEl.scrollTo(0, 0);
-      }
-    });
-  }
-
-  if (backlinksEl instanceof HTMLElement) {
-    backlinksEl.addEventListener("click", (event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
-        return;
-      }
-
-      const link = target.closest(".backlink-link");
-      if (!(link instanceof HTMLAnchorElement) || !backlinksEl.contains(link)) {
-        return;
-      }
-
-      event.preventDefault();
-      const route = link.dataset.route;
-      if (!route) {
-        return;
-      }
-      state.navigate(route, true);
-      if (viewerEl instanceof HTMLElement) {
-        viewerEl.scrollTo(0, 0);
-      }
-    });
-  }
-
   const setActiveBranch = async (nextBranch) => {
-    const normalized = normalizeBranch(nextBranch);
-    if (!normalized || !availableBranchSet.has(normalized)) {
+    if (!navigation.setActiveBranch(nextBranch)) {
       return;
     }
 
-    activeBranch = normalized;
-    view = getBranchView(activeBranch);
-    localStorage.setItem(BRANCH_KEY, activeBranch);
+    localStorage.setItem(BRANCH_KEY, navigation.activeBranch);
     updateBranchInfo();
     void requestTreeLoad("branch");
 
-    const currentRoute = resolveRouteFromLocation(view.routeMap, pathBase);
-    if (view.routeMap[currentRoute]) {
-      await state.navigate(currentRoute, false);
+    const currentRoute = resolveRouteFromLocation(pathBase);
+    if (navigation.view.routeMap[currentRoute]) {
+      await contentController.navigate(currentRoute, false);
       return;
     }
 
-    const fallbackRoute = pickHomeRoute(view);
-    await state.navigate(fallbackRoute, true);
+    const fallbackRoute = pickHomeRoute(navigation.view);
+    await contentController.navigate(fallbackRoute, true);
   };
 
   renderBranchPills();
   updateBranchInfo();
 
-  const currentRoute = resolveRouteFromLocation(view.routeMap, pathBase);
-  const initialRoute = currentRoute === "/" ? pickHomeRoute(view) : currentRoute;
+  const currentRoute = resolveRouteFromLocation(pathBase);
+  const initialRoute = currentRoute === "/" ? pickHomeRoute(navigation.view) : currentRoute;
   handleLayoutChange();
-  await state.navigate(initialRoute, currentRoute === "/" && initialRoute !== "/");
+  await contentController.navigate(initialRoute, currentRoute === "/" && initialRoute !== "/");
   setAppReadyState("ready");
   window.performance?.mark?.("eiam-app-ready");
   scheduleTreeLoadAfterFirstContentPaint();
 
-  window.addEventListener("popstate", async () => {
-    await state.navigate(resolveRouteFromLocation(view.routeMap, pathBase), false);
-  });
+  window.addEventListener("pagehide", () => contentController?.destroy(), { once: true });
 }
 
 start().catch((error) => {
