@@ -19,6 +19,25 @@
   --color-warning: #df8e1d;
   --color-danger: #d20f39;
   --color-code-accent: #7287fd;
+  --surface-reader: #ffffff;
+  --surface-navigation: var(--color-surface);
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
+    "Malgun Gothic", sans-serif;
+  --font-mono:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+  --type-title: 2.5rem;
+  --type-content: 1.0625rem;
+  --type-heading-1: 2.0625rem;
+  --type-heading-2: 1.625rem;
+  --type-heading-3: 1.3125rem;
+  --type-heading-4: 1.125rem;
+  --type-navigation: 0.875rem;
+  --type-metadata: 0.8125rem;
+  --type-caption: 0.75rem;
+  --leading-content: 1.78;
+  --leading-heading: 1.3;
   --overlay-backdrop: rgba(76, 79, 105, 0.4);
   --elevated-surface: rgba(255, 255, 255, 0.64);
   --elevated-surface-strong: rgba(255, 255, 255, 0.68);
@@ -66,6 +85,8 @@
   --color-warning: #f9e2af;
   --color-danger: #f38ba8;
   --color-code-accent: #b4befe;
+  --surface-reader: var(--color-canvas);
+  --surface-navigation: var(--color-surface);
   --overlay-backdrop: rgba(17, 17, 27, 0.6);
   --elevated-surface: rgba(49, 50, 68, 0.72);
   --elevated-surface-strong: rgba(69, 71, 90, 0.74);
@@ -100,9 +121,7 @@ body {
 body {
   background: var(--color-canvas);
   color: var(--color-text);
-  font-family:
-    "Pretendard Variable", "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic",
-    "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
@@ -258,7 +277,7 @@ a:hover {
 
 /* Sidebar */
 .sidebar {
-  background: var(--color-surface);
+  background: var(--surface-navigation);
   border-right: 0;
   display: flex;
   flex-direction: column;
@@ -307,7 +326,7 @@ a:hover {
 
 .sidebar-title {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.0625rem;
   font-weight: 700;
   letter-spacing: 0;
   display: flex;
@@ -352,7 +371,7 @@ a:hover {
 .branch-info {
   grid-column: 1 / -1;
   display: block;
-  font-size: 0.75rem;
+  font-size: var(--type-caption);
   color: var(--color-text-subtle);
 }
 
@@ -369,7 +388,7 @@ a:hover {
   border-radius: 999px;
   background: var(--elevated-surface-strong);
   color: var(--color-text-secondary);
-  font-size: 0.8rem;
+  font-size: var(--type-metadata);
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: 0;
@@ -450,7 +469,7 @@ a:hover {
   background: transparent;
   color: var(--color-text);
   font: inherit;
-  font-size: 0.88rem;
+  font-size: var(--type-navigation);
 }
 
 .tree-search-input::placeholder {
@@ -626,7 +645,7 @@ a:hover {
     transparent
   );
   --trees-font-family-override: inherit;
-  --trees-font-size-override: 0.9rem;
+  --trees-font-size-override: var(--type-navigation);
   --trees-font-weight-regular-override: 450;
   --trees-font-weight-semibold-override: 700;
   --trees-border-radius-override: 6px;
@@ -660,7 +679,7 @@ a:hover {
   align-items: center;
   gap: 12px;
   min-height: 57px;
-  font-size: 0.75rem;
+  font-size: var(--type-caption);
   color: var(--color-text-secondary);
 }
 
@@ -696,9 +715,7 @@ a:hover {
 }
 
 .status-encoding {
-  font-family:
-    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
+  font-family: var(--font-mono);
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -750,7 +767,7 @@ a:hover {
 
 .sidebar-settings-title {
   margin: 0 0 10px;
-  font-size: 0.85rem;
+  font-size: var(--type-navigation);
   font-weight: 700;
   color: var(--color-text);
 }
@@ -842,7 +859,7 @@ a:hover {
 /* Viewer */
 .viewer {
   overflow-y: auto;
-  background: var(--color-canvas);
+  background: var(--surface-reader);
   position: relative;
   min-width: 0;
 }
@@ -861,7 +878,7 @@ a:hover {
   color: var(--mobile-toggle-fg);
   min-height: 48px;
   padding: 0 16px;
-  font-size: 0.9rem;
+  font-size: var(--type-navigation);
   font-weight: 600;
   box-shadow: 0 10px 24px color-mix(in srgb, var(--color-accent) 25%, transparent);
   cursor: pointer;
@@ -888,10 +905,8 @@ body.mobile-toggle-left .mobile-menu-toggle {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.85rem;
-  font-family:
-    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
+  font-size: var(--type-metadata);
+  font-family: var(--font-mono);
   color: var(--color-text-subtle);
   margin-bottom: 24px;
   flex-wrap: nowrap;
@@ -944,7 +959,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 
 .viewer-title {
   margin: 0 0 16px;
-  font-size: 2.5rem;
+  font-size: var(--type-title);
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: 0;
@@ -956,10 +971,8 @@ body.mobile-toggle-left .mobile-menu-toggle {
   align-items: center;
   gap: 16px;
   min-height: 22px;
-  font-size: 0.85rem;
-  font-family:
-    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
+  font-size: var(--type-metadata);
+  font-family: var(--font-mono);
   color: var(--color-text-secondary);
 }
 
@@ -975,7 +988,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 }
 
 .meta-prefix {
-  font-size: 0.74rem;
+  font-size: var(--type-caption);
   font-weight: 700;
   letter-spacing: 0;
   color: var(--color-text-secondary);
@@ -991,13 +1004,13 @@ body.mobile-toggle-left .mobile-menu-toggle {
 
 /* Viewer content */
 .viewer-content {
-  line-height: 1.82;
-  font-size: 1.02rem;
+  line-height: var(--leading-content);
+  font-size: var(--type-content);
   width: 100%;
   max-width: none;
   margin: 0;
   text-wrap: pretty;
-  color: var(--color-text-secondary);
+  color: var(--color-text);
 }
 
 .viewer-content > :first-child {
@@ -1010,7 +1023,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 .viewer-content h4 {
   color: var(--color-text);
   font-weight: 650;
-  line-height: 1.33;
+  line-height: var(--leading-heading);
   letter-spacing: 0;
   text-wrap: balance;
   margin-top: 2.2rem;
@@ -1019,7 +1032,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 }
 
 .viewer-content h1 {
-  font-size: 2.08rem;
+  font-size: var(--type-heading-1);
   font-weight: 760;
   letter-spacing: 0;
   margin-top: 2.8rem;
@@ -1029,7 +1042,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 }
 
 .viewer-content h2 {
-  font-size: 1.62rem;
+  font-size: var(--type-heading-2);
   margin-top: 2.6rem;
   margin-bottom: 1.04rem;
   padding: 0.1rem 0 0.18rem 0.55rem;
@@ -1037,14 +1050,14 @@ body.mobile-toggle-left .mobile-menu-toggle {
 }
 
 .viewer-content h3 {
-  font-size: 1.34rem;
+  font-size: var(--type-heading-3);
   color: var(--content-heading-subtle);
   margin-top: 2.15rem;
   margin-bottom: 0.92rem;
 }
 
 .viewer-content h4 {
-  font-size: 1.14rem;
+  font-size: var(--type-heading-4);
   color: var(--content-heading-subtle);
   margin-top: 1.85rem;
   margin-bottom: 0.8rem;
@@ -1086,7 +1099,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   padding: 12px 16px;
   padding-left: 20px;
   border-left: 4px solid var(--color-accent);
-  background: rgba(230, 233, 239, 0.5);
+  background: color-mix(in srgb, var(--color-surface) 58%, transparent);
   border-radius: 0 8px 8px 0;
   font-style: normal;
   color: var(--color-text-secondary);
@@ -1098,9 +1111,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   border: 1px solid var(--color-border);
   border-radius: 4px;
   padding: 2px 6px;
-  font-family:
-    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
+  font-family: var(--font-mono);
   font-size: 0.88em;
   color: var(--color-accent);
 }
@@ -1147,10 +1158,8 @@ body.mobile-toggle-left .mobile-menu-toggle {
 
 .code-filename {
   flex: 1;
-  font-family:
-    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
-  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
   color: #aeb7c2;
   text-align: center;
 }
@@ -1194,9 +1203,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   display: block;
   padding: 18px 20px;
   overflow-x: auto;
-  font-family:
-    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
+  font-family: var(--font-mono);
   font-size: 0.95rem;
   font-weight: 500;
   line-height: 1.72;
@@ -1242,10 +1249,8 @@ body.mobile-toggle-left .mobile-menu-toggle {
   box-shadow: none;
   background: transparent !important;
   color: var(--color-text-secondary);
-  font-family:
-    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
-  font-size: 0.9rem;
+  font-family: var(--font-mono);
+  font-size: var(--type-navigation);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
@@ -1304,9 +1309,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   display: block;
   padding: 16px;
   overflow-x: auto;
-  font-family:
-    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
+  font-family: var(--font-mono);
   font-size: 0.875rem;
   line-height: 1.6;
 }
@@ -1316,7 +1319,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   width: 100%;
   border-collapse: collapse;
   margin: 1.5rem 0;
-  font-size: 0.9rem;
+  font-size: var(--type-navigation);
 }
 
 .viewer-content th {
@@ -1333,7 +1336,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 }
 
 .viewer-content tr:hover {
-  background: rgba(230, 233, 239, 0.5);
+  background: color-mix(in srgb, var(--color-surface) 58%, transparent);
 }
 
 /* Images */
@@ -1448,7 +1451,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 
 .backlinks-title {
   margin: 0 0 14px;
-  font-size: 1.05rem;
+  font-size: var(--type-navigation);
   color: var(--color-text-muted);
 }
 
@@ -1485,7 +1488,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 }
 
 .backlink-prefix {
-  font-size: 0.72rem;
+  font-size: var(--type-caption);
   font-weight: 700;
   letter-spacing: 0;
   color: var(--color-text-subtle);
@@ -1495,7 +1498,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 }
 
 .backlink-text {
-  font-size: 0.9rem;
+  font-size: var(--type-navigation);
 }
 
 .nav-link {
@@ -1518,7 +1521,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.75rem;
+  font-size: var(--type-caption);
   color: var(--color-text-subtle);
   margin-bottom: 4px;
 }
@@ -1528,7 +1531,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
 }
 
 .nav-link-title {
-  font-size: 0.9rem;
+  font-size: var(--type-navigation);
   font-weight: 500;
   color: var(--color-text);
 }
@@ -1559,7 +1562,7 @@ body.mobile-toggle-left .mobile-menu-toggle {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  background: var(--color-canvas);
+  background: var(--surface-reader);
   color: var(--color-text);
 }
 
@@ -1674,8 +1677,9 @@ body.mobile-toggle-left .mobile-menu-toggle {
     padding: 32px 24px 104px;
   }
 
-  .viewer-title {
-    font-size: 1.75rem;
+  .viewer {
+    --type-title: 1.75rem;
+    --type-content: 1.05rem;
   }
 
   .viewer-meta {
@@ -1684,7 +1688,6 @@ body.mobile-toggle-left .mobile-menu-toggle {
   }
 
   .viewer-content {
-    font-size: 1.05rem;
     line-height: 1.9;
   }
 
@@ -1744,22 +1747,16 @@ body.mobile-toggle-left .mobile-menu-toggle {
     padding: 22px clamp(16px, 5vw, 22px) 104px;
   }
 
+  .viewer {
+    --type-content: 1.01rem;
+    --type-heading-1: 1.82rem;
+    --type-heading-2: 1.42rem;
+    --type-heading-3: 1.22rem;
+  }
+
   .viewer-content {
-    font-size: 1.01rem;
     line-height: 1.88;
     max-width: none;
-  }
-
-  .viewer-content h1 {
-    font-size: 1.82rem;
-  }
-
-  .viewer-content h2 {
-    font-size: 1.42rem;
-  }
-
-  .viewer-content h3 {
-    font-size: 1.22rem;
   }
 
   .viewer-content table {

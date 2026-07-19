@@ -763,29 +763,31 @@ export function createTreeController(options) {
     deferredFrame = windowRef.requestAnimationFrame(() => {
       deferredFrame = null;
       paintFrame = windowRef.requestAnimationFrame(() => {
-        paintFrame = null;
-        if (!events) {
-          return;
-        }
-        treeLoadAllowed = true;
-        windowRef.performance?.mark?.("eiam-first-content-paint-opportunity");
-        if (pendingTreeLoadReason) {
-          void requestLoad(pendingTreeLoadReason);
-          return;
-        }
-        if (isCompactLayout()) {
-          return;
-        }
-        const loadForDesktop = () => {
-          idleHandle = null;
-          idleFallbackTimer = null;
-          void requestLoad("desktop-idle");
-        };
-        if (typeof windowRef.requestIdleCallback === "function") {
-          idleHandle = windowRef.requestIdleCallback(loadForDesktop, { timeout: 500 });
-        } else {
-          idleFallbackTimer = windowRef.setTimeout(loadForDesktop, 0);
-        }
+        paintFrame = windowRef.requestAnimationFrame(() => {
+          paintFrame = null;
+          if (!events) {
+            return;
+          }
+          treeLoadAllowed = true;
+          windowRef.performance?.mark?.("eiam-first-content-paint-opportunity");
+          if (pendingTreeLoadReason) {
+            void requestLoad(pendingTreeLoadReason);
+            return;
+          }
+          if (isCompactLayout()) {
+            return;
+          }
+          const loadForDesktop = () => {
+            idleHandle = null;
+            idleFallbackTimer = null;
+            void requestLoad("desktop-idle");
+          };
+          if (typeof windowRef.requestIdleCallback === "function") {
+            idleHandle = windowRef.requestIdleCallback(loadForDesktop, { timeout: 500 });
+          } else {
+            idleFallbackTimer = windowRef.setTimeout(loadForDesktop, 0);
+          }
+        });
       });
     });
   };

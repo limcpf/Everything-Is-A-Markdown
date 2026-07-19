@@ -69,7 +69,7 @@ test.describe("semantic theme tokens", () => {
               bodyBackground: "rgb(239, 241, 245)",
               bodyColor: "rgb(76, 79, 105)",
               sidebarBackground: "rgb(230, 233, 239)",
-              viewerBackground: "rgb(239, 241, 245)",
+              viewerBackground: "rgb(255, 255, 255)",
             }
           : {
               appliedTheme: "dark",
