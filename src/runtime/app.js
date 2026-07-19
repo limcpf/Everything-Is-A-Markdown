@@ -43,6 +43,7 @@ function collectViewerElements() {
   return {
     breadcrumb: document.getElementById("viewer-breadcrumb"),
     title: document.getElementById("viewer-title"),
+    mobileTitle: document.getElementById("mobile-reader-title"),
     meta: document.getElementById("viewer-meta"),
     content: document.getElementById("viewer-content"),
     backlinks: document.getElementById("viewer-backlinks"),

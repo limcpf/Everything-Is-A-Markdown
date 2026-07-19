@@ -226,10 +226,6 @@ function createFakeDocument() {
   const appRoot = new FakeElement();
   const viewer = new FakeElement();
   const inputs = {
-    menu: [
-      Object.assign(new FakeInput(), { value: "left" }),
-      Object.assign(new FakeInput(), { value: "right" }),
-    ],
     theme: [
       Object.assign(new FakeInput(), { value: "system" }),
       Object.assign(new FakeInput(), { value: "light" }),
@@ -259,7 +255,6 @@ function createFakeDocument() {
       return null;
     },
     querySelectorAll(selector: string) {
-      if (selector === 'input[name="menu-toggle-position"]') return inputs.menu;
       if (selector === 'input[name="theme-mode"]') return inputs.theme;
       return [];
     },

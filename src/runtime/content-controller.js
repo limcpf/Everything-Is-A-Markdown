@@ -106,6 +106,7 @@ export function createContentController(options) {
     });
     setHtml(elements.breadcrumb, chrome.breadcrumbHtml);
     setText(elements.title, doc.title);
+    setText(elements.mobileTitle, doc.title);
     setHtml(elements.meta, chrome.metaHtml);
     updateBacklinks(chrome.backlinksHtml);
     setHtml(elements.nav, chrome.navHtml);
@@ -128,6 +129,7 @@ export function createContentController(options) {
     lifecycle.onMissingSelection?.();
     setHtml(elements.breadcrumb, renderers.breadcrumb(route));
     setText(elements.title, messages.missingDocumentTitle);
+    setText(elements.mobileTitle, messages.missingDocumentTitle);
     setHtml(elements.meta, "");
     setPlaceholder(elements.content, messages.missingRouteBody);
     updateBacklinks("");

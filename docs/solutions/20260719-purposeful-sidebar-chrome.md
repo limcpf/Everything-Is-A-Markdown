@@ -12,7 +12,7 @@ Every persistent sidebar element has one user-facing purpose:
 | Folder chevrons     | Expose hierarchy and expansion state                                                      |
 | Prefix text         | Preserves the document's stable public identifier without pill decoration                 |
 | `NEW` marker        | Communicates actual recency derived from document dates                                   |
-| Settings button     | Keeps theme and mobile menu-position preferences available                                |
+| Settings button     | Keeps the persisted theme preference available                                             |
 | Mobile close button | Exits the modal navigation panel                                                          |
 
 The terminal glyph, branch badge and pills, `publish: true` copy, animated

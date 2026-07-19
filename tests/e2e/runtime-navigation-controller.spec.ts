@@ -108,9 +108,11 @@ test.describe("runtime navigation contracts", () => {
     const navigation = createNavigationState(createManifest());
     const nav = new ListenerElement();
     const backlinks = new ListenerElement();
+    const mobileTitle = new ListenerElement();
     const elements = {
       breadcrumb: new ListenerElement(),
       title: new ListenerElement(),
+      mobileTitle,
       meta: new ListenerElement(),
       content: new ListenerElement(),
       backlinks,
@@ -168,6 +170,7 @@ test.describe("runtime navigation contracts", () => {
     await controller.navigate("/BASE/", true);
     expect(navigation.currentDocId).toBe("base");
     expect(elements.breadcrumb.innerHTML).toBe("crumb:/BASE/");
+    expect(mobileTitle.textContent).toBe("Base");
     expect(elements.content.innerHTML).toBe("content:/blog/content/base.html");
     expect(elements.nav.innerHTML).toBe("nav:base");
     expect(pushed).toEqual(["/blog/BASE/"]);

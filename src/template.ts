@@ -236,7 +236,7 @@ export function renderAppShellHtml(
 <html lang="${locale}">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 ${headMeta}
     <link rel="stylesheet" href="${escapeHtmlAttribute(assets.cssHref)}" />
   </head>
@@ -302,17 +302,6 @@ ${headMeta}
           <section id="sidebar-settings" class="sidebar-settings" hidden aria-label="${text(messages.explorerSettings)}">
             <p class="sidebar-settings-title">${text(messages.explorerSettings)}</p>
             <fieldset class="settings-group">
-              <legend>${text(messages.menuButtonPosition)}</legend>
-              <label class="settings-option">
-                <input type="radio" name="menu-toggle-position" value="right" checked />
-                <span>${text(messages.bottomRight)}</span>
-              </label>
-              <label class="settings-option">
-                <input type="radio" name="menu-toggle-position" value="left" />
-                <span>${text(messages.bottomLeft)}</span>
-              </label>
-            </fieldset>
-            <fieldset class="settings-group">
               <legend>${text(messages.theme)}</legend>
               <div class="settings-segment" role="radiogroup" aria-label="${text(messages.selectTheme)}">
                 <label class="settings-segment-option">
@@ -343,17 +332,20 @@ ${headMeta}
         tabindex="0"
       ></div>
       <main id="viewer-panel" class="viewer" tabindex="-1">
-        <button
-          id="sidebar-toggle"
-          class="mobile-menu-toggle"
-          type="button"
-          aria-controls="sidebar-panel"
-          aria-expanded="false"
-          aria-label="${text(messages.openExplorer)}"
-        >
-          ${renderAppIcon("menu")}
-          <span>${text(messages.files)}</span>
-        </button>
+        <header class="mobile-reader-header">
+          <button
+            id="sidebar-toggle"
+            class="mobile-menu-toggle"
+            type="button"
+            aria-controls="sidebar-panel"
+            aria-expanded="false"
+            aria-label="${text(messages.openExplorer)}"
+          >
+            ${renderAppIcon("menu")}
+            <span>${text(messages.files)}</span>
+          </button>
+          <p id="mobile-reader-title" class="mobile-reader-title">${initialTitle}</p>
+        </header>
         <div class="viewer-container">
           <nav id="viewer-breadcrumb" class="viewer-breadcrumb" aria-label="${text(messages.path)}">${initialBreadcrumb}</nav>
           <header id="viewer-header" class="viewer-header">
@@ -388,7 +380,7 @@ export function render404Html(
 <html lang="${normalizedLocale}">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>404 - ${escapeHtmlAttribute(siteTitle.trim() || DEFAULT_SITE_TITLE)}</title>
     <link rel="stylesheet" href="${escapeHtmlAttribute(assets.cssHref)}" />
   </head>
