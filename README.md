@@ -519,7 +519,7 @@ Main behaviors:
 - direct-link loading from route HTML
 - previous/next document navigation
 - backlink list for notes referenced by other notes
-- mobile sidebar with accessibility handling and focus trap behavior
+- sticky mobile reader header with an accessible modal sidebar and focus trap behavior
 - theme mode persistence: `light`, `dark`, `system`
 - sidebar width persistence on desktop
 
@@ -649,7 +649,7 @@ E2E coverage in `tests/e2e/` includes:
 - searchable Trees sidebar behavior
 - responsive sidebar layout bounds with long Korean/English labels
 - Mermaid runtime behavior
-- mobile sidebar accessibility and focus trap behavior
+- sticky mobile reader header layout, safe-area behavior, and modal sidebar accessibility
 - runtime XSS/path-base guardrails
 
 ## Known Limitations

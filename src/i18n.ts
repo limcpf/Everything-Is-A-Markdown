@@ -20,9 +20,6 @@ export interface UiMessages {
   documentExplorer: string;
   openExplorerSettings: string;
   explorerSettings: string;
-  menuButtonPosition: string;
-  bottomRight: string;
-  bottomLeft: string;
   theme: string;
   selectTheme: string;
   lightTheme: string;
@@ -87,9 +84,6 @@ const koreanMessages = Object.freeze({
   documentExplorer: "문서 탐색기",
   openExplorerSettings: "탐색기 설정 열기",
   explorerSettings: "탐색기 설정",
-  menuButtonPosition: "메뉴 버튼 위치",
-  bottomRight: "오른쪽 하단",
-  bottomLeft: "왼쪽 하단",
   theme: "테마",
   selectTheme: "테마 선택",
   lightTheme: "밝게",
@@ -153,9 +147,6 @@ const englishMessages = Object.freeze({
   documentExplorer: "Document explorer",
   openExplorerSettings: "Open explorer settings",
   explorerSettings: "Explorer settings",
-  menuButtonPosition: "Menu button position",
-  bottomRight: "Bottom right",
-  bottomLeft: "Bottom left",
   theme: "Theme",
   selectTheme: "Select theme",
   lightTheme: "Light",

@@ -1,6 +1,5 @@
 import { createEventScope } from "./controller-lifecycle.js";
 
-const MENU_TOGGLE_POSITION_KEY = "fsblog.menuTogglePosition";
 const THEME_MODE_KEY = "fsblog.themeMode";
 const DARK_MODE_QUERY = "(prefers-color-scheme: dark)";
 
@@ -43,9 +42,6 @@ export function createSettingsController(options = {}) {
   const settingsToggle = documentRef.getElementById("settings-toggle");
   const settingsClose = documentRef.getElementById("settings-close");
   const settingsPanel = documentRef.getElementById("sidebar-settings");
-  const menuTogglePositionInputs = Array.from(
-    documentRef.querySelectorAll('input[name="menu-toggle-position"]'),
-  );
   const themeModeInputs = Array.from(documentRef.querySelectorAll('input[name="theme-mode"]'));
   const darkModeMediaQuery = windowRef.matchMedia(DARK_MODE_QUERY);
   /** @type {EventScope | null} */
@@ -72,9 +68,7 @@ export function createSettingsController(options = {}) {
     }
     settingsPanel.hidden = false;
     setSettingsExpanded(true);
-    const checkedInput = settingsPanel.querySelector(
-      'input[name="theme-mode"]:checked, input[name="menu-toggle-position"]:checked',
-    );
+    const checkedInput = settingsPanel.querySelector('input[name="theme-mode"]:checked');
     if (checkedInput instanceof windowRef.HTMLElement) {
       checkedInput.focus();
     }
@@ -91,26 +85,10 @@ export function createSettingsController(options = {}) {
     }
   };
 
-  /** @param {"left" | "right"} position */
-  const applyMenuTogglePosition = (position) => {
-    documentRef.body?.classList.toggle("mobile-toggle-left", position === "left");
-  };
-
   const applyTheme = () => {
     const appliedTheme = resolveAppliedTheme(themeMode, darkModeMediaQuery.matches);
     documentRef.documentElement.dataset.theme = appliedTheme;
     documentRef.documentElement.style.colorScheme = appliedTheme;
-  };
-
-  /** @param {Event} event */
-  const handleMenuTogglePositionChange = (event) => {
-    const input = event.currentTarget;
-    if (!(input instanceof windowRef.HTMLInputElement) || !input.checked) {
-      return;
-    }
-    const nextPosition = input.value === "left" ? "left" : "right";
-    applyMenuTogglePosition(nextPosition);
-    storage.setItem(MENU_TOGGLE_POSITION_KEY, nextPosition);
   };
 
   /** @param {Event} event */
@@ -161,17 +139,9 @@ export function createSettingsController(options = {}) {
         return;
       }
 
-      const savedTogglePosition =
-        storage.getItem(MENU_TOGGLE_POSITION_KEY) === "left" ? "left" : "right";
       themeMode = normalizeThemeMode(storage.getItem(THEME_MODE_KEY));
-      applyMenuTogglePosition(savedTogglePosition);
       applyTheme();
 
-      for (const input of menuTogglePositionInputs) {
-        if (input instanceof windowRef.HTMLInputElement) {
-          input.checked = input.value === savedTogglePosition;
-        }
-      }
       for (const input of themeModeInputs) {
         if (input instanceof windowRef.HTMLInputElement) {
           input.checked = input.value === themeMode;
@@ -183,9 +153,6 @@ export function createSettingsController(options = {}) {
       events.listen(settingsClose, "click", close);
       events.listen(documentRef, "click", handleOutsideClick);
       events.listen(darkModeMediaQuery, "change", handleDarkModeChange);
-      for (const input of menuTogglePositionInputs) {
-        events.listen(input, "change", handleMenuTogglePositionChange);
-      }
       for (const input of themeModeInputs) {
         events.listen(input, "change", handleThemeModeChange);
       }

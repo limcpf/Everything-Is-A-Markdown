@@ -129,6 +129,7 @@ export interface EventScope {
 export interface ViewerElements {
   breadcrumb: HTMLElement | null;
   title: HTMLElement | null;
+  mobileTitle: HTMLElement | null;
   meta: HTMLElement | null;
   content: HTMLElement | null;
   backlinks: HTMLElement | null;
