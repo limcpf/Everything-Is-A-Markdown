@@ -221,6 +221,7 @@ a:hover {
   height: 100dvh;
   min-height: 0;
   width: 100vw;
+  padding: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom) var(--safe-area-left);
 }
 
 .app-root.is-resizing,
@@ -656,7 +657,7 @@ a:hover {
   right: 12px;
   bottom: calc(100% + 8px);
   width: min(300px, calc(100vw - 24px));
-  max-height: calc(100dvh - 70px);
+  max-height: calc(100dvh - 70px - var(--safe-area-top) - var(--safe-area-bottom));
   overflow: auto;
   background: var(--color-canvas);
   border: 1px solid var(--color-border);
@@ -1525,6 +1526,7 @@ a:hover {
 @media (max-width: 0px /* eiam-compact-breakpoint */) {
   .app-root {
     grid-template-columns: 1fr;
+    padding: 0;
   }
 
   .app-splitter {
@@ -1596,10 +1598,6 @@ a:hover {
 
   .sidebar-search {
     padding: 12px 14px 9px;
-  }
-
-  .sidebar-settings {
-    max-height: calc(100dvh - 70px - var(--safe-area-top) - var(--safe-area-bottom));
   }
 
   .viewer-container {

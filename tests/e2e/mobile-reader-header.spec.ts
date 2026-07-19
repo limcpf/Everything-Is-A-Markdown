@@ -186,7 +186,9 @@ test.describe("sticky mobile reader header", () => {
   test("safe-area metadata와 설정 정리 contract를 노출하고 desktop에서는 숨는다", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    const viewport = { width: 1280, height: 800 };
+    const safeArea = { top: 29, right: 21, bottom: 25, left: 18 };
+    await page.setViewportSize(viewport);
     await page.goto("/BC-VO-01/");
     await waitForAppReady(page);
 
@@ -197,5 +199,40 @@ test.describe("sticky mobile reader header", () => {
     await expect(page.locator(".mobile-reader-header")).toBeHidden();
     await expect(page.locator("#sidebar-panel")).toBeVisible();
     await expect(page.locator('input[name="menu-toggle-position"]')).toHaveCount(0);
+
+    await page.evaluate((insets) => {
+      const root = document.documentElement.style;
+      root.setProperty("--safe-area-top", `${insets.top}px`);
+      root.setProperty("--safe-area-right", `${insets.right}px`);
+      root.setProperty("--safe-area-bottom", `${insets.bottom}px`);
+      root.setProperty("--safe-area-left", `${insets.left}px`);
+    }, safeArea);
+    await page.locator("#settings-toggle").click();
+    await expect(page.locator("#sidebar-settings")).toBeVisible();
+
+    const desktop = await page.evaluate(() => {
+      const rect = (selector: string) => {
+        const bounds = document.querySelector(selector)!.getBoundingClientRect();
+        return {
+          bottom: bounds.bottom,
+          left: bounds.left,
+          right: bounds.right,
+          top: bounds.top,
+        };
+      };
+      return {
+        settings: rect("#sidebar-settings"),
+        sidebar: rect("#sidebar-panel"),
+        tools: rect(".sidebar-tools"),
+        viewer: rect("#viewer-panel"),
+      };
+    });
+
+    expect(desktop.sidebar.top).toBeGreaterThanOrEqual(safeArea.top);
+    expect(desktop.sidebar.left).toBeGreaterThanOrEqual(safeArea.left);
+    expect(desktop.sidebar.bottom).toBeLessThanOrEqual(viewport.height - safeArea.bottom + 1);
+    expect(desktop.tools.bottom).toBeLessThanOrEqual(viewport.height - safeArea.bottom + 1);
+    expect(desktop.settings.top).toBeGreaterThanOrEqual(safeArea.top);
+    expect(desktop.viewer.right).toBeLessThanOrEqual(viewport.width - safeArea.right + 1);
   });
 });
