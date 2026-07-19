@@ -18,8 +18,10 @@ header, fixed modal drawer, skip link, reader content, and persistent desktop ch
 all four insets at the app-shell boundary before laying out its grid. Compact mode resets that shell
 padding and applies the insets at the drawer boundary instead, which avoids double spacing while
 keeping the title, close action, search, tree, settings tool, and settings popover inside the usable
-viewport. Header flex children can shrink without introducing horizontal overflow when the browser
-is zoomed or the viewport is narrow.
+viewport. Desktop sidebar resizing measures the padded shell's content width, so its active width,
+drag behavior, and separator ARIA range stay synchronized; previously stored values are clamped on
+load. Header flex children can shrink without introducing horizontal overflow when the browser is
+zoomed or the viewport is narrow.
 
 The header stays below the sidebar overlay in the stacking order. Opening the explorer preserves
 the existing modal contract: the reader becomes inert, focus is trapped in the drawer, Escape or

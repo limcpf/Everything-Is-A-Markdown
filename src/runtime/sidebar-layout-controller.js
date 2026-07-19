@@ -121,14 +121,27 @@ export function createSidebarLayoutController(options = {}) {
 
   const isCompact = () => compactMediaQuery.matches;
 
+  const getDesktopLayoutWidth = () => {
+    if (!(appRoot instanceof windowRef.HTMLElement) || !(appRoot.clientWidth > 0)) {
+      return windowRef.innerWidth;
+    }
+    const style = windowRef.getComputedStyle(appRoot);
+    const horizontalPadding =
+      (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
+    return Math.max(0, appRoot.clientWidth - horizontalPadding);
+  };
+
+  const getDesktopSidebarMax = () =>
+    Math.max(
+      layout.desktopSidebarMinPx,
+      getDesktopLayoutWidth() - layout.desktopViewerMinPx - layout.splitterWidthPx,
+    );
+
   const updateSplitterA11y = () => {
     if (!(splitter instanceof windowRef.HTMLElement)) {
       return;
     }
-    const max = Math.max(
-      layout.desktopSidebarMinPx,
-      windowRef.innerWidth - layout.desktopViewerMinPx - layout.splitterWidthPx,
-    );
+    const max = getDesktopSidebarMax();
     splitter.setAttribute("aria-valuemin", String(layout.desktopSidebarMinPx));
     splitter.setAttribute("aria-valuemax", String(Math.round(max)));
     splitter.setAttribute("aria-valuenow", String(Math.round(desktopSidebarWidth)));
@@ -140,7 +153,7 @@ export function createSidebarLayoutController(options = {}) {
   const syncDesktopSidebarWidth = (persist) => {
     desktopSidebarWidth = clampResolvedDesktopSidebarWidth(
       desktopSidebarWidth,
-      windowRef.innerWidth,
+      getDesktopLayoutWidth(),
       layout,
     );
     if (appRoot instanceof windowRef.HTMLElement) {
@@ -312,10 +325,7 @@ export function createSidebarLayoutController(options = {}) {
     if (isCompact()) {
       return;
     }
-    const max = Math.max(
-      layout.desktopSidebarMinPx,
-      windowRef.innerWidth - layout.desktopViewerMinPx - layout.splitterWidthPx,
-    );
+    const max = getDesktopSidebarMax();
     let nextWidth = desktopSidebarWidth;
     if (event.key === "ArrowLeft") {
       nextWidth -= layout.splitterStepPx;

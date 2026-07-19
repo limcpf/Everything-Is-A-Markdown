@@ -200,12 +200,19 @@ test.describe("sticky mobile reader header", () => {
     await expect(page.locator("#sidebar-panel")).toBeVisible();
     await expect(page.locator('input[name="menu-toggle-position"]')).toHaveCount(0);
 
+    const splitter = page.locator("#app-splitter");
+    await splitter.focus();
+    await page.keyboard.press("End");
+    const maxBeforeInsets = Number(await splitter.getAttribute("aria-valuemax"));
+    await expect(splitter).toHaveAttribute("aria-valuenow", String(maxBeforeInsets));
+
     await page.evaluate((insets) => {
       const root = document.documentElement.style;
       root.setProperty("--safe-area-top", `${insets.top}px`);
       root.setProperty("--safe-area-right", `${insets.right}px`);
       root.setProperty("--safe-area-bottom", `${insets.bottom}px`);
       root.setProperty("--safe-area-left", `${insets.left}px`);
+      window.dispatchEvent(new Event("resize"));
     }, safeArea);
     await page.locator("#settings-toggle").click();
     await expect(page.locator("#sidebar-settings")).toBeVisible();
@@ -223,6 +230,11 @@ test.describe("sticky mobile reader header", () => {
       return {
         settings: rect("#sidebar-settings"),
         sidebar: rect("#sidebar-panel"),
+        sidebarWidth: getComputedStyle(document.querySelector(".app-root")!).getPropertyValue(
+          "--sidebar-width",
+        ),
+        splitterMax: document.querySelector("#app-splitter")!.getAttribute("aria-valuemax"),
+        splitterNow: document.querySelector("#app-splitter")!.getAttribute("aria-valuenow"),
         tools: rect(".sidebar-tools"),
         viewer: rect("#viewer-panel"),
       };
@@ -234,5 +246,9 @@ test.describe("sticky mobile reader header", () => {
     expect(desktop.tools.bottom).toBeLessThanOrEqual(viewport.height - safeArea.bottom + 1);
     expect(desktop.settings.top).toBeGreaterThanOrEqual(safeArea.top);
     expect(desktop.viewer.right).toBeLessThanOrEqual(viewport.width - safeArea.right + 1);
+    const safeMax = maxBeforeInsets - safeArea.left - safeArea.right;
+    expect(desktop.sidebarWidth.trim()).toBe(`${safeMax}px`);
+    expect(desktop.splitterMax).toBe(String(safeMax));
+    expect(desktop.splitterNow).toBe(String(safeMax));
   });
 });
