@@ -1,5 +1,6 @@
 import { escapeHtmlAttribute } from "./seo";
 import type { Manifest } from "./types";
+import { toViewPathWithBase } from "./view-contract";
 
 const DEFAULT_TITLE = "File-System Blog";
 const DEFAULT_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
@@ -168,16 +169,6 @@ function renderInitialViewScript(initialView: AppShellInitialView | null): strin
   return `\n    <script id="initial-view-data" type="application/json">${payload}</script>`;
 }
 
-function toPublicUrl(pathBase: string, pathname: string): string {
-  const normalizedBase = pathBase.trim().replace(/^\/+|\/+$/g, "");
-  const normalizedPath = pathname.trim().replace(/^\/+/g, "");
-  const rawPath = `/${[normalizedBase, normalizedPath].filter(Boolean).join("/")}`;
-  return rawPath
-    .split("/")
-    .map((segment, index) => (index === 0 && segment === "" ? "" : encodeURIComponent(segment)))
-    .join("/");
-}
-
 function renderRuntimeBootstrapScript(
   manifest: AppShellManifestPayload | null,
   assets: AppShellAssets,
@@ -187,9 +178,9 @@ function renderRuntimeBootstrapScript(
   }
 
   const payloadData: AppShellRuntimePayload = {
-    manifestUrl: toPublicUrl(manifest.pathBase, "/manifest.json"),
+    manifestUrl: toViewPathWithBase("/manifest.json", manifest.pathBase),
     pathBase: manifest.pathBase,
-    treeModuleUrl: toPublicUrl(manifest.pathBase, assets.treeModulePath),
+    treeModuleUrl: toViewPathWithBase(assets.treeModulePath, manifest.pathBase),
   };
   const payload = JSON.stringify(payloadData)
     .replaceAll("<", "\\u003c")

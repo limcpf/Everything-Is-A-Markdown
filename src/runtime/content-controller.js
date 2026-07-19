@@ -1,13 +1,13 @@
 import { toPathWithBase } from "./navigation-state.js";
 
 function setHtml(element, value) {
-  if (element) {
+  if (element && element.innerHTML !== value) {
     element.innerHTML = value;
   }
 }
 
 function setText(element, value) {
-  if (element) {
+  if (element && element.textContent !== value) {
     element.textContent = value;
   }
 }
@@ -31,21 +31,29 @@ export function createContentController(options) {
   let hasHydratedInitialView = false;
   let isSetup = false;
 
-  const updateBacklinks = (doc) => {
+  const updateBacklinks = (html) => {
     if (!elements.backlinks) {
       return;
     }
-    const html = doc ? renderers.backlinks(doc, pathBase) : "";
-    elements.backlinks.innerHTML = html;
-    elements.backlinks.hidden = html.length === 0;
+    setHtml(elements.backlinks, html);
+    const shouldHide = html.length === 0;
+    if (elements.backlinks.hidden !== shouldHide) {
+      elements.backlinks.hidden = shouldHide;
+    }
   };
 
   const renderChrome = (route, doc) => {
-    setHtml(elements.breadcrumb, renderers.breadcrumb(route));
+    const chrome = renderers.chrome({
+      route,
+      doc,
+      docs: navigation.view.docs,
+      pathBase,
+    });
+    setHtml(elements.breadcrumb, chrome.breadcrumbHtml);
     setText(elements.title, doc.title);
-    setHtml(elements.meta, renderers.meta(doc));
-    updateBacklinks(doc);
-    setHtml(elements.nav, renderers.nav(navigation.view, doc.id, pathBase));
+    setHtml(elements.meta, chrome.metaHtml);
+    updateBacklinks(chrome.backlinksHtml);
+    setHtml(elements.nav, chrome.navHtml);
   };
 
   const finishNavigation = async (doc) => {
@@ -62,7 +70,7 @@ export function createContentController(options) {
     setText(elements.title, "문서를 찾을 수 없습니다");
     setHtml(elements.meta, "");
     setHtml(elements.content, '<p class="placeholder">요청한 경로에 해당하는 문서가 없습니다.</p>');
-    updateBacklinks(null);
+    updateBacklinks("");
     setHtml(elements.nav, "");
     lifecycle.announce?.("탐색 실패: 요청한 문서를 찾을 수 없습니다.");
     if (push) {
@@ -105,7 +113,7 @@ export function createContentController(options) {
     const response = await fetchContent(toPathWithBase(resolved.doc.contentUrl, pathBase));
     if (!response.ok) {
       setHtml(elements.content, '<p class="placeholder">본문을 불러오지 못했습니다.</p>');
-      updateBacklinks(null);
+      updateBacklinks("");
       setHtml(elements.nav, "");
       lifecycle.announce?.(`탐색 실패: ${resolved.doc.title} 문서를 불러오지 못했습니다.`);
       return false;

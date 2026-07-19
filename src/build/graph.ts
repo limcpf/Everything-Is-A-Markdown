@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { BuildOptions, DocRecord, FileNode, FolderNode, Manifest, TreeNode } from "../types";
+import { filterViewDocsByBranch, pickViewHomeRoute } from "../view-contract";
 import type { DocumentGraphResult, WikiLookup } from "./contracts";
 import { buildBacklinksByDocId, createWikiLookup } from "./source";
 import { resolveSiteTitle } from "./shared";
@@ -67,14 +68,10 @@ function matchesPathPrefix(value: string, prefix: string): boolean {
 }
 
 export function pickHomeDoc(docs: DocRecord[]): DocRecord | null {
-  const inDefaultBranch = docs.filter((doc) => doc.branch == null || doc.branch === DEFAULT_BRANCH);
-  const candidates = inDefaultBranch.length > 0 ? inDefaultBranch : docs;
-  const byRoute = candidates.find((doc) => doc.route === "/index/");
-  if (byRoute) {
-    return byRoute;
-  }
-
-  return [...candidates].sort(compareByRecentDateThenPath)[0] ?? null;
+  const defaultCandidates = filterViewDocsByBranch(docs, DEFAULT_BRANCH, DEFAULT_BRANCH);
+  const candidates = defaultCandidates.length > 0 ? defaultCandidates : docs;
+  const route = pickViewHomeRoute(candidates);
+  return candidates.find((doc) => doc.route === route) ?? null;
 }
 
 function buildPinnedMenuFolder(docs: DocRecord[], options: BuildOptions): FolderNode | null {
