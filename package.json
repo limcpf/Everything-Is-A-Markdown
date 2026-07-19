@@ -21,18 +21,23 @@
 		"build": "bun run src/cli.ts build",
 		"dev": "bun run src/cli.ts dev",
 		"clean": "bun run src/cli.ts clean",
+		"check:size": "bun run scripts/check-output-size.ts --out ./dist",
+		"check:reproducible": "bun run scripts/check-build-reproducibility.ts --vault ./test-vault --out ./dist",
 		"lint:md:publish": "bun run scripts/lint-published-markdown.ts --out-dir dist",
 		"test:e2e": "playwright test",
 		"test:e2e:focus-trap": "playwright test tests/e2e/mobile-sidebar-focus-trap.spec.ts"
 	},
 	"dependencies": {
 		"@pierre/trees": "1.0.0-beta.4",
+		"@shikijs/core": "4.2.0",
+		"@shikijs/engine-javascript": "4.2.0",
+		"@shikijs/langs": "4.2.0",
+		"@shikijs/themes": "4.2.0",
 		"chokidar": "^5.0.0",
 		"gray-matter": "^4.0.3",
 		"markdown-it": "^14.2.0",
 		"picomatch": "^4.0.4",
-		"sanitize-html": "2.17.6",
-		"shiki": "^4.2.0"
+		"sanitize-html": "2.17.6"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.60.0",

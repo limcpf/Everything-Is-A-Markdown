@@ -2,7 +2,17 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
-import type { BuildCache, BuildOptions, DocRecord, FileNode, FolderNode, Manifest, TreeNode, WikiResolver } from "./types";
+import type {
+  BuildCache,
+  BuildOptions,
+  DocRecord,
+  FileNode,
+  FolderNode,
+  Manifest,
+  ManifestDoc,
+  TreeNode,
+  WikiResolver,
+} from "./types";
 import { createMarkdownRenderer } from "./markdown";
 import { buildCanonicalUrl, escapeHtmlAttribute } from "./seo";
 import { render404Html, renderAppShellHtml } from "./template";
@@ -44,6 +54,7 @@ interface OutputWriteContext {
 interface RuntimeAssets {
   cssRelPath: string;
   jsRelPath: string;
+  treeJsRelPath: string;
 }
 
 interface WikiLookup {
@@ -809,7 +820,6 @@ function toDocRecord(
   sourcePath: string,
   relPath: string,
   entry: CachedSourceEntry,
-  newThreshold: number,
 ): DocRecord {
   const relNoExt = stripMdExt(relPath);
   const fileName = path.basename(relPath);
@@ -834,7 +844,6 @@ function toDocRecord(
     body: entry.body,
     rawHash: entry.rawHash,
     wikiTargets: entry.wikiTargets,
-    isNew: isNewByFrontmatterDate(entry.date, newThreshold),
     branch: entry.branch,
   };
 }
@@ -849,9 +858,6 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
       stat: await fs.stat(sourcePath),
     })),
   );
-  const now = Date.now();
-  const newThreshold = now - options.newWithinDays * 24 * 60 * 60 * 1000;
-
   const docs: DocRecord[] = [];
   const nextSources: BuildCache["sources"] = {};
 
@@ -895,7 +901,7 @@ async function readPublishedDocs(options: BuildOptions, previousSources: BuildCa
     }
 
     nextSources[relPath] = completeEntry;
-    docs.push(toDocRecord(sourcePath, relPath, completeEntry, newThreshold));
+    docs.push(toDocRecord(sourcePath, relPath, completeEntry));
   }
 
   ensureUniqueRoutes(docs);
@@ -1020,16 +1026,6 @@ function fileNodeFromDoc(doc: DocRecord): FileNode {
     type: "file",
     name: doc.fileName,
     id: doc.id,
-    title: doc.title,
-    prefix: doc.prefix,
-    route: doc.route,
-    contentUrl: doc.contentUrl,
-    isNew: doc.isNew,
-    tags: doc.tags,
-    description: doc.description,
-    date: doc.date,
-    updatedDate: doc.updatedDate,
-    branch: doc.branch,
   };
 }
 
@@ -1057,11 +1053,6 @@ function parseDateToEpochMs(value: string | undefined): number | null {
 
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function isNewByFrontmatterDate(date: string | undefined, newThreshold: number): boolean {
-  const publishedAt = parseDateToEpochMs(date);
-  return publishedAt != null && publishedAt >= newThreshold;
 }
 
 function getRecentSortEpochMs(doc: DocRecord): number | null {
@@ -1200,22 +1191,26 @@ function buildManifest(docs: DocRecord[], tree: TreeNode[], options: BuildOption
   const wikiLookup = createWikiLookup(docs);
   const backlinksByDocId = buildBacklinksByDocId(docs, wikiLookup);
 
-  const docsForManifest = docs.map((doc) => ({
-    id: doc.id,
-    route: doc.route,
-    title: doc.title,
-    prefix: doc.prefix,
-    categoryPath: doc.categoryPath,
-    date: doc.date,
-    updatedDate: doc.updatedDate,
-    tags: doc.tags,
-    description: doc.description,
-    isNew: doc.isNew,
-    contentUrl: doc.contentUrl,
-    branch: doc.branch,
-    wikiTargets: doc.wikiTargets,
-    backlinks: backlinksByDocId.get(doc.id) ?? [],
-  }));
+  const docsById = Object.fromEntries(
+    docs.map((doc) => [
+      doc.id,
+      {
+        id: doc.id,
+        route: doc.route,
+        title: doc.title,
+        prefix: doc.prefix,
+        categoryPath: doc.categoryPath,
+        date: doc.date,
+        updatedDate: doc.updatedDate,
+        tags: doc.tags,
+        description: doc.description,
+        contentUrl: doc.contentUrl,
+        branch: doc.branch,
+        wikiTargets: doc.wikiTargets,
+        backlinks: backlinksByDocId.get(doc.id) ?? [],
+      },
+    ]),
+  );
 
   const branchSet = new Set<string>([DEFAULT_BRANCH]);
   for (const doc of docs) {
@@ -1235,7 +1230,7 @@ function buildManifest(docs: DocRecord[], tree: TreeNode[], options: BuildOption
   });
 
   return {
-    generatedAt: new Date().toISOString(),
+    schemaVersion: 2,
     siteTitle: resolveSiteTitle(options),
     pathBase: options.seo?.pathBase ?? "",
     defaultBranch: DEFAULT_BRANCH,
@@ -1247,7 +1242,8 @@ function buildManifest(docs: DocRecord[], tree: TreeNode[], options: BuildOption
     },
     tree,
     routeMap,
-    docs: docsForManifest,
+    docIds: docs.map((doc) => doc.id),
+    docsById,
   };
 }
 
@@ -1474,26 +1470,84 @@ function buildAppShellAssetsForOutput(outputPath: string, runtimeAssets: Runtime
   return {
     cssHref: toRelativeAssetPath(outputPath, runtimeAssets.cssRelPath),
     jsSrc: toRelativeAssetPath(outputPath, runtimeAssets.jsRelPath),
+    treeModulePath: `/${runtimeAssets.treeJsRelPath}`,
   };
 }
 
-async function bundleRuntimeJs(entrypoint: string): Promise<string> {
+function createMinimalTreeIconPlugin(): { plugin: Bun.BunPlugin; replacementCount: () => number } {
+  const minimalIconModule = path.join(import.meta.dir, "runtime", "tree-icons-minimal.js");
+  let replacements = 0;
+
+  return {
+    plugin: {
+      name: "eiam-minimal-tree-icons",
+      setup(builder) {
+        builder.onResolve({ filter: /builtInIcons[.]js$/ }, (args) => {
+          const importer = toPosixPath(args.importer);
+          if (!importer.includes("/node_modules/@pierre/trees/dist/")) {
+            return undefined;
+          }
+          replacements += 1;
+          return { path: minimalIconModule };
+        });
+      },
+    },
+    replacementCount: () => replacements,
+  };
+}
+
+async function bundleRuntimeJs(
+  entrypoint: string,
+  options: { label: string; replaceTreeIcons: boolean },
+): Promise<string> {
+  const minimalTreeIcons = options.replaceTreeIcons ? createMinimalTreeIconPlugin() : null;
   const result = await Bun.build({
     entrypoints: [entrypoint],
     target: "browser",
     format: "esm",
     splitting: false,
     sourcemap: "none",
+    minify: true,
+    plugins: minimalTreeIcons ? [minimalTreeIcons.plugin] : [],
   });
 
   if (!result.success) {
     const details = result.logs.map((log) => String(log)).filter(Boolean).join("\n");
-    throw new Error(`Failed to bundle runtime app.js${details ? `:\n${details}` : ""}`);
+    throw new Error(`Failed to bundle runtime ${options.label}${details ? `:\n${details}` : ""}`);
   }
 
   const output = result.outputs.find((artifact) => artifact.path.endsWith(".js")) ?? result.outputs[0];
   if (!output) {
-    throw new Error("Failed to bundle runtime app.js: no JavaScript output was produced");
+    throw new Error(`Failed to bundle runtime ${options.label}: no JavaScript output was produced`);
+  }
+
+  if (minimalTreeIcons && minimalTreeIcons.replacementCount() === 0) {
+    throw new Error("Failed to replace the pinned @pierre/trees built-in icon module");
+  }
+
+  const runtimeJs = await output.text();
+  if (runtimeJs.includes("file-tree-builtin-")) {
+    throw new Error("Failed to remove the @pierre/trees built-in file icon catalog");
+  }
+  return runtimeJs;
+}
+
+async function bundleRuntimeCss(entrypoint: string): Promise<string> {
+  const result = await Bun.build({
+    entrypoints: [entrypoint],
+    target: "browser",
+    sourcemap: "none",
+    minify: true,
+  });
+
+  if (!result.success) {
+    const details = result.logs.map((log) => String(log)).filter(Boolean).join("\n");
+    throw new Error(`Failed to bundle runtime app.css${details ? `:\n${details}` : ""}`);
+  }
+
+  const output = result.outputs.find((artifact) => artifact.path.endsWith(".css")) ?? result.outputs[0];
+  if (!output) {
+    throw new Error("Failed to bundle runtime app.css: no CSS output was produced");
   }
 
   return output.text();
@@ -1501,17 +1555,28 @@ async function bundleRuntimeJs(entrypoint: string): Promise<string> {
 
 async function writeRuntimeAssets(context: OutputWriteContext): Promise<RuntimeAssets> {
   const runtimeDir = path.join(import.meta.dir, "runtime");
-  const runtimeJs = await bundleRuntimeJs(path.join(runtimeDir, "app.js"));
-  const runtimeCss = await Bun.file(path.join(runtimeDir, "app.css")).text();
+  const [runtimeJs, treeRuntimeJs, runtimeCss] = await Promise.all([
+    bundleRuntimeJs(path.join(runtimeDir, "app.js"), {
+      label: "app.js",
+      replaceTreeIcons: false,
+    }),
+    bundleRuntimeJs(path.join(runtimeDir, "tree-runtime.js"), {
+      label: "tree-runtime.js",
+      replaceTreeIcons: true,
+    }),
+    bundleRuntimeCss(path.join(runtimeDir, "app.css")),
+  ]);
 
   const jsRelPath = `assets/app.${makeHash(runtimeJs).slice(0, 12)}.js`;
+  const treeJsRelPath = `assets/tree.${makeHash(treeRuntimeJs).slice(0, 12)}.js`;
   const cssRelPath = `assets/app.${makeHash(runtimeCss).slice(0, 12)}.css`;
 
   for (const previousPath of Object.keys(context.previousHashes)) {
     const isLegacyRuntimeAsset =
-      previousPath.startsWith("assets/app") &&
+      (previousPath.startsWith("assets/app") || previousPath.startsWith("assets/tree")) &&
       (previousPath.endsWith(".js") || previousPath.endsWith(".css")) &&
       previousPath !== jsRelPath &&
+      previousPath !== treeJsRelPath &&
       previousPath !== cssRelPath;
     if (!isLegacyRuntimeAsset) {
       continue;
@@ -1520,11 +1585,13 @@ async function writeRuntimeAssets(context: OutputWriteContext): Promise<RuntimeA
   }
 
   await writeOutputIfChanged(context, jsRelPath, runtimeJs);
+  await writeOutputIfChanged(context, treeJsRelPath, treeRuntimeJs);
   await writeOutputIfChanged(context, cssRelPath, runtimeCss);
 
   return {
     cssRelPath,
     jsRelPath,
+    treeJsRelPath,
   };
 }
 
@@ -1657,7 +1724,7 @@ function renderInitialNav(docs: DocRecord[], currentId: string, pathBase: string
   return html;
 }
 
-function renderInitialBacklinks(backlinks: Manifest["docs"][number]["backlinks"], pathBase: string): string {
+function renderInitialBacklinks(backlinks: ManifestDoc["backlinks"], pathBase: string): string {
   if (backlinks.length === 0) {
     return "";
   }
@@ -1677,7 +1744,7 @@ function buildInitialView(
   doc: DocRecord,
   docs: DocRecord[],
   contentHtml: string,
-  manifestDocById: Map<string, Manifest["docs"][number]>,
+  manifestDocById: Map<string, Manifest["docsById"][string]>,
   pathBase: string,
 ): AppShellInitialView {
   const manifestDoc = manifestDocById.get(doc.id);
@@ -1701,7 +1768,7 @@ async function writeShellPages(
   runtimeAssets: RuntimeAssets,
   contentByDocId: Map<string, string>,
 ): Promise<void> {
-  const manifestDocById = new Map(manifest.docs.map((doc) => [doc.id, doc]));
+  const manifestDocById = new Map(Object.entries(manifest.docsById));
   const pathBase = options.seo?.pathBase ?? "";
   const indexDoc = pickHomeDoc(docs);
   const indexOutputPath = "index.html";
@@ -1856,8 +1923,8 @@ function buildWikiResolutionSignature(doc: DocRecord, lookup: WikiLookup): strin
 function buildBacklinksByDocId(
   docs: DocRecord[],
   lookup: WikiLookup,
-): Map<string, Manifest["docs"][number]["backlinks"]> {
-  const buckets = new Map<string, Map<string, Manifest["docs"][number]["backlinks"][number]>>();
+): Map<string, ManifestDoc["backlinks"]> {
+  const buckets = new Map<string, Map<string, ManifestDoc["backlinks"][number]>>();
 
   for (const doc of docs) {
     for (const target of doc.wikiTargets) {
@@ -1866,7 +1933,7 @@ function buildBacklinksByDocId(
         continue;
       }
 
-      const bucket = buckets.get(targetDoc.id) ?? new Map<string, Manifest["docs"][number]["backlinks"][number]>();
+      const bucket = buckets.get(targetDoc.id) ?? new Map<string, ManifestDoc["backlinks"][number]>();
       bucket.set(doc.id, {
         id: doc.id,
         route: doc.route,
@@ -1877,9 +1944,9 @@ function buildBacklinksByDocId(
     }
   }
 
-  const backlinksByDocId = new Map<string, Manifest["docs"][number]["backlinks"]>();
+  const backlinksByDocId = new Map<string, ManifestDoc["backlinks"]>();
   for (const doc of docs) {
-    const source = buckets.get(doc.id) ?? new Map<string, Manifest["docs"][number]["backlinks"][number]>();
+    const source = buckets.get(doc.id) ?? new Map<string, ManifestDoc["backlinks"][number]>();
     const backlinks = Array.from(source.values()).sort((left, right) =>
       left.route.localeCompare(right.route, "ko-KR"),
     );

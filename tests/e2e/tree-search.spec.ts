@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { waitForAppReady } from "./utils/app-ready";
+import { waitForAppReady, waitForTreeReady } from "./utils/app-ready";
 
 test.describe("Trees sidebar search", () => {
   test("검색 결과를 필터링하고 clear 후 일반 트리로 복귀한다", async ({ page }) => {
     await page.goto("/");
     await waitForAppReady(page);
+    await waitForTreeReady(page);
 
     const searchInput = page.locator("#tree-search-input");
     const searchCount = page.locator("#tree-search-count");

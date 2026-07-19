@@ -27,6 +27,7 @@ export interface AppShellMeta {
 export interface AppShellAssets {
   cssHref: string;
   jsSrc: string;
+  treeModulePath: string;
 }
 
 export interface AppShellInitialView {
@@ -48,9 +49,16 @@ interface AppShellInitialViewPayload {
 
 interface AppShellManifestPayload extends Manifest {}
 
+interface AppShellRuntimePayload {
+  manifestUrl: string;
+  pathBase: string;
+  treeModuleUrl: string;
+}
+
 const DEFAULT_ASSETS: AppShellAssets = {
   cssHref: "/assets/app.css",
   jsSrc: "/assets/app.js",
+  treeModulePath: "/assets/tree.js",
 };
 
 function normalizeJsonLd(value: unknown | unknown[] | undefined): unknown[] {
@@ -160,17 +168,35 @@ function renderInitialViewScript(initialView: AppShellInitialView | null): strin
   return `\n    <script id="initial-view-data" type="application/json">${payload}</script>`;
 }
 
-function renderInitialManifestScript(manifest: AppShellManifestPayload | null): string {
+function toPublicUrl(pathBase: string, pathname: string): string {
+  const normalizedBase = pathBase.trim().replace(/^\/+|\/+$/g, "");
+  const normalizedPath = pathname.trim().replace(/^\/+/g, "");
+  const rawPath = `/${[normalizedBase, normalizedPath].filter(Boolean).join("/")}`;
+  return rawPath
+    .split("/")
+    .map((segment, index) => (index === 0 && segment === "" ? "" : encodeURIComponent(segment)))
+    .join("/");
+}
+
+function renderRuntimeBootstrapScript(
+  manifest: AppShellManifestPayload | null,
+  assets: AppShellAssets,
+): string {
   if (!manifest) {
     return "";
   }
 
-  const payload = JSON.stringify(manifest)
+  const payloadData: AppShellRuntimePayload = {
+    manifestUrl: toPublicUrl(manifest.pathBase, "/manifest.json"),
+    pathBase: manifest.pathBase,
+    treeModuleUrl: toPublicUrl(manifest.pathBase, assets.treeModulePath),
+  };
+  const payload = JSON.stringify(payloadData)
     .replaceAll("<", "\\u003c")
     .replaceAll("\u2028", "\\u2028")
     .replaceAll("\u2029", "\\u2029");
 
-  return `\n    <script id="initial-manifest-data" type="application/json">${payload}</script>`;
+  return `\n    <script id="initial-runtime-data" type="application/json">${payload}</script>`;
 }
 
 export function renderAppShellHtml(
@@ -181,7 +207,7 @@ export function renderAppShellHtml(
 ): string {
   const headMeta = renderHeadMeta(meta);
   const initialViewScript = renderInitialViewScript(initialView);
-  const initialManifestScript = renderInitialManifestScript(manifest);
+  const runtimeBootstrapScript = renderRuntimeBootstrapScript(manifest, assets);
   const symbolFontStylesheet =
     "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap";
   const appTitle = typeof manifest?.siteTitle === "string" && manifest.siteTitle.trim().length > 0
@@ -347,7 +373,7 @@ ${headMeta}
     </div>
     <div id="tree-label-tooltip" class="tree-label-tooltip" role="tooltip" hidden></div>
 ${initialViewScript}
-${initialManifestScript}
+${runtimeBootstrapScript}
     <script type="module" src="${escapeHtmlAttribute(assets.jsSrc)}"></script>
   </body>
 </html>

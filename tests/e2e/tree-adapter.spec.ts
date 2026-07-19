@@ -6,6 +6,7 @@ test.describe("Trees sidebar adapter", () => {
     const docs = [
       {
         id: "doc-a",
+        isNew: true,
         prefix: "BC-VO-02",
         route: "/BC-VO-02/",
         title: "Setup Guide",
@@ -13,6 +14,7 @@ test.describe("Trees sidebar adapter", () => {
       },
       {
         id: "doc-b",
+        isNew: false,
         prefix: "BC-XSS-01",
         route: "/BC-XSS-01/",
         title: "Unsafe <img src=x onerror=alert(1)>",
@@ -30,11 +32,6 @@ test.describe("Trees sidebar adapter", () => {
             type: "file",
             id: "doc-a",
             name: "setup-guide.md",
-            prefix: "BC-VO-02",
-            route: "/BC-VO-02/",
-            title: "Setup Guide",
-            isNew: true,
-            branch: null,
           },
         ],
       },
@@ -48,21 +45,11 @@ test.describe("Trees sidebar adapter", () => {
             type: "file",
             id: "doc-a",
             name: "setup-guide.md",
-            prefix: "BC-VO-02",
-            route: "/BC-VO-02/",
-            title: "Setup Guide",
-            isNew: true,
-            branch: null,
           },
           {
             type: "file",
             id: "doc-b",
             name: "unsafe.md",
-            prefix: "BC-XSS-01",
-            route: "/BC-XSS-01/",
-            title: "Unsafe <img src=x onerror=alert(1)>",
-            isNew: false,
-            branch: null,
           },
         ],
       },
@@ -80,11 +67,6 @@ test.describe("Trees sidebar adapter", () => {
                 type: "file",
                 id: "doc-a",
                 name: "setup-guide.md",
-                prefix: "BC-VO-02",
-                route: "/BC-VO-02/",
-                title: "Setup Guide",
-                isNew: true,
-                branch: null,
               },
             ],
           },
@@ -112,6 +94,7 @@ test.describe("Trees sidebar adapter", () => {
       "engineering/guides/BC-VO-02 Setup Guide",
     ]);
     expect(adapter.docIdToPrimaryTreePath.get("doc-a")).toBe("PINNED/BC-VO-02 Setup Guide");
+    expect(adapter.metadataByTreePath.get("Recent/BC-VO-02 Setup Guide")?.isNew).toBe(true);
   });
 
   test("file basenames use prefix plus title and avoid path separator leaks", () => {
@@ -125,6 +108,29 @@ test.describe("Trees sidebar adapter", () => {
         null,
       ),
     ).toBe("DOC - 01 Setup - Install");
+  });
+
+  test("runtime-derived NEW state overrides stale legacy tree metadata", () => {
+    const tree = [
+      {
+        type: "folder",
+        name: "Legacy",
+        path: "legacy",
+        children: [
+          { type: "file", id: "recent", name: "recent.md", title: "Recent", isNew: false },
+          { type: "file", id: "old", name: "old.md", title: "Old", isNew: true },
+        ],
+      },
+    ];
+    const docs = [
+      { id: "recent", route: "/RECENT/", title: "Recent", isNew: true },
+      { id: "old", route: "/OLD/", title: "Old", isNew: false },
+    ];
+
+    const adapter = buildTreesAdapterInput(tree, docs);
+
+    expect(adapter.metadataByTreePath.get("Legacy/Recent")?.isNew).toBe(true);
+    expect(adapter.metadataByTreePath.get("Legacy/Old")?.isNew).toBe(false);
   });
 
   test("duplicate canonical paths receive stable suffixes without changing route lookup", () => {

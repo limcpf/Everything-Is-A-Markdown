@@ -109,7 +109,6 @@ export interface DocRecord {
   body: string;
   rawHash: string;
   wikiTargets: string[];
-  isNew: boolean;
   branch: string | null;
 }
 
@@ -117,16 +116,6 @@ export interface FileNode {
   type: "file";
   name: string;
   id: string;
-  title: string;
-  prefix?: string;
-  route: string;
-  contentUrl: string;
-  isNew: boolean;
-  tags: string[];
-  description?: string;
-  date?: string;
-  updatedDate?: string;
-  branch: string | null;
 }
 
 export interface FolderNode {
@@ -139,8 +128,29 @@ export interface FolderNode {
 
 export type TreeNode = FolderNode | FileNode;
 
+export interface ManifestDoc {
+  id: string;
+  route: string;
+  title: string;
+  prefix?: string;
+  categoryPath: string;
+  contentUrl: string;
+  date?: string;
+  updatedDate?: string;
+  tags: string[];
+  description?: string;
+  branch: string | null;
+  wikiTargets: string[];
+  backlinks: Array<{
+    id: string;
+    route: string;
+    title: string;
+    prefix?: string;
+  }>;
+}
+
 export interface Manifest {
-  generatedAt: string;
+  schemaVersion: 2;
   siteTitle: string;
   pathBase: string;
   defaultBranch: string;
@@ -156,27 +166,8 @@ export interface Manifest {
   };
   tree: TreeNode[];
   routeMap: Record<string, string>;
-  docs: Array<{
-    id: string;
-    route: string;
-    title: string;
-    prefix?: string;
-    categoryPath: string;
-    contentUrl: string;
-    date?: string;
-    updatedDate?: string;
-    tags: string[];
-    description?: string;
-    isNew: boolean;
-    branch: string | null;
-    wikiTargets: string[];
-    backlinks: Array<{
-      id: string;
-      route: string;
-      title: string;
-      prefix?: string;
-    }>;
-  }>;
+  docIds: string[];
+  docsById: Record<string, ManifestDoc>;
 }
 
 export interface BuildCache {

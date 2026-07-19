@@ -565,6 +565,79 @@ a:hover {
   padding: 12px 12px 24px;
 }
 
+.tree-load-status,
+.tree-load-fallback {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 96px;
+  margin: 0;
+  border: 1px solid var(--latte-surface0);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--latte-mantle) 72%, transparent);
+  color: var(--latte-subtext1);
+  font-size: 0.78rem;
+}
+
+.tree-load-status {
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  text-align: center;
+}
+
+.tree-load-fallback {
+  max-height: 100%;
+  overflow: auto;
+  padding: 12px;
+}
+
+.tree-load-fallback-message {
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+
+.tree-load-retry {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--latte-surface1);
+  border-radius: 7px;
+  background: var(--latte-base);
+  color: var(--latte-text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.tree-load-retry:focus-visible,
+.tree-load-fallback-links a:focus-visible {
+  outline: 2px solid var(--latte-blue);
+  outline-offset: 2px;
+}
+
+.tree-load-fallback-links {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tree-load-fallback-links a {
+  display: block;
+  overflow: hidden;
+  padding: 6px 8px;
+  border-radius: 5px;
+  color: var(--latte-subtext1);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-load-fallback-links a:hover {
+  background: var(--latte-surface0);
+  color: var(--latte-text);
+}
+
 .tree-root file-tree-container {
   --trees-bg-override: transparent;
   --trees-bg-muted-override: color-mix(in srgb, var(--latte-surface0) 44%, transparent);

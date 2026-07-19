@@ -210,9 +210,31 @@ Key points:
 
 - Every published route gets its own `index.html` for direct access.
 - Rendered article bodies are stored separately under `dist/content/`.
-- Runtime assets are content-hashed.
+- Production JavaScript and CSS are minified, then content-hashed from the final emitted bytes.
+- `manifest.json` uses schema v2: `docIds` preserves order, `docsById` is the canonical metadata index, and tree file nodes carry document references instead of duplicated metadata. The runtime adapter also accepts legacy unversioned/v1 `docs` arrays during migration.
+- Route HTML embeds only a small path-aware runtime bootstrap; the shared manifest is fetched once from `manifest.json` instead of being copied into every generated page.
+- Generated files omit wall-clock build metadata and derived current-time flags, so two builds with unchanged content and config produce byte-identical output. The runtime derives each `NEW` badge from the manifest `date` and configured `newWithinDays` when the page loads.
 - Static files declared in config are copied into the same relative paths under `dist/`.
 - Build cache is stored under `.cache/eiam/v1-<namespace>/build-index.json`.
+
+CI enforces raw and gzip budgets for the generated runtime assets. After a
+sample build, run `bun run check:size` to apply the same limits locally. The
+critical app JavaScript is limited to 45,000 raw / 15,000 gzip bytes, the
+deferred tree chunk to 220,000 raw / 60,000 gzip bytes, and their combined
+payload to 260,000 raw / 78,000 gzip bytes. CSS is limited to 31,000 raw /
+7,000 gzip bytes.
+
+The same command requires each EIAM-generated route HTML runtime bootstrap to
+contain only `manifestUrl`, `pathBase`, and the hashed `treeModuleUrl`, and to
+stay within 256 bytes; copied static HTML is left untouched. It also always
+validates manifest schema v2 canonical document references. Once the
+reconstructed legacy projection reaches 8,000 bytes, it requires at least 25%
+raw and 5% gzip reduction versus that duplicated tree/document projection.
+Smaller manifests skip only this relative ratio because fixed schema/gzip
+overhead dominates when there is not yet enough duplicated payload to measure
+reliably.
+
+Run `bun run check:reproducible` to perform two no-op builds into the same output and compare SHA-256 hashes for every generated file. CI applies the same double-build check.
 
 ## Config File
 
@@ -396,6 +418,9 @@ This setting allows arbitrary authored HTML and can execute client-side code. Do
 Regular fenced code blocks are rendered with:
 
 - Shiki highlighting
+- explicit default grammars/theme, with additional known fence languages and
+  non-default themes loaded on demand
+- escaped plaintext fallback for unknown fence languages
 - a desktop-style code header
 - a copy button
 - optional filename text when fence info contains extra tokens
@@ -460,7 +485,10 @@ The generated site includes a client-side runtime that powers navigation without
 
 Main behaviors:
 
-- searchable sidebar tree rendered by the vanilla `@pierre/trees` runtime
+- searchable sidebar tree rendered by the exact-pinned vanilla `@pierre/trees`
+  runtime with a five-symbol generic icon sprite
+- tree dependency loading deferred until after the first content paint on
+  desktop, and until sidebar/search interaction on compact layouts
 - `Recent` virtual folder
 - optional pinned virtual folder
 - prefix/title file labels without visible `.md` extensions, plus NEW badges when `ui.newWithinDays` matches
