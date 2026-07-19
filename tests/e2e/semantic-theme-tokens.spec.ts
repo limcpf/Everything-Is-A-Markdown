@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { waitForAppReady } from "./utils/app-ready";
 
 const stylesheet = readFileSync("src/runtime/app.css", "utf8");
 
@@ -26,6 +27,7 @@ test.describe("semantic theme tokens", () => {
         localStorage.setItem("fsblog.themeMode", mode);
       }, theme);
       await page.goto("/");
+      await waitForAppReady(page);
 
       const snapshot = await page.evaluate(() => {
         const root = getComputedStyle(document.documentElement);
