@@ -1,6 +1,13 @@
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "bun:test";
-import { resolveBuildOptions, validateUserConfig, type CliArgs } from "../../src/config";
+import {
+  loadUserConfig,
+  resolveBuildOptions,
+  validateUserConfig,
+  type CliArgs,
+} from "../../src/config";
 
 const baseCli: CliArgs = {
   command: "build",
@@ -104,6 +111,27 @@ describe("user config validation", () => {
         defaultTwitterImage: "/assets/twitter.png",
       },
     });
+  });
+
+  test("keeps named-export config modules backward compatible", async () => {
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), "eiam-named-config-"));
+
+    try {
+      fs.writeFileSync(
+        path.join(configDir, "blog.config.mjs"),
+        `export const vaultDir = "./named-vault";
+export const ui = { newWithinDays: 2, recentLimit: 9 };
+`,
+        "utf8",
+      );
+
+      await expect(loadUserConfig(configDir)).resolves.toMatchObject({
+        vaultDir: "./named-vault",
+        ui: { newWithinDays: 2, recentLimit: 9 },
+      });
+    } finally {
+      fs.rmSync(configDir, { recursive: true, force: true });
+    }
   });
 
   const invalidCases: Array<{
@@ -352,6 +380,28 @@ describe("user config validation", () => {
     expect(warnings).toHaveLength(2);
     expect(warnings[0]).toContain('"markdown.mermaid.cdnUrl"');
     expect(warnings[1]).toContain('"markdown.mermaid.theme"');
+  });
+
+  test("rejects reserved static output paths during config validation", () => {
+    for (const staticPath of [".eiam-output.json", "assets/../.eiam-output.json"] as const) {
+      expect(() => validateUserConfig({ staticPaths: [staticPath] }, () => {})).toThrow(
+        '"staticPaths[0]" is invalid: Refusing reserved static output path; received string',
+      );
+    }
+  });
+
+  test("does not expose rejected SEO credentials in diagnostics", () => {
+    let message = "";
+    try {
+      validateUserConfig({ seo: { siteUrl: "https://user:secret@example.com" } }, () => {});
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(message).toContain('"seo.siteUrl"');
+    expect(message).toContain("received string");
+    expect(message).not.toContain("user");
+    expect(message).not.toContain("secret");
   });
 
   test("preserves valid path and glob strings for backward compatibility", () => {

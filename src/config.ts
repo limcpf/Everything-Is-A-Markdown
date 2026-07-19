@@ -1,5 +1,6 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { OUTPUT_MARKER_FILE_NAME } from "./build/shared";
 import { normalizeSeoConfig } from "./seo";
 import type { BuildOptions, PinnedMenuOption, UserConfig, UserSeoConfig } from "./types";
 
@@ -311,9 +312,9 @@ export async function loadUserConfig(cwd = process.cwd()): Promise<ValidatedUser
     }
 
     const imported = await import(pathToFileURL(absolute).href);
-    const raw = Object.prototype.hasOwnProperty.call(imported, "default")
-      ? imported.default
-      : imported;
+    const raw =
+      imported.default ??
+      Object.fromEntries(Object.entries(imported).filter(([key]) => key !== "default"));
     return validateUserConfig(raw);
   }
 
@@ -407,18 +408,36 @@ function normalizeStaticPaths(raw: unknown, errorPrefix = "[config]"): string[] 
 
     if (
       !cleaned ||
-      cleaned === "." ||
-      cleaned === ".." ||
-      cleaned.startsWith("../") ||
       cleaned.startsWith("/") ||
-      path.isAbsolute(value.trim())
+      path.isAbsolute(value.trim()) ||
+      path.win32.isAbsolute(value.trim())
     ) {
       throw new Error(
         `${errorPrefix} "staticPaths[${index}]" must be a non-empty vault-relative path (for example: "assets"); received ${receivedValue(value)}`,
       );
     }
 
-    normalized.add(cleaned);
+    const normalizedPath = path.posix.normalize(cleaned);
+    if (normalizedPath === ".") {
+      throw new Error(
+        `${errorPrefix} "staticPaths[${index}]" is invalid: Refusing static path that resolves to the vault root; received ${receivedValue(value)}`,
+      );
+    }
+    if (normalizedPath === ".." || normalizedPath.startsWith("../")) {
+      throw new Error(
+        `${errorPrefix} "staticPaths[${index}]" is invalid: Refusing static output path outside the output directory; received ${receivedValue(value)}`,
+      );
+    }
+    if (
+      normalizedPath === OUTPUT_MARKER_FILE_NAME ||
+      normalizedPath.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`)
+    ) {
+      throw new Error(
+        `${errorPrefix} "staticPaths[${index}]" is invalid: Refusing reserved static output path; received ${receivedValue(value)}`,
+      );
+    }
+
+    normalized.add(normalizedPath);
   }
 
   return Array.from(normalized);

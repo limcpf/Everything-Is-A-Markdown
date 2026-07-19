@@ -119,7 +119,7 @@ Notes:
 - Invalid numeric options fail fast.
 - Builds validate and read the vault before marking a dedicated output directory with `.eiam-output.json`, bind that marker to a cache namespace derived from the canonical vault, output, and cache-root paths, and refuse to claim a non-empty unmarked or mismatched directory.
 - `dev` aborts before starting its watcher or server when the initial build cannot claim the output safely; later rebuild failures are logged without stopping an already-safe server.
-- Build migration and `clean` remove `.cache/build-index.json` only when it matches a historical EIAM cache schema, including when either command must reject a pre-marker output directory or reserved static path. Outputs that contain or sit inside the cache root, symlinked cache components/namespaces/indexes, and static paths that collide with the reserved `.eiam-output.json` marker are rejected; `clean` otherwise removes only the marked output directory and its matching EIAM cache namespace, preserving sibling namespaces and unrelated `.cache` data.
+- Build migration and `clean` remove `.cache/build-index.json` only when it matches a historical EIAM cache schema, including when either command must reject a pre-marker output directory. Config validation rejects reserved static paths before migration or storage inspection. Outputs that contain or sit inside the cache root, symlinked cache components/namespaces/indexes, and static paths that collide with the reserved `.eiam-output.json` marker are rejected; `clean` otherwise removes only the marked output directory and its matching EIAM cache namespace, preserving sibling namespaces and unrelated `.cache` data.
 
 ## Frontmatter
 
