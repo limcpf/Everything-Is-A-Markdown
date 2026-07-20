@@ -16,6 +16,7 @@ import {
   renderViewChrome,
   toViewPathWithBase,
 } from "../view-contract";
+import { renderCloudflarePagesHeaders } from "./cache-headers";
 import type { OutputPhaseState, OutputWriteContext, RuntimeAssets } from "./contracts";
 import { OUTPUT_MARKER_FILE_NAME, resolveSiteTitle } from "./shared";
 
@@ -659,6 +660,13 @@ export async function prepareOutputPhase(
   };
   const runtimeAssets = await writeRuntimeAssets(context, options.layout, includeSelfHostedMermaid);
   await copyStaticPaths(context, options);
+  if (!Object.hasOwn(context.nextHashes, "_headers")) {
+    await writeOutputIfChanged(
+      context,
+      "_headers",
+      renderCloudflarePagesHeaders(runtimeAssets, options.seo?.pathBase ?? ""),
+    );
+  }
   const mermaidRuntimeUrl = runtimeAssets.mermaidJsRelPath
     ? toViewPathWithBase(`/${runtimeAssets.mermaidJsRelPath}`, options.seo?.pathBase ?? "")
     : null;

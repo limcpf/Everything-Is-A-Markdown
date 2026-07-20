@@ -181,6 +181,44 @@ bun run dev -- --vault ./test-vault --out ./dist
 bun run build -- --vault ./test-vault --out ./dist
 ```
 
+## Cloudflare Pages 캐시 헤더
+
+빌드는 기본적으로 Cloudflare Pages가 읽는 `dist/_headers`를 생성합니다. HTML route,
+`manifest.json`, `content/*`, `robots.txt`, `sitemap.xml`, 라이선스 및 복사된 정적 파일은 다음
+정책으로 매번 재검증합니다.
+
+```text
+Cache-Control: public, max-age=0, must-revalidate
+```
+
+최종 byte에서 content hash를 만든 EIAM 소유 JS/CSS 파일의 정확한 경로만 다음 정책으로
+교체합니다.
+
+```text
+Cache-Control: public, max-age=31536000, immutable
+```
+
+`assets/social.png`처럼 같은 이름으로 내용이 바뀔 수 있는 사용자 파일을 영구 cache하지 않도록
+`/assets/*` 전체에는 immutable을 적용하지 않습니다. `seo.pathBase: "/blog"`이면 모든 규칙도
+`/blog`와 `/blog/*` 아래에 생성됩니다. 자체 정책이 필요하면 vault의 `_headers`를
+`staticPaths`에 지정할 수 있으며, 이 경우 custom 파일을 그대로 사용하고 생성 preset과
+자동 병합하지 않습니다.
+
+압축은 host 책임입니다. EIAM은 결정적인 원본 파일만 만들고 precompressed 파일이나
+`Content-Encoding`을 생성하지 않습니다. Cloudflare Pages는 가능한 경우 Gzip/Brotli를
+협상하므로, 배포 후 실제 응답을 확인합니다.
+
+```bash
+# 파일명은 dist/assets/에 실제 생성된 값으로 바꿉니다.
+curl -sI -H 'Accept-Encoding: br' https://example.com/assets/app.0123456789ab.js
+```
+
+응답의 immutable `Cache-Control`과, Brotli가 협상된 경우 `Content-Encoding: br`를 확인합니다.
+HTML route와 `manifest.json`도 같은 방식으로 재검증 정책을 확인합니다. `_headers`는 Pages의
+정적 asset 응답에만 적용되며 Pages Functions 응답에는 적용되지 않습니다. 자세한 형식과 동작은
+[Cloudflare Pages headers](https://developers.cloudflare.com/pages/configuration/headers/)와
+[serving behavior](https://developers.cloudflare.com/pages/configuration/serving-pages/)를 참고합니다.
+
 ## Markdown Frontmatter
 
 공개 여부를 결정하는 핵심 필드는 `publish`입니다.
