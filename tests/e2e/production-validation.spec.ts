@@ -23,9 +23,12 @@ function writeText(filePath: string, content: string): void {
   fs.writeFileSync(filePath, content, "utf8");
 }
 
-function runValidation(args: string[]): { status: number | null; output: string } {
+function runValidation(
+  args: string[],
+  cwd = repositoryRoot,
+): { status: number | null; output: string } {
   const result = spawnSync("bun", [validatorPath, ...args], {
-    cwd: repositoryRoot,
+    cwd,
     encoding: "utf8",
   });
   return {
@@ -66,6 +69,47 @@ test.describe("production validation command", () => {
       const homeHtml = fs.readFileSync(path.join(outDir, "index.html"), "utf8");
       expect(homeHtml).toContain('href="/docs/PROD-02/"');
       expect(homeHtml).not.toContain('href="/PROD-02/"');
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("resolves packaged helper scripts when invoked from a caller directory", () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "eiam-production-caller-"));
+    const vaultDir = path.join(workDir, "vault");
+    const configPath = path.join(workDir, "blog.config.mjs");
+
+    try {
+      writeText(
+        path.join(vaultDir, "note.md"),
+        `---
+publish: true
+prefix: CALLER-01
+category_path: production
+---
+
+Caller-owned production note.
+`,
+      );
+      writeText(
+        configPath,
+        `export default {
+  vaultDir: "./vault",
+  seo: { siteUrl: "https://example.com" },
+};
+`,
+      );
+
+      const result = runValidation(
+        ["--config", "./blog.config.mjs", "--out", "./dist", "--report-dir", "./reports"],
+        workDir,
+      );
+      expect(result.status, result.output).toBe(0);
+
+      const report = readReport(path.join(workDir, "reports"));
+      expect(report.status).toBe("passed");
+      expect(report.checks).toHaveLength(8);
+      expect(report.checks.every(({ status }) => status === "passed")).toBe(true);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

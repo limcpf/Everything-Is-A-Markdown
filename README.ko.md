@@ -131,6 +131,20 @@ bun run validate:production -- \
 정확히 같아야 하므로 finding 추가·삭제·위치·내용 변화는 baseline을 명시적으로 검토해야
 합니다. `--vault`와 반복 가능한 `--exclude` override도 지원합니다.
 
+## Cloudflare Pages 배포
+
+Vault 저장소는 재사용 가능한
+[`deploy-cloudflare-pages.yml`](.github/workflows/deploy-cloudflare-pages.yml)을 호출해 lockfile에
+고정된 EIAM으로 자체 vault를 빌드·검증한 뒤, 분리된 job에서 검증된 output만 배포할 수
+있습니다. vault, output, config, Pages project, production/preview branch, exclude, Markdown
+baseline을 명시적으로 입력받습니다. `artifact-only` 모드는 Cloudflare secret을 읽지 않으므로
+fork PR과 배포 전 검토에 사용할 수 있습니다.
+
+완전한 caller workflow 예제, `Pages Write` token 범위, GitHub environment 보호 규칙,
+root 배포와 prefix 배포의 `pathBase` 차이, 실패 artifact, host smoke check, production rollback
+절차는 [Cloudflare Pages 배포 문서](docs/CLOUDFLARE-PAGES.md)에 정리되어 있습니다. Generator
+npm package publish는 별도 release workflow이며 caller vault를 배포하지 않습니다.
+
 ## 개발 품질 검사
 
 브라우저 설치나 E2E 실행 전에 빠른 source gate를 로컬에서 그대로 실행할 수 있습니다.

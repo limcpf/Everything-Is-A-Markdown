@@ -719,6 +719,20 @@ Copy fingerprints from the report's
 lists exactly, so a new, removed, moved, or changed finding requires an explicit
 baseline review. Other useful overrides are `--vault` and repeatable `--exclude`.
 
+## Cloudflare Pages Deployment
+
+Vault repositories can call the reusable
+[`deploy-cloudflare-pages.yml`](.github/workflows/deploy-cloudflare-pages.yml) workflow to build and
+validate their own locked EIAM dependency before a separate job deploys the exact output directory.
+It accepts explicit vault, output, config, Pages project, production/preview branch, exclusion, and
+Markdown baseline inputs. `artifact-only` mode never reads Cloudflare secrets, so it is suitable for
+fork pull requests and pre-deployment review.
+
+The complete caller template, required `Pages Write` token scope, GitHub environment protection,
+root-versus-prefix `pathBase` behavior, failure artifacts, host smoke checks, and production rollback
+procedure are documented in [Cloudflare Pages deployment](docs/CLOUDFLARE-PAGES.md). Generator npm
+publication remains a separate release workflow and never deploys a caller's vault.
+
 ## Example Vault
 
 This repository includes `test-vault/` as a working sample.

@@ -40,6 +40,8 @@ const CHECK_IDS = [
   "cache-headers",
   "output-budgets",
 ] as const;
+const PUBLISHED_MARKDOWN_LINT_SCRIPT = path.join(import.meta.dir, "lint-published-markdown.ts");
+const OUTPUT_SIZE_SCRIPT = path.join(import.meta.dir, "check-output-size.ts");
 
 function printHelp(): void {
   console.log(`
@@ -156,7 +158,7 @@ async function validateResolvedProduction(
     await fs.rm(markdownReportPath, { force: true });
     const lintArgs = [
       "run",
-      "scripts/lint-published-markdown.ts",
+      PUBLISHED_MARKDOWN_LINT_SCRIPT,
       "--out-dir",
       report.configuration.reportDir,
       ...(args.configPath ? ["--config", args.configPath] : []),
@@ -230,12 +232,7 @@ async function validateResolvedProduction(
       await validateCacheHeaders(options.outDir, options.seo?.pathBase ?? "", docs),
     );
 
-    const sizeResult = runBunScript([
-      "run",
-      "scripts/check-output-size.ts",
-      "--out",
-      options.outDir,
-    ]);
+    const sizeResult = runBunScript(["run", OUTPUT_SIZE_SCRIPT, "--out", options.outDir]);
     addValidationCheck(
       report,
       "output-budgets",
