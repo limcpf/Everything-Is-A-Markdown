@@ -45,10 +45,10 @@ If two notes normalize to the same public route, the builder keeps both and auto
 
 ## Requirements
 
-- `bun` installed
+- The exact Bun version declared by `packageManager` in `package.json`
 - A Markdown vault directory
 
-This repository is authored around Bun. The CLI entry point is `src/cli.ts`, and package scripts assume Bun is available.
+This repository is authored around Bun. The CLI entry point is `src/cli.ts`, and package scripts assume Bun is available. The exact `packageManager` value is the single source of truth for the supported version; GitHub Actions lets `oven-sh/setup-bun` read it directly, so CI and release jobs cannot silently move to a different Bun release. Toolchain upgrades must update that one value and pass install, build, package, unit, and E2E verification.
 
 ## Install
 
