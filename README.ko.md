@@ -17,6 +17,12 @@ Everything-Is-A-Markdown은 로컬 Markdown 볼트를 정적 웹사이트로 빌
 - Obsidian에서 평소처럼 작성한 뒤, 공개할 문서만 빌드할 수 있습니다.
 - Obsidian 스타일 위키링크(`[[...]]`)를 지원합니다.
 
+## 배포 패키지
+
+사용자용 공식 배포 경로는 Bun으로 실행하는 [npm 패키지 `@limcpf/everything-is-a-markdown`](https://www.npmjs.com/package/@limcpf/everything-is-a-markdown)입니다. 아래의 정확한 Bun 버전이 지원하는 플랫폼에서 사용하는 소스 패키지이며, 컴파일된 단일 실행 파일이나 플랫폼별 바이너리가 아닙니다. 패키지 버전과 package manager가 검증하는 무결성 checksum은 npm registry metadata로 제공됩니다.
+
+생성되는 `dist/`는 입력 vault와 배포 설정에 종속됩니다. 따라서 이 프로젝트는 범용 사이트 archive나 "single-file" GitHub Release asset을 배포하지 않습니다. 자신의 vault를 빌드해 생성된 디렉터리를 배포하세요.
+
 ## 설치
 
 지원하는 Bun 버전의 단일 기준은 `package.json`의 정확한 `packageManager` 값입니다.
