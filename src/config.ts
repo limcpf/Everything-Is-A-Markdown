@@ -181,23 +181,19 @@ function normalizeStringArray(raw: unknown, field: string): string[] {
 }
 
 function normalizeMermaidCdnUrl(
-  value: string | undefined,
+  value: string,
   warn: ConfigWarningHandler = defaultConfigWarning,
-): string {
-  if (value === undefined) {
-    return DEFAULTS.mermaid.cdnUrl;
-  }
-
+): string | undefined {
   const normalized = value.trim();
   if (!normalized) {
-    return DEFAULTS.mermaid.cdnUrl;
+    return undefined;
   }
 
   if (normalized.length > MERMAID_URL_MAX_LENGTH || !MERMAID_CDN_URL_PATTERN.test(normalized)) {
     warn(
-      `[config] "markdown.mermaid.cdnUrl" has an invalid string value ${JSON.stringify(value)}; using default ${JSON.stringify(DEFAULTS.mermaid.cdnUrl)}`,
+      `[config] "markdown.mermaid.cdnUrl" has an invalid string value ${JSON.stringify(value)}; using the self-hosted Mermaid runtime`,
     );
-    return DEFAULTS.mermaid.cdnUrl;
+    return undefined;
   }
 
   return normalized;

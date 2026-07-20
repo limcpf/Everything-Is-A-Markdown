@@ -1,6 +1,6 @@
 import type { BuildCache, BuildOptions } from "../types";
 import type { BuildResult } from "./contracts";
-import { renderDocuments } from "./content";
+import { hasMermaidDocuments, renderDocuments } from "./content";
 import { buildDocumentGraph } from "./graph";
 import { emitOutputPhase, prepareOutputPhase, validateStaticOutputPlan } from "./output";
 import { readPublishedDocs } from "./source";
@@ -26,17 +26,31 @@ export async function buildSite(options: BuildOptions): Promise<BuildResult> {
   const stagedOptions: BuildOptions = { ...options, outDir: transaction.stagingRoot };
 
   try {
-    const output = await prepareOutputPhase(stagedOptions, storage.previousOutputHashes);
-    const graph = buildDocumentGraph(docs, stagedOptions);
+    const shouldSelfHostMermaid =
+      stagedOptions.mermaid.enabled &&
+      stagedOptions.mermaid.cdnUrl === null &&
+      hasMermaidDocuments(docs);
+    const output = await prepareOutputPhase(
+      stagedOptions,
+      storage.previousOutputHashes,
+      shouldSelfHostMermaid,
+    );
+    const outputOptions: BuildOptions = output.mermaidRuntimeUrl
+      ? {
+          ...stagedOptions,
+          mermaid: { ...stagedOptions.mermaid, cdnUrl: output.mermaidRuntimeUrl },
+        }
+      : stagedOptions;
+    const graph = buildDocumentGraph(docs, outputOptions);
     const rendered = await renderDocuments(
       docs,
-      stagedOptions,
+      outputOptions,
       storage.previousDocs,
       output.context,
       graph.wikiLookup,
     );
 
-    await emitOutputPhase(output, docs, graph.manifest, stagedOptions, rendered.contentByDocId);
+    await emitOutputPhase(output, docs, graph.manifest, outputOptions, rendered.contentByDocId);
 
     const nextCache: BuildCache = {
       version: BUILD_CACHE_VERSION,

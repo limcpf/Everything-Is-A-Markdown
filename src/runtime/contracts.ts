@@ -166,7 +166,7 @@ export interface ContentController extends RuntimeController {
 
 export interface MermaidConfig {
   enabled: boolean;
-  cdnUrl: string;
+  cdnUrl: string | null;
   theme: string;
 }
 

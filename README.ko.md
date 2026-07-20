@@ -124,7 +124,6 @@ const config = {
     allowUnsafeHtml: false,
     mermaid: {
       enabled: true,
-      cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
       theme: "default",
     },
   },
@@ -141,8 +140,8 @@ Config module은 신뢰되지 않은 런타임 입력으로 취급합니다. 지
 정규화한 뒤에만 `build`, `dev`, `clean`이 output/cache 경로를 생성·변경·삭제할 수 있습니다.
 잘못된 값은 정확한 점 표기 필드 경로와 실제 런타임 타입을 포함한 오류로 명령을 중단합니다.
 알 수 없는 필드는 오타를 확인할 수 있도록 경고한 뒤 무시합니다. 안전하지 않은 Mermaid
-URL/theme 문자열은 기존 정책대로 안전한 기본값을 사용하지만, 런타임 타입이 잘못된 값은
-거부합니다.
+URL은 self-hosted runtime으로, 안전하지 않은 theme 문자열은 `default`로 폴백하지만,
+런타임 타입이 잘못된 값은 거부합니다.
 
 `staticPaths`:
 
@@ -294,7 +293,17 @@ flowchart LR
 Mermaid fence는 일반 코드 블록 UI와 분리된 전용 컨테이너(`.mermaid-block`)에서 렌더링되므로 코드 헤더/파일명/복사 버튼이 표시되지 않습니다.
 렌더된 SVG는 데스크톱/모바일 모두에서 중앙 정렬되며 `min(100%, 720px)` 기준으로 자동 축소됩니다.
 본문 이미지도 동일한 폭 정책을 적용해 글 읽기 흐름을 유지합니다.
-설정에서 Mermaid를 비활성화하거나 CDN 로드가 실패하면, 같은 컨테이너 안에서 소스 코드 텍스트를 유지하고 하단에 경고 메시지를 표시합니다.
+기본값은 exact dependency인 Mermaid `11.16.0`을 `assets/mermaid.<content-hash>.js`와
+해당 `LICENSE.txt`로 self-host합니다. 활성화된 게시 문서에 Mermaid fence가 있을 때만 asset을 만들고, 현재
+문서에 실제 Mermaid block이 나타날 때만 브라우저가 lazy-load합니다. 설정에서 Mermaid를
+비활성화하거나 runtime 로드가 실패하면 같은 컨테이너 안에서 소스 코드 텍스트를 유지하고
+하단에 경고 메시지를 표시합니다.
+
+기본 runtime은 same-origin이므로 생성 사이트를 HTTP로 제공하는 한 외부 네트워크 없이도
+동작하고 CSP의 `script-src 'self'`를 유지할 수 있습니다. Mermaid SVG가 inline presentation
+style을 사용하므로 더 엄격한 `style-src`/`style-src-attr` 정책은 실제 사이트에서 검증해야
+합니다. 외부 runtime을 명시하면 해당 고정 origin만 `script-src`에 추가해야 하며 offline
+동작은 보장되지 않습니다.
 
 ## 본문 이미지 레이아웃
 
@@ -331,7 +340,7 @@ markdown: {
   allowUnsafeHtml: false, // true면 렌더 HTML sanitize를 비활성화하므로 신뢰된 볼트에서만 사용
   mermaid: {
     enabled: true, // false면 코드 블록만 표시
-    cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js", // http/https 또는 /, ./, ../ 경로
+    // cdnUrl: "https://cdn.example.test/mermaid/11.16.0/mermaid.min.js", // 선택적 외부 override
     theme: "default", // mermaid.initialize({ theme }) 값
   },
 },
@@ -339,7 +348,7 @@ markdown: {
 
 유효성 검증 및 런타임 가드레일:
 
-- `markdown.mermaid.cdnUrl`에 잘못된 값(예: `javascript:`)이 들어오면 빌드 시 기본 CDN URL로 자동 폴백합니다.
+- `markdown.mermaid.cdnUrl`을 생략하거나 잘못된 값(예: `javascript:`)을 넣으면 exact dependency의 self-hosted runtime을 사용합니다.
 - `markdown.mermaid.theme`이 유효한 식별자 형식이 아니면 빌드 시 `default`로 자동 폴백합니다.
 - 런타임 로더는 실패 후 남은 Mermaid 스크립트를 정리하고, 중복 삽입을 피하며, 다음 렌더에서 재시도합니다.
 

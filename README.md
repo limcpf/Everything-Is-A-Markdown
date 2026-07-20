@@ -275,7 +275,6 @@ export default {
     },
     mermaid: {
       enabled: true,
-      cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
       theme: "default",
     },
   },
@@ -317,7 +316,10 @@ export default {
 - `markdown.gfm`: enable or disable GFM table/strikethrough support.
 - `markdown.allowUnsafeHtml`: disables rendered HTML sanitization only when explicitly set to `true`; default `false`.
 - `markdown.highlight.theme`: Shiki theme.
-- `markdown.mermaid.*`: Mermaid runtime settings.
+- `markdown.mermaid.enabled`: render Mermaid fences; default `true`.
+- `markdown.mermaid.theme`: value passed to `mermaid.initialize`.
+- `markdown.mermaid.cdnUrl`: optional explicit external or local runtime override. When omitted,
+  the exact Mermaid dependency is self-hosted.
 - `seo.*`: canonical URL, social metadata, sitemap, robots, and path-base behavior.
 
 `ui.locale` controls application copy and accessibility names. `seo.locale` remains an independent
@@ -329,8 +331,8 @@ Config modules are treated as untrusted runtime input. Every supported field is 
 normalized before `build`, `dev`, or `clean` can create, modify, or remove output/cache paths. An
 invalid value stops the command with its exact dotted field path and received runtime type.
 Unknown fields are ignored after a warning so spelling mistakes remain visible without breaking
-forward-compatible configs. Unsafe Mermaid URL/theme strings keep their documented safe-default
-fallback; values with the wrong runtime type are rejected.
+forward-compatible configs. Unsafe Mermaid URLs fall back to the self-hosted runtime and unsafe
+theme strings fall back to `default`; values with the wrong runtime type are rejected.
 
 ### `staticPaths`
 
@@ -469,7 +471,28 @@ Behavior:
 - rendered on first load and on document navigation
 - centered and width-constrained in the viewer
 - if rendering fails, source remains visible and an error message is shown
-- invalid Mermaid CDN URLs or invalid theme values are normalized back to safe defaults
+- Mermaid `11.16.0` is an exact dependency; by default its browser runtime is copied byte-for-byte
+  to `assets/mermaid.<content-hash>.js` with its matching `LICENSE.txt`
+- the self-hosted asset is emitted only when an enabled published document contains a Mermaid fence
+- the script is still loaded lazily only when the current document contains a Mermaid block
+- an invalid `cdnUrl` falls back to self-hosting; a valid `cdnUrl` is an explicit external override
+
+The default is same-origin and continues to work when the generated site is served without network
+access. A basic Content Security Policy can keep `script-src 'self'`; test your `style-src` and
+`style-src-attr` directives because Mermaid-generated SVG uses inline presentation styles. If you
+set an external `cdnUrl`, add only that pinned origin to `script-src`; external mode is no longer
+offline-capable. EIAM preserves Mermaid source and shows a localized error when the runtime or an
+individual diagram fails.
+
+```ts
+markdown: {
+  mermaid: {
+    enabled: true,
+    cdnUrl: "https://cdn.example.test/mermaid/11.16.0/mermaid.min.js",
+    theme: "default",
+  },
+},
+```
 
 ## Body Image Layout
 
@@ -660,7 +683,7 @@ E2E coverage in `tests/e2e/` includes:
 - Published docs without `prefix` are skipped.
 - Local images may be omitted depending on config.
 - Wikilinks resolve only to published docs.
-- Mermaid rendering depends on runtime script loading in the browser.
+- Mermaid rendering requires JavaScript, but its default runtime is included in the generated site.
 - Sidebar rename, drag/drop, git status indicators, and bulk actions are intentionally out of scope.
 - SEO files are not generated unless `seo.siteUrl` is configured.
 
