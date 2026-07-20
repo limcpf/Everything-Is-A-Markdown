@@ -189,6 +189,7 @@ Typical output:
 
 ```text
 dist/
+  _headers                # Cloudflare Pages cache policy
   404.html
   index.html
   manifest.json
@@ -209,6 +210,8 @@ dist/
 Key points:
 
 - Every published route gets its own `index.html` for direct access.
+- `_headers` gives mutable output an explicit revalidation policy and gives only build-owned,
+  content-hashed runtime assets a one-year immutable policy.
 - Rendered article bodies are stored separately under `dist/content/`.
 - Production JavaScript and CSS are minified, then content-hashed from the final emitted bytes.
 - `manifest.json` uses schema v2: `docIds` preserves order, `docsById` is the canonical metadata index, and tree file nodes carry document references instead of duplicated metadata. The runtime adapter also accepts legacy unversioned/v1 `docs` arrays during migration.
@@ -236,6 +239,45 @@ overhead dominates when there is not yet enough duplicated payload to measure
 reliably.
 
 Run `bun run check:reproducible` to perform two no-op builds into the same output and compare SHA-256 hashes for every generated file. CI applies the same double-build check.
+
+### Cloudflare Pages cache headers
+
+By default, each build writes a Cloudflare Pages-compatible `dist/_headers` file. HTML routes,
+`manifest.json`, `content/*`, `robots.txt`, `sitemap.xml`, licenses, and copied static files use:
+
+```text
+Cache-Control: public, max-age=0, must-revalidate
+```
+
+Only the exact JS/CSS filenames generated from final content bytes receive:
+
+```text
+Cache-Control: public, max-age=31536000, immutable
+```
+
+The generated file deliberately does not use a broad `/assets/*` immutable rule, because a copied
+file such as `assets/social.png` may keep the same name when its contents change. For
+`seo.pathBase: "/blog"`, every rule is emitted under `/blog` and `/blog/*`. If the vault declares
+`_headers` in `staticPaths`, that custom file is copied unchanged and replaces the generated preset;
+EIAM does not merge potentially conflicting host rules. The override must be a file: `_headers/*`
+child paths and an `_headers` directory are rejected so the host policy cannot collide with static
+output.
+
+Compression is a host concern: EIAM emits the original deterministic files and does not write
+precompressed variants or a `Content-Encoding` header. Cloudflare Pages negotiates Gzip or Brotli
+when possible. After deployment, verify the actual response instead of inferring it from the build:
+
+```bash
+# Replace the sample filename with the one emitted in dist/assets/.
+curl -sI -H 'Accept-Encoding: br' https://example.com/assets/app.0123456789ab.js
+```
+
+The response should show the immutable `Cache-Control` value above and, when Brotli is negotiated,
+`Content-Encoding: br`. Repeat against an HTML route and `manifest.json` to confirm the revalidation
+policy. `_headers` applies to Cloudflare Pages static asset responses, not Pages Functions; attach
+equivalent headers in a Function response if one handles these routes. See the official
+[Pages headers](https://developers.cloudflare.com/pages/configuration/headers/) and
+[serving behavior](https://developers.cloudflare.com/pages/configuration/serving-pages/) docs.
 
 ## Config File
 

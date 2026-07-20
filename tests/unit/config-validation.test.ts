@@ -399,7 +399,11 @@ export const ui = { newWithinDays: 2, recentLimit: 9 };
   });
 
   test("rejects reserved static output paths during config validation", () => {
-    for (const staticPath of [".eiam-output.json", "assets/../.eiam-output.json"] as const) {
+    for (const staticPath of [
+      ".eiam-output.json",
+      "assets/../.eiam-output.json",
+      "_headers/keep.txt",
+    ] as const) {
       expect(() => validateUserConfig({ staticPaths: [staticPath] }, () => {})).toThrow(
         '"staticPaths[0]" is invalid: Refusing reserved static output path; received string',
       );

@@ -16,8 +16,9 @@ import {
   renderViewChrome,
   toViewPathWithBase,
 } from "../view-contract";
+import { renderCloudflarePagesHeaders } from "./cache-headers";
 import type { OutputPhaseState, OutputWriteContext, RuntimeAssets } from "./contracts";
-import { OUTPUT_MARKER_FILE_NAME, resolveSiteTitle } from "./shared";
+import { CLOUDFLARE_HEADERS_FILE_NAME, OUTPUT_MARKER_FILE_NAME, resolveSiteTitle } from "./shared";
 
 const DEFAULT_SITE_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
 const require = createRequire(import.meta.url);
@@ -151,7 +152,8 @@ function assertSafeStaticOutputPath(relOutputPath: string): void {
   }
   if (
     normalized === OUTPUT_MARKER_FILE_NAME ||
-    normalized.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`)
+    normalized.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`) ||
+    normalized.startsWith(`${CLOUDFLARE_HEADERS_FILE_NAME}/`)
   ) {
     throw new Error(`[safety] Refusing reserved static output path: ${relOutputPath}`);
   }
@@ -198,6 +200,12 @@ async function copyStaticPaths(context: OutputWriteContext, options: BuildOption
       continue;
     }
 
+    if (staticPath === CLOUDFLARE_HEADERS_FILE_NAME && sourceStat.isDirectory()) {
+      throw new Error(
+        `[static] "${CLOUDFLARE_HEADERS_FILE_NAME}" must be a file when used as a custom Cloudflare Pages header policy`,
+      );
+    }
+
     if (sourceStat.isDirectory()) {
       const files = await listFilesRecursively(sourcePath);
       for (const file of files) {
@@ -215,6 +223,21 @@ async function copyStaticPaths(context: OutputWriteContext, options: BuildOption
     }
 
     console.warn(`[static] unsupported path type, skipped: ${staticPath}`);
+  }
+}
+
+async function removeCloudflareHeadersTargetCollision(context: OutputWriteContext): Promise<void> {
+  const headersPath = path.join(context.outDir, CLOUDFLARE_HEADERS_FILE_NAME);
+  try {
+    const targetStat = await fs.lstat(headersPath);
+    if (targetStat.isFile()) {
+      return;
+    }
+    await fs.rm(headersPath, { force: true, recursive: targetStat.isDirectory() });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
   }
 }
 
@@ -658,7 +681,15 @@ export async function prepareOutputPhase(
     nextHashes: {},
   };
   const runtimeAssets = await writeRuntimeAssets(context, options.layout, includeSelfHostedMermaid);
+  await removeCloudflareHeadersTargetCollision(context);
   await copyStaticPaths(context, options);
+  if (!Object.hasOwn(context.nextHashes, CLOUDFLARE_HEADERS_FILE_NAME)) {
+    await writeOutputIfChanged(
+      context,
+      CLOUDFLARE_HEADERS_FILE_NAME,
+      renderCloudflarePagesHeaders(runtimeAssets, options.seo?.pathBase ?? ""),
+    );
+  }
   const mermaidRuntimeUrl = runtimeAssets.mermaidJsRelPath
     ? toViewPathWithBase(`/${runtimeAssets.mermaidJsRelPath}`, options.seo?.pathBase ?? "")
     : null;

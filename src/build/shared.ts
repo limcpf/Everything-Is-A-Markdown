@@ -3,6 +3,7 @@ import { DEFAULT_SITE_TITLE } from "../defaults";
 import { makeHash } from "../utils";
 
 export const OUTPUT_MARKER_FILE_NAME = ".eiam-output.json";
+export const CLOUDFLARE_HEADERS_FILE_NAME = "_headers";
 
 export function toContentFileName(id: string): string {
   return `${makeHash(id)}.html`;
