@@ -13,13 +13,24 @@ function writeText(filePath: string, content: string): void {
 }
 
 function runBuild(workDir: string, vaultDir: string, outDir: string): string {
+  const result = invokeBuild(workDir, vaultDir, outDir);
+  expect(result.status, result.output).toBe(0);
+  return result.output;
+}
+
+function invokeBuild(
+  workDir: string,
+  vaultDir: string,
+  outDir: string,
+): { status: number | null; output: string } {
   const result = spawnSync("bun", [cliPath, "build", "--vault", vaultDir, "--out", outDir], {
     cwd: workDir,
     encoding: "utf8",
   });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-  expect(result.status, output).toBe(0);
-  return output;
+  return {
+    status: result.status,
+    output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
+  };
 }
 
 function patternMatches(pattern: string, pathname: string): boolean {
@@ -160,6 +171,42 @@ Custom host policy.
 
       runBuild(workDir, vaultDir, outDir);
       expect(fs.readFileSync(path.join(outDir, "_headers"), "utf8")).toBe(customHeaders);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects an _headers directory without replacing the last successful output", () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "eiam-headers-collision-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+    const configPath = path.join(workDir, "blog.config.mjs");
+
+    try {
+      writeText(
+        path.join(vaultDir, "collision.md"),
+        `---
+publish: true
+prefix: COLLISION-01
+category_path: deployment
+---
+
+Last successful output.
+`,
+      );
+      runBuild(workDir, vaultDir, outDir);
+      const generatedHeaders = fs.readFileSync(path.join(outDir, "_headers"), "utf8");
+
+      writeText(configPath, 'export default { staticPaths: ["_headers"] };\n');
+      writeText(path.join(vaultDir, "_headers", "keep.txt"), "must not replace output\n");
+      const rejected = invokeBuild(workDir, vaultDir, outDir);
+
+      expect(rejected.status).not.toBe(0);
+      expect(rejected.output).toContain(
+        '"_headers" must be a file when used as a custom Cloudflare Pages header policy',
+      );
+      expect(fs.readFileSync(path.join(outDir, "_headers"), "utf8")).toBe(generatedHeaders);
+      expect(fs.existsSync(path.join(outDir, "_headers", "keep.txt"))).toBe(false);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

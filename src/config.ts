@@ -1,6 +1,6 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { OUTPUT_MARKER_FILE_NAME } from "./build/shared";
+import { CLOUDFLARE_HEADERS_FILE_NAME, OUTPUT_MARKER_FILE_NAME } from "./build/shared";
 import { DEFAULT_RUNTIME_CONFIG } from "./defaults";
 import { SUPPORTED_UI_LOCALES, type UiLocale } from "./i18n";
 import { normalizeSeoConfig } from "./seo";
@@ -426,7 +426,8 @@ function normalizeStaticPaths(raw: unknown, errorPrefix = "[config]"): string[] 
     }
     if (
       normalizedPath === OUTPUT_MARKER_FILE_NAME ||
-      normalizedPath.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`)
+      normalizedPath.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`) ||
+      normalizedPath.startsWith(`${CLOUDFLARE_HEADERS_FILE_NAME}/`)
     ) {
       throw new Error(
         `${errorPrefix} "staticPaths[${index}]" is invalid: Refusing reserved static output path; received ${receivedValue(value)}`,

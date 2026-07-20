@@ -202,7 +202,8 @@ Cache-Control: public, max-age=31536000, immutable
 `/assets/*` 전체에는 immutable을 적용하지 않습니다. `seo.pathBase: "/blog"`이면 모든 규칙도
 `/blog`와 `/blog/*` 아래에 생성됩니다. 자체 정책이 필요하면 vault의 `_headers`를
 `staticPaths`에 지정할 수 있으며, 이 경우 custom 파일을 그대로 사용하고 생성 preset과
-자동 병합하지 않습니다.
+자동 병합하지 않습니다. override는 파일이어야 하며, host 정책과 static output이 충돌하지
+않도록 `_headers/*` 하위 경로와 `_headers` 디렉터리는 거부합니다.
 
 압축은 host 책임입니다. EIAM은 결정적인 원본 파일만 만들고 precompressed 파일이나
 `Content-Encoding`을 생성하지 않습니다. Cloudflare Pages는 가능한 경우 Gzip/Brotli를

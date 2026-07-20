@@ -259,7 +259,9 @@ The generated file deliberately does not use a broad `/assets/*` immutable rule,
 file such as `assets/social.png` may keep the same name when its contents change. For
 `seo.pathBase: "/blog"`, every rule is emitted under `/blog` and `/blog/*`. If the vault declares
 `_headers` in `staticPaths`, that custom file is copied unchanged and replaces the generated preset;
-EIAM does not merge potentially conflicting host rules.
+EIAM does not merge potentially conflicting host rules. The override must be a file: `_headers/*`
+child paths and an `_headers` directory are rejected so the host policy cannot collide with static
+output.
 
 Compression is a host concern: EIAM emits the original deterministic files and does not write
 precompressed variants or a `Content-Encoding` header. Cloudflare Pages negotiates Gzip or Brotli

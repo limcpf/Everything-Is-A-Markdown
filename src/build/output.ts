@@ -18,7 +18,7 @@ import {
 } from "../view-contract";
 import { renderCloudflarePagesHeaders } from "./cache-headers";
 import type { OutputPhaseState, OutputWriteContext, RuntimeAssets } from "./contracts";
-import { OUTPUT_MARKER_FILE_NAME, resolveSiteTitle } from "./shared";
+import { CLOUDFLARE_HEADERS_FILE_NAME, OUTPUT_MARKER_FILE_NAME, resolveSiteTitle } from "./shared";
 
 const DEFAULT_SITE_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
 const require = createRequire(import.meta.url);
@@ -152,7 +152,8 @@ function assertSafeStaticOutputPath(relOutputPath: string): void {
   }
   if (
     normalized === OUTPUT_MARKER_FILE_NAME ||
-    normalized.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`)
+    normalized.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`) ||
+    normalized.startsWith(`${CLOUDFLARE_HEADERS_FILE_NAME}/`)
   ) {
     throw new Error(`[safety] Refusing reserved static output path: ${relOutputPath}`);
   }
@@ -197,6 +198,12 @@ async function copyStaticPaths(context: OutputWriteContext, options: BuildOption
     } catch {
       console.warn(`[static] path not found: ${staticPath}`);
       continue;
+    }
+
+    if (staticPath === CLOUDFLARE_HEADERS_FILE_NAME && sourceStat.isDirectory()) {
+      throw new Error(
+        `[static] "${CLOUDFLARE_HEADERS_FILE_NAME}" must be a file when used as a custom Cloudflare Pages header policy`,
+      );
     }
 
     if (sourceStat.isDirectory()) {
@@ -660,10 +667,10 @@ export async function prepareOutputPhase(
   };
   const runtimeAssets = await writeRuntimeAssets(context, options.layout, includeSelfHostedMermaid);
   await copyStaticPaths(context, options);
-  if (!Object.hasOwn(context.nextHashes, "_headers")) {
+  if (!Object.hasOwn(context.nextHashes, CLOUDFLARE_HEADERS_FILE_NAME)) {
     await writeOutputIfChanged(
       context,
-      "_headers",
+      CLOUDFLARE_HEADERS_FILE_NAME,
       renderCloudflarePagesHeaders(runtimeAssets, options.seo?.pathBase ?? ""),
     );
   }
