@@ -35,6 +35,8 @@ export interface RuntimeAssets {
   cssRelPath: string;
   jsRelPath: string;
   treeJsRelPath: string;
+  mermaidJsRelPath?: string;
+  mermaidLicenseRelPath?: string;
 }
 
 export interface BuildStorageState {
@@ -69,4 +71,5 @@ export interface RenderDocumentsResult {
 export interface OutputPhaseState {
   context: OutputWriteContext;
   runtimeAssets: RuntimeAssets;
+  mermaidRuntimeUrl: string | null;
 }

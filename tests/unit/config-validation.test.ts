@@ -390,7 +390,7 @@ export const ui = { newWithinDays: 2, recentLimit: 9 };
 
     expect(config.markdown?.mermaid).toEqual({
       enabled: undefined,
-      cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
+      cdnUrl: undefined,
       theme: "default",
     });
     expect(warnings).toHaveLength(2);

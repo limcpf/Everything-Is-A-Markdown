@@ -431,7 +431,7 @@ test.describe("runtime controller module contracts", () => {
     expect(clampDesktopSidebarWidth(900, 1200)).toBe(510);
     expect(resolveMermaidConfig({ mermaid: { cdnUrl: "", theme: "bad theme" } })).toMatchObject({
       enabled: true,
-      cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
+      cdnUrl: null,
       theme: "default",
     });
     const mermaid = createMermaidController(

@@ -1,4 +1,5 @@
 import path from "node:path";
+import MarkdownIt from "markdown-it";
 import type { BuildCache, BuildOptions, DocRecord } from "../types";
 import { createMarkdownRenderer } from "../markdown";
 import { makeHash } from "../utils";
@@ -8,6 +9,18 @@ import { toContentFileName } from "./shared";
 
 // Bump whenever renderer-owned HTML changes in a way that is incompatible with cached fragments.
 export const CONTENT_RENDERER_VERSION = "content-html-v3";
+const mermaidFenceDetector = new MarkdownIt({ html: true });
+
+export function hasMermaidDocuments(docs: DocRecord[]): boolean {
+  return docs.some((doc) =>
+    mermaidFenceDetector
+      .parse(doc.body, {})
+      .some(
+        (token) =>
+          token.type === "fence" && token.info.trim().split(/\s+/)[0]?.toLowerCase() === "mermaid",
+      ),
+  );
+}
 
 export async function renderDocuments(
   docs: DocRecord[],

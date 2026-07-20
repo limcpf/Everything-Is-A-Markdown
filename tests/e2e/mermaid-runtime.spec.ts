@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -13,16 +14,16 @@ interface CliResult {
 
 interface MermaidFixtureOptions {
   enabled: boolean;
-  cdnUrl: string;
+  cdnUrl?: string;
   theme: string;
   mockScript: boolean;
+  pathBase?: string;
   mockDimensions?: {
     width: number;
     height: number;
   };
 }
 
-const DEFAULT_MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
 const DEFAULT_MERMAID_THEME = "default";
 const CONTENT_VISUAL_MAX_WIDTH = 880;
 const CONTENT_IMAGE_SQUARE_MAX_WIDTH = 720;
@@ -273,11 +274,12 @@ function writeBlogConfig(workDir: string, options: MermaidFixtureOptions): void 
     path.join(workDir, "blog.config.mjs"),
     `export default {
   staticPaths: ["assets"],
+  ${options.pathBase ? `seo: { siteUrl: "https://example.test", pathBase: ${JSON.stringify(options.pathBase)} },` : ""}
   markdown: {
     images: "keep",
     mermaid: {
       enabled: ${options.enabled},
-      cdnUrl: ${JSON.stringify(options.cdnUrl)},
+      ${options.cdnUrl === undefined ? "" : `cdnUrl: ${JSON.stringify(options.cdnUrl)},`}
       theme: ${JSON.stringify(options.theme)},
     },
   },
@@ -314,6 +316,126 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
   const repoRoot = process.cwd();
   const cliPath = path.join(repoRoot, "src/cli.ts");
 
+  test("기본 Mermaid 런타임을 exact dependency에서 self-host하고 필요할 때만 로드한다", async ({
+    page,
+  }) => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-mermaid-self-hosted-"));
+    const { vaultDir, outDir } = createFixture(workDir, {
+      enabled: true,
+      theme: "default",
+      mockScript: false,
+    });
+
+    try {
+      const packageJson = JSON.parse(
+        fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+      ) as {
+        dependencies?: { mermaid?: unknown };
+      };
+      expect(packageJson.dependencies?.mermaid).toBe("11.16.0");
+
+      const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(build.status, build.output).toBe(0);
+      const manifest = JSON.parse(fs.readFileSync(path.join(outDir, "manifest.json"), "utf8")) as {
+        mermaid?: { cdnUrl?: unknown };
+      };
+      expect(manifest.mermaid?.cdnUrl).toMatch(/^\/assets\/mermaid\.[a-f0-9]{12}\.js$/);
+      const runtimeRelativePath = String(manifest.mermaid?.cdnUrl).replace(/^\/+/, "");
+      const runtimePath = path.join(outDir, runtimeRelativePath);
+      const runtimeBytes = fs.readFileSync(runtimePath);
+      const emittedHash = path.basename(runtimePath).split(".")[1];
+      expect(crypto.createHash("sha1").update(runtimeBytes).digest("hex").slice(0, 12)).toBe(
+        emittedHash,
+      );
+      expect(
+        runtimeBytes.equals(
+          fs.readFileSync(path.join(repoRoot, "node_modules/mermaid/dist/mermaid.min.js")),
+        ),
+      ).toBe(true);
+      const licensePath = runtimePath.replace(/\.js$/, ".LICENSE.txt");
+      expect(fs.readFileSync(licensePath, "utf8")).toBe(
+        fs.readFileSync(path.join(repoRoot, "node_modules/mermaid/LICENSE"), "utf8"),
+      );
+
+      const runtimeRequests: string[] = [];
+      page.on("request", (request) => {
+        if (request.url().includes("mermaid")) {
+          runtimeRequests.push(request.url());
+        }
+      });
+      const server = await startStaticServer(outDir);
+      try {
+        await page.goto(`${server.baseUrl}${TEST_ROUTE}`);
+        await expect(page.locator(".mermaid-block pre.mermaid svg")).toBeVisible();
+        await expect(page.locator("#mermaid-runtime")).toHaveAttribute(
+          "src",
+          String(manifest.mermaid?.cdnUrl),
+        );
+        expect(runtimeRequests).toEqual([`${server.baseUrl}${manifest.mermaid?.cdnUrl}`]);
+        expect(runtimeRequests.some((requestUrl) => requestUrl.startsWith("https://"))).toBe(false);
+      } finally {
+        await server.close();
+      }
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("Mermaid block이 없는 site에는 self-hosted runtime을 출력하지 않는다", () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-mermaid-unused-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+
+    try {
+      writeText(
+        path.join(vaultDir, "plain.md"),
+        `---
+publish: true
+prefix: PLAIN-01
+category_path: plain
+title: Plain document
+---
+
+No diagram here.
+`,
+      );
+      const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(build.status, build.output).toBe(0);
+      const manifest = JSON.parse(fs.readFileSync(path.join(outDir, "manifest.json"), "utf8")) as {
+        mermaid?: { cdnUrl?: unknown };
+      };
+      expect(manifest.mermaid?.cdnUrl).toBeNull();
+      expect(
+        fs.readdirSync(path.join(outDir, "assets")).filter((name) => name.startsWith("mermaid.")),
+      ).toEqual([]);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("self-hosted Mermaid URL은 deployment pathBase를 따른다", () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-mermaid-path-base-"));
+    const { vaultDir, outDir } = createFixture(workDir, {
+      enabled: true,
+      theme: "default",
+      mockScript: false,
+      pathBase: "/notes",
+    });
+
+    try {
+      const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(build.status, build.output).toBe(0);
+      const manifest = JSON.parse(fs.readFileSync(path.join(outDir, "manifest.json"), "utf8")) as {
+        mermaid?: { cdnUrl?: unknown };
+      };
+      expect(manifest.mermaid?.cdnUrl).toMatch(/^\/notes\/assets\/mermaid\.[a-f0-9]{12}\.js$/);
+      const outputRelativePath = String(manifest.mermaid?.cdnUrl).replace(/^\/notes\//, "");
+      expect(fs.existsSync(path.join(outDir, outputRelativePath))).toBe(true);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
   test("로컬 mock 스크립트로 Mermaid 다이어그램을 렌더링한다", async ({ page }) => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-mermaid-render-"));
     const { vaultDir, outDir } = createFixture(workDir, {
@@ -326,6 +448,11 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
     try {
       const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
       expect(build.status, build.output).toBe(0);
+      expect(
+        fs
+          .readdirSync(path.join(outDir, "assets"))
+          .filter((name) => /^mermaid\.[a-f0-9]{12}\.js$/.test(name)),
+      ).toEqual([]);
 
       const server = await startStaticServer(outDir);
       try {
@@ -792,7 +919,7 @@ test.describe("Mermaid 런타임 회귀 가드", () => {
       const manifest = JSON.parse(fs.readFileSync(path.join(outDir, "manifest.json"), "utf8")) as {
         mermaid?: { cdnUrl?: unknown; theme?: unknown };
       };
-      expect(manifest.mermaid?.cdnUrl).toBe(DEFAULT_MERMAID_CDN);
+      expect(manifest.mermaid?.cdnUrl).toMatch(/^\/assets\/mermaid\.[a-f0-9]{12}\.js$/);
       expect(manifest.mermaid?.theme).toBe(DEFAULT_MERMAID_THEME);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
