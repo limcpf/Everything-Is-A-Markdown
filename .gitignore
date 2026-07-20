@@ -16,6 +16,7 @@ dist/
 
 coverage/
 .tmp/
+.reports/
 temp/
 *.tmp
 .sisyphus

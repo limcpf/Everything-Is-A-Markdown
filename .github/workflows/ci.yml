@@ -49,6 +49,19 @@ jobs:
       - name: Verify reproducible no-op builds
         run: bun run check:reproducible
 
+      - name: Validate production site
+        id: production-validation
+        run: bun run validate:production -- --config ./tests/fixtures/production-site/blog.config.ts --out ./.tmp/production-dist --report-dir ./.tmp/production-report
+
+      - name: Upload production validation report on failure
+        if: failure() && steps.production-validation.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-validation-report
+          path: .tmp/production-report/**
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Run E2E tests
         run: bun run test:e2e
 

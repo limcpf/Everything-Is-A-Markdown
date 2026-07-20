@@ -24,6 +24,7 @@
     "clean": "bun run src/cli.ts clean",
     "check:size": "bun run scripts/check-output-size.ts --out ./dist",
     "check:reproducible": "bun run scripts/check-build-reproducibility.ts --vault ./test-vault --out ./dist",
+    "validate:production": "bun run scripts/validate-production.ts",
     "format": "prettier --write src scripts tests package.json tsconfig.json playwright.config.ts eslint.config.js .github/workflows",
     "format:check": "prettier --check src scripts tests package.json tsconfig.json playwright.config.ts eslint.config.js .github/workflows",
     "lint:source": "eslint src scripts --max-warnings=0",

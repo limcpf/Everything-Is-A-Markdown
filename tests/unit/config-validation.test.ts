@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, test } from "bun:test";
 import {
   loadUserConfig,
+  loadUserConfigFile,
   resolveBuildOptions,
   validateUserConfig,
   type CliArgs,
@@ -133,6 +134,29 @@ export const ui = { newWithinDays: 2, recentLimit: 9 };
         vaultDir: "./named-vault",
         ui: { newWithinDays: 2, recentLimit: 9 },
       });
+    } finally {
+      fs.rmSync(configDir, { recursive: true, force: true });
+    }
+  });
+
+  test("loads an explicit config file without relying on a root candidate name", async () => {
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), "eiam-explicit-config-"));
+    const configPath = path.join(configDir, "production.config.mjs");
+
+    try {
+      fs.writeFileSync(
+        configPath,
+        'export default { vaultDir: "./production-vault", seo: { siteUrl: "https://example.com" } };\n',
+        "utf8",
+      );
+
+      await expect(loadUserConfigFile(configPath)).resolves.toMatchObject({
+        vaultDir: "./production-vault",
+        seo: { siteUrl: "https://example.com" },
+      });
+      await expect(loadUserConfigFile(path.join(configDir, "missing.mjs"))).rejects.toThrow(
+        "[config] file not found:",
+      );
     } finally {
       fs.rmSync(configDir, { recursive: true, force: true });
     }

@@ -663,6 +663,7 @@ Options:
 
 - `--out-dir <path>`: required report directory
 - `--strict`: exits with status `1` when issues exist
+- `--config <path>`: load an explicit config module
 - `--vault <path>`: override vault root
 - `--exclude <glob>`: extra exclude patterns
 
@@ -678,6 +679,45 @@ What it checks:
 Publication metadata diagnostics are warnings in the report, while frontmatter parse and Markdown
 style findings are errors. `--strict` exits with status `1` when any of those diagnostics or findings
 exists, including a publication warning.
+
+## Production Validation
+
+Run the deployment gate against the same config and output directory that will be
+published:
+
+```bash
+bun run validate:production -- \
+  --config ./blog.config.ts \
+  --out ./dist \
+  --report-dir ./.reports/production-validation
+```
+
+Production validation requires `seo.siteUrl`; when it is absent, the command fails
+before claiming or changing the output directory. It then builds twice and requires
+byte-identical output, strict-clean published Markdown, valid manifest routes,
+wikilinks, backlinks and generated/static references, correct sitemap, robots,
+canonical metadata, `404.html`, `pathBase` and runtime bootstrap values, the
+generated Cloudflare cache policy, and all output size budgets.
+
+The machine-readable result is
+`production-validation-report.json` in `--report-dir`. CI and release jobs upload
+that directory when this gate fails. The output and report directories must not
+overlap.
+
+Intentional Markdown findings may be frozen with
+`--markdown-baseline <path>`. The file must use this exact schema:
+
+```json
+{
+  "schemaVersion": 1,
+  "fingerprints": []
+}
+```
+
+Copy fingerprints from the report's
+`markdown-publication.details.fingerprints` array. The gate compares the sorted
+lists exactly, so a new, removed, moved, or changed finding requires an explicit
+baseline review. Other useful overrides are `--vault` and repeatable `--exclude`.
 
 ## Example Vault
 
