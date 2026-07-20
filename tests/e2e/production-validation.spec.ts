@@ -15,6 +15,7 @@ interface ValidationReport {
   status: "passed" | "failed";
   checks: Array<{ id: string; status: "passed" | "failed" | "skipped" }>;
   failures: Array<{ check: string; message: string }>;
+  configuration: { reportDir: string; requestedReportDir?: string };
 }
 
 function writeText(filePath: string, content: string): void {
@@ -107,6 +108,38 @@ Production note.
       expect(report.failures).toContainEqual({
         check: "production-config",
         message: "seo.siteUrl is required in production mode",
+      });
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("redirects an overlapping failure report without claiming the output", () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "eiam-production-overlap-"));
+    const outDir = path.join(workDir, "dist");
+    const requestedReportDir = path.join(outDir, "reports");
+    const fallbackReportDir = path.join(workDir, ".dist-production-validation-report");
+
+    try {
+      const result = runValidation([
+        "--config",
+        fixtureConfigPath,
+        "--out",
+        outDir,
+        "--report-dir",
+        requestedReportDir,
+      ]);
+      expect(result.status, result.output).toBe(1);
+      expect(fs.existsSync(outDir)).toBe(false);
+
+      const report = readReport(fallbackReportDir);
+      expect(report.configuration).toMatchObject({
+        reportDir: fallbackReportDir,
+        requestedReportDir,
+      });
+      expect(report.failures).toContainEqual({
+        check: "production-config",
+        message: "production output and report directories must not overlap",
       });
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });

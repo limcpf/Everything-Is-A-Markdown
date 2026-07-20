@@ -42,6 +42,7 @@ export interface ProductionValidationReport {
     vaultDir?: string;
     outDir?: string;
     reportDir: string;
+    requestedReportDir?: string;
     siteUrl?: string;
     pathBase?: string;
     markdownBaselinePath?: string;

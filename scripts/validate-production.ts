@@ -89,6 +89,31 @@ async function finish(report: ProductionValidationReport): Promise<never> {
   throw new Error("unreachable after process.exit");
 }
 
+async function relocateOverlappingReportDirectory(
+  report: ProductionValidationReport,
+  outDir: string,
+): Promise<boolean> {
+  const canonicalOutDir = await canonicalizePath(outDir);
+  const canonicalReportDir = await canonicalizePath(report.configuration.reportDir);
+  if (!pathsOverlap(canonicalOutDir, canonicalReportDir)) return false;
+
+  const requestedReportDir = report.configuration.reportDir;
+  const resolvedOutDir = path.resolve(outDir);
+  const outputName = path.basename(resolvedOutDir) || "output";
+  const candidates = [
+    path.join(path.dirname(resolvedOutDir), `.${outputName}-production-validation-report`),
+    path.join(process.cwd(), ".reports", `production-validation-fallback-${process.pid}`),
+  ];
+  for (const candidate of candidates) {
+    const canonicalCandidate = await canonicalizePath(candidate);
+    if (pathsOverlap(canonicalOutDir, canonicalCandidate)) continue;
+    report.configuration.requestedReportDir = requestedReportDir;
+    report.configuration.reportDir = candidate;
+    return true;
+  }
+  throw new Error("Unable to select a production report directory outside the output directory");
+}
+
 async function validateResolvedProduction(
   report: ProductionValidationReport,
   options: BuildOptions,
@@ -239,7 +264,6 @@ async function main(): Promise<void> {
   }
 
   const report = createProductionReport(args);
-  await fs.mkdir(report.configuration.reportDir, { recursive: true });
 
   let options: BuildOptions;
   try {
@@ -261,11 +285,7 @@ async function main(): Promise<void> {
 
     const configFailures: string[] = [];
     if (!options.seo) configFailures.push("seo.siteUrl is required in production mode");
-    const [canonicalOutDir, canonicalReportDir] = await Promise.all([
-      canonicalizePath(options.outDir),
-      canonicalizePath(report.configuration.reportDir),
-    ]);
-    if (pathsOverlap(canonicalOutDir, canonicalReportDir)) {
+    if (await relocateOverlappingReportDirectory(report, options.outDir)) {
       configFailures.push("production output and report directories must not overlap");
     }
     try {
@@ -291,12 +311,21 @@ async function main(): Promise<void> {
     );
     if (configFailures.length > 0) return finish(report);
   } catch (error) {
+    const catchFailures = [errorMessage(error)];
+    try {
+      if (await relocateOverlappingReportDirectory(report, path.resolve(args.outDir ?? "dist"))) {
+        catchFailures.unshift("production output and report directories must not overlap");
+      }
+    } catch (relocationError) {
+      catchFailures.push(errorMessage(relocationError));
+    }
     addValidationCheck(report, "production-config", "Production config could not be loaded", [
-      errorMessage(error),
+      ...catchFailures,
     ]);
     return finish(report);
   }
 
+  await fs.mkdir(report.configuration.reportDir, { recursive: true });
   await validateResolvedProduction(report, options, args);
 }
 
