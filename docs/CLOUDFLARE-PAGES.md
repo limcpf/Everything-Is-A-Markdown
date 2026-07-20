@@ -76,8 +76,9 @@ jobs:
 
 This example deploys `main` to production, deploys pushes to `preview` as a Pages preview, and makes
 every pull request artifact-only. Fork pull requests must use artifact-only mode; the reusable
-workflow rejects a fork that attempts a credentialed deploy. An artifact-only caller may omit
-`project-name` and both Cloudflare secrets.
+workflow rejects a fork that attempts a credentialed deploy. Because artifact-only work cannot
+change a Pages alias, a fork whose head branch is also named `main` remains a valid dry run. An
+artifact-only caller may omit `project-name` and both Cloudflare secrets.
 
 The optional `markdown-baseline-path` input points to the exact strict Markdown baseline. Additional
 exclusions are newline-separated in `exclude-patterns`; each non-empty line becomes one
@@ -111,16 +112,19 @@ for the host-side project contract.
 
 `artifact-only: true` performs the frozen install and full production validation, then uploads:
 
-- `eiam-site-<run>-<attempt>`: the exact validated directory, including `_headers` and hidden EIAM
-  ownership metadata;
-- `production-validation-<run>-<attempt>`: the JSON validation and Markdown reports.
+- `eiam-site-<run>-<attempt>-<invocation>`: the exact validated directory, including `_headers` and
+  hidden EIAM ownership metadata;
+- `production-validation-<run>-<attempt>-<invocation>`: the JSON validation and Markdown reports,
+  explicitly including files under the hidden report directory.
 
 No Cloudflare secret is read and no network mutation is attempted. This is the supported path for
 forks and for reviewing a deploy candidate before credentials exist.
 
 On a validation failure, the report upload still runs but the site artifact and deploy job do not.
-The report is retained for 14 days; a successful site artifact is retained for 7 days. A rerun
-creates a new artifact name, and Wrangler attaches the caller commit SHA to the deployment.
+The report is retained for 14 days; a successful site artifact is retained for 7 days. Every
+reusable call generates an independent 128-bit invocation ID, so matrix jobs and multiple vaults in
+one caller run cannot collide. A rerun creates another artifact name, and Wrangler attaches the
+caller commit SHA to the deployment.
 
 ## `pathBase` behavior
 

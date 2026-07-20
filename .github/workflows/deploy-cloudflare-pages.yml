@@ -65,6 +65,9 @@ on:
       artifact-digest:
         description: SHA-256 digest reported by actions/upload-artifact
         value: ${{ jobs.build-validate.outputs.artifact-digest }}
+      validation-report-artifact-name:
+        description: Production validation report artifact uploaded by the build job
+        value: ${{ jobs.build-validate.outputs.report-artifact-name }}
       deployment-url:
         description: Immutable Cloudflare Pages deployment URL; empty in artifact-only mode
         value: ${{ jobs.deploy.outputs.deployment-url }}
@@ -91,6 +94,7 @@ jobs:
       deploy-branch: ${{ steps.inputs.outputs.deploy-branch }}
       output-path: ${{ steps.inputs.outputs.output-path }}
       project-name: ${{ steps.inputs.outputs.project-name }}
+      report-artifact-name: ${{ steps.inputs.outputs.report-artifact-name }}
       report-path: ${{ steps.inputs.outputs.report-path }}
     steps:
       - name: Checkout caller repository
@@ -172,18 +176,24 @@ jobs:
 
           if [[ "$DEPLOYMENT_ENVIRONMENT" == "production" ]]; then
             deploy_branch="$PRODUCTION_BRANCH"
-            [[ "$GITHUB_REF" == "refs/heads/$PRODUCTION_BRANCH" ]] || fail "production deployment must run from refs/heads/$PRODUCTION_BRANCH"
+            if [[ "$ARTIFACT_ONLY" != "true" && "$GITHUB_REF" != "refs/heads/$PRODUCTION_BRANCH" ]]; then
+              fail "production deployment must run from refs/heads/$PRODUCTION_BRANCH"
+            fi
           else
             deploy_branch="$PREVIEW_BRANCH"
             if [[ -z "$deploy_branch" ]]; then
               deploy_branch="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
             fi
             validate_branch "preview-branch" "$deploy_branch"
-            [[ "$deploy_branch" != "$PRODUCTION_BRANCH" ]] || fail "preview-branch must differ from production-branch"
+            if [[ "$ARTIFACT_ONLY" != "true" && "$deploy_branch" == "$PRODUCTION_BRANCH" ]]; then
+              fail "preview-branch must differ from production-branch"
+            fi
           fi
 
-          report_path=".eiam-reports/production-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          artifact_name="eiam-site-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          invocation_id="$(openssl rand -hex 16)"
+          report_path=".eiam-reports/production-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${invocation_id}"
+          artifact_name="eiam-site-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${invocation_id}"
+          report_artifact_name="production-validation-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${invocation_id}"
           output_resolved="$(realpath -m -- "$OUTPUT_PATH")"
           report_resolved="$(realpath -m -- "$report_path")"
           if [[ "$output_resolved" == "$report_resolved" || "$output_resolved" == "$report_resolved"/* || "$report_resolved" == "$output_resolved"/* ]]; then
@@ -194,6 +204,7 @@ jobs:
             echo "deploy-branch=$deploy_branch"
             echo "output-path=$OUTPUT_PATH"
             echo "project-name=$PROJECT_NAME"
+            echo "report-artifact-name=$report_artifact_name"
             echo "report-path=$report_path"
           } >> "$GITHUB_OUTPUT"
 
@@ -269,9 +280,10 @@ jobs:
         if: always() && steps.inputs.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: production-validation-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ steps.inputs.outputs.report-artifact-name }}
           path: ${{ steps.inputs.outputs.report-path }}/**
           if-no-files-found: warn
+          include-hidden-files: true
           retention-days: 14
 
       - name: Upload exact validated site

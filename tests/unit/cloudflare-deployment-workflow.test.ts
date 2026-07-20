@@ -63,9 +63,11 @@ describe("reusable Cloudflare Pages deployment workflow", () => {
     expect(workflow).toContain("caller packageManager must pin one exact stable Bun version");
     expect(workflow).toContain("Unpinned EIAM dependency");
     expect(workflow).toContain("output-path must not overlap");
-    expect(workflow).toContain("include-hidden-files: true");
+    expect(workflow.match(/include-hidden-files: true/g)).toHaveLength(2);
     expect(workflow).toContain("if-no-files-found: error");
     expect(workflow).toContain("compression-level: 0");
+    expect(workflow).toContain('invocation_id="$(openssl rand -hex 16)"');
+    expect(workflow).toContain("report-artifact-name");
   });
 
   test("keeps credentials out of artifact-only work and pins deploy tooling", () => {
@@ -94,6 +96,9 @@ describe("reusable Cloudflare Pages deployment workflow", () => {
     expect(workflow).toContain("fork pull requests must use artifact-only mode");
     expect(workflow).toContain("preview-branch must differ from production-branch");
     expect(workflow).toContain("production deployment must run from refs/heads/$PRODUCTION_BRANCH");
+    expect(workflow).toContain(
+      '[[ "$ARTIFACT_ONLY" != "true" && "$deploy_branch" == "$PRODUCTION_BRANCH" ]]',
+    );
     expect(workflow).toContain("/pages/projects/$PROJECT_NAME");
     expect(workflow).toContain(".result.production_branch");
     expect(workflow).toContain("Cloudflare production branch mismatch");
