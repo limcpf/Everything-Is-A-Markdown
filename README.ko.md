@@ -19,6 +19,10 @@ Everything-Is-A-Markdown은 로컬 Markdown 볼트를 정적 웹사이트로 빌
 
 ## 설치
 
+지원하는 Bun 버전의 단일 기준은 `package.json`의 정확한 `packageManager` 값입니다.
+CI와 릴리스 workflow도 `oven-sh/setup-bun`을 통해 같은 값을 읽습니다. 버전을 올릴 때는
+그 값 하나를 변경하고 install, build, package, unit, E2E 검증을 함께 통과해야 합니다.
+
 ```bash
 bun install
 ```

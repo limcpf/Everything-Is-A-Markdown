@@ -1,6 +1,7 @@
 {
   "name": "@limcpf/everything-is-a-markdown",
   "version": "0.8.0",
+  "packageManager": "bun@1.3.14",
   "license": "MIT",
   "private": false,
   "type": "module",
