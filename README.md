@@ -50,6 +50,12 @@ If two notes normalize to the same public route, the builder keeps both and auto
 
 This repository is authored around Bun. The CLI entry point is `src/cli.ts`, and package scripts assume Bun is available. The exact `packageManager` value is the single source of truth for the supported version; GitHub Actions lets `oven-sh/setup-bun` read it directly, so CI and release jobs cannot silently move to a different Bun release. Toolchain upgrades must update that one value and pass install, build, package, unit, and E2E verification.
 
+## Distribution
+
+The supported user-facing distribution is the [npm package `@limcpf/everything-is-a-markdown`](https://www.npmjs.com/package/@limcpf/everything-is-a-markdown), run with Bun. It is a source package for platforms supported by the exact Bun version above, not a compiled standalone executable or a platform-specific binary. The npm registry records the package version and integrity checksum used by package managers.
+
+Generated `dist/` output belongs to the input vault and deployment configuration that produced it. The project therefore does not publish a generic site archive or a "single-file" GitHub Release asset; build your own vault and deploy that resulting directory.
+
 ## Install
 
 For local development in this repository:
