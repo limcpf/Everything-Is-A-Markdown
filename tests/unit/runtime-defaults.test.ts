@@ -9,12 +9,14 @@ import {
   DEFAULT_SITE_TITLE,
   resolveRuntimeLayoutConfig,
 } from "../../src/defaults";
+import { DEFAULT_UI_LOCALE } from "../../src/i18n";
 
 describe("canonical runtime defaults", () => {
   test("exposes one immutable default payload", () => {
     expect(DEFAULT_RUNTIME_CONFIG).toEqual({
       defaultBranch: DEFAULT_BRANCH,
       siteTitle: DEFAULT_SITE_TITLE,
+      locale: DEFAULT_UI_LOCALE,
       mermaid: DEFAULT_MERMAID_CONFIG,
       layout: DEFAULT_RUNTIME_LAYOUT,
     });

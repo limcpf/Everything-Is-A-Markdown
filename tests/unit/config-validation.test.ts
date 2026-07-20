@@ -31,6 +31,7 @@ describe("user config validation", () => {
           categoryPath: " news / releases/ ",
         },
         ui: {
+          locale: " EN ",
           newWithinDays: 0,
           recentLimit: 12,
         },
@@ -80,6 +81,7 @@ describe("user config validation", () => {
         categoryPath: "news/releases",
       },
       ui: {
+        locale: "en",
         newWithinDays: 0,
         recentLimit: 12,
       },
@@ -195,6 +197,12 @@ export const ui = { newWithinDays: 2, recentLimit: 9 };
       receivedType: "boolean",
     },
     { name: "ui", config: { ui: [] }, field: "ui", receivedType: "array" },
+    {
+      name: "ui.locale",
+      config: { ui: { locale: 1 } },
+      field: "ui.locale",
+      receivedType: "number",
+    },
     {
       name: "ui.newWithinDays",
       config: { ui: { newWithinDays: "7" } },
@@ -438,6 +446,18 @@ export const ui = { newWithinDays: 2, recentLimit: 9 };
     });
   });
 
+  test("accepts only the documented UI locales", () => {
+    expect(() => validateUserConfig({ ui: { locale: "   " } }, () => {})).toThrow(
+      '"ui.locale" must be a non-empty string',
+    );
+    expect(() => validateUserConfig({ ui: { locale: "fr" } }, () => {})).toThrow(
+      '"ui.locale" must be one of "ko", "en"',
+    );
+    expect(validateUserConfig({ ui: { locale: " KO " } }, () => {})).toEqual({
+      ui: { locale: "ko", newWithinDays: undefined, recentLimit: undefined },
+    });
+  });
+
   test("validates the complete user config even when CLI values would override it", () => {
     expect(() =>
       resolveBuildOptions(
@@ -456,6 +476,7 @@ export const ui = { newWithinDays: 2, recentLimit: 9 };
         vaultDir: "./vault",
         outDir: "./site",
         exclude: ["private/**"],
+        ui: { locale: "en" },
         seo: { siteName: "Notes without canonical URLs" },
       },
       null,
@@ -466,6 +487,7 @@ export const ui = { newWithinDays: 2, recentLimit: 9 };
     expect(options.outDir).toBe(path.join("/workspace", "site"));
     expect(options.exclude).toEqual([".obsidian/**", "private/**", "drafts/**"]);
     expect(options.defaultBranch).toBe("dev");
+    expect(options.locale).toBe("en");
     expect(options.siteTitle).toBe("Notes without canonical URLs");
     expect(options.layout).toMatchObject({
       compactBreakpointPx: 1024,

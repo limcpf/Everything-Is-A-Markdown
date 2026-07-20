@@ -1,4 +1,5 @@
 import { createEventScope } from "./controller-lifecycle.js";
+import { getUiMessages } from "../i18n.ts";
 
 const CONTENT_IMAGE_LANDSCAPE_CLASS = "is-landscape";
 const CONTENT_IMAGE_PORTRAIT_CLASS = "is-portrait";
@@ -10,6 +11,7 @@ const CONTENT_IMAGE_PORTRAIT_THRESHOLD = 0.9;
 /** @typedef {import("./contracts").EventScope} EventScope */
 /** @typedef {import("./contracts").MermaidController} MermaidController */
 /** @typedef {import("./contracts").RuntimeWindow} RuntimeWindow */
+/** @typedef {import("../i18n").UiMessages} UiMessages */
 
 /** @type {Map<string, Promise<ImageDimensions | null>>} */
 const contentImageDimensionCache = new Map();
@@ -202,13 +204,14 @@ export function enhanceContentImages(root, windowRef = globalThis.window) {
 }
 
 /**
- * @param {{ root: HTMLElement | null; mermaidController: MermaidController; clipboard?: Pick<Clipboard, "writeText">; windowRef?: RuntimeWindow }} options
+ * @param {{ root: HTMLElement | null; mermaidController: MermaidController; messages?: UiMessages; clipboard?: Pick<Clipboard, "writeText">; windowRef?: RuntimeWindow }} options
  * @returns {ContentEnhancementController}
  */
 export function createContentEnhancementController(options) {
   const {
     root,
     mermaidController,
+    messages = getUiMessages(),
     clipboard = globalThis.navigator?.clipboard,
     windowRef = globalThis.window,
   } = options;
@@ -240,16 +243,20 @@ export function createContentEnhancementController(options) {
       }
       await clipboard.writeText(code);
       button.classList.add("copied");
-      const icon = button.querySelector(".material-symbols-outlined");
-      if (icon instanceof windowRef.HTMLElement) {
-        icon.textContent = "check";
+      button.setAttribute("aria-label", messages.copied);
+      button.setAttribute("title", messages.copied);
+      const iconUse = button.querySelector(".app-icon use");
+      if (iconUse instanceof windowRef.Element) {
+        iconUse.setAttribute("href", "#eiam-icon-check");
       }
       const timer = windowRef.setTimeout(() => {
         resetTimers.delete(timer);
         button.classList.remove("copied");
-        const nextIcon = button.querySelector(".material-symbols-outlined");
-        if (nextIcon instanceof windowRef.HTMLElement) {
-          nextIcon.textContent = "content_copy";
+        button.setAttribute("aria-label", messages.copyCode);
+        button.setAttribute("title", messages.copyCode);
+        const nextIconUse = button.querySelector(".app-icon use");
+        if (nextIconUse instanceof windowRef.Element) {
+          nextIconUse.setAttribute("href", "#eiam-icon-copy");
         }
       }, 2000);
       resetTimers.add(timer);

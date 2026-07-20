@@ -1,9 +1,10 @@
 import { escapeHtmlAttribute } from "./seo";
 import { DEFAULT_SITE_TITLE } from "./defaults";
+import { getUiMessages, normalizeUiLocale } from "./i18n";
+import { renderAppIconSprite } from "./icon-sprite";
+import { renderAppIcon } from "./icons";
 import type { Manifest } from "./types";
 import { toViewPathWithBase } from "./view-contract";
-
-const DEFAULT_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
 
 export interface AppShellMeta {
   title?: string;
@@ -76,10 +77,10 @@ function stringifyJsonLd(value: unknown): string {
     .replaceAll("\u2029", "\\u2029");
 }
 
-function renderHeadMeta(meta: AppShellMeta): string {
+function renderHeadMeta(meta: AppShellMeta, defaultDescription: string): string {
   const title = (meta.title ?? DEFAULT_SITE_TITLE).trim() || DEFAULT_SITE_TITLE;
   const description = typeof meta.description === "string" ? meta.description.trim() : "";
-  const fallbackDescription = description || DEFAULT_DESCRIPTION;
+  const fallbackDescription = description || defaultDescription;
   const canonicalUrl = typeof meta.canonicalUrl === "string" ? meta.canonicalUrl.trim() : "";
 
   const ogTitle = (meta.ogTitle ?? title).trim() || title;
@@ -88,13 +89,13 @@ function renderHeadMeta(meta: AppShellMeta): string {
   const ogLocale = typeof meta.ogLocale === "string" ? meta.ogLocale.trim() : "";
   const ogUrl = typeof meta.ogUrl === "string" ? meta.ogUrl.trim() : "";
   const ogDescription =
-    (meta.ogDescription ?? (description || DEFAULT_DESCRIPTION)).trim() || DEFAULT_DESCRIPTION;
+    (meta.ogDescription ?? (description || defaultDescription)).trim() || defaultDescription;
   const ogImage = typeof meta.ogImage === "string" ? meta.ogImage.trim() : "";
 
   const twitterCard = (meta.twitterCard ?? "summary").trim() || "summary";
   const twitterTitle = (meta.twitterTitle ?? title).trim() || title;
   const twitterDescription =
-    (meta.twitterDescription ?? (description || DEFAULT_DESCRIPTION)).trim() || DEFAULT_DESCRIPTION;
+    (meta.twitterDescription ?? (description || defaultDescription)).trim() || defaultDescription;
   const twitterImage = typeof meta.twitterImage === "string" ? meta.twitterImage.trim() : "";
   const twitterSite = typeof meta.twitterSite === "string" ? meta.twitterSite.trim() : "";
   const twitterCreator = typeof meta.twitterCreator === "string" ? meta.twitterCreator.trim() : "";
@@ -210,137 +211,114 @@ export function renderAppShellHtml(
   initialView: AppShellInitialView | null = null,
   manifest: AppShellManifestPayload | null = null,
 ): string {
-  const headMeta = renderHeadMeta(meta);
+  const locale = normalizeUiLocale(manifest?.locale);
+  const messages = getUiMessages(locale);
+  const text = escapeHtmlAttribute;
+  const headMeta = renderHeadMeta(meta, messages.defaultDescription);
   const initialViewScript = renderInitialViewScript(initialView);
   const runtimeBootstrapScript = renderRuntimeBootstrapScript(manifest, assets);
-  const symbolFontStylesheet =
-    "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap";
   const appTitle =
     typeof manifest?.siteTitle === "string" && manifest.siteTitle.trim().length > 0
       ? manifest.siteTitle.trim()
       : DEFAULT_SITE_TITLE;
-  const initialTitle = initialView ? escapeHtmlAttribute(initialView.title) : "문서를 선택하세요";
+  const initialTitle = initialView
+    ? escapeHtmlAttribute(initialView.title)
+    : text(messages.selectDocumentTitle);
   const initialBreadcrumb = initialView ? initialView.breadcrumbHtml : "";
   const initialMeta = initialView ? initialView.metaHtml : "";
   const initialContent = initialView
     ? initialView.contentHtml
-    : '<p class="placeholder">좌측 탐색기에서 문서를 선택하세요.</p>';
+    : `<p class="placeholder">${text(messages.selectDocumentBody)}</p>`;
   const initialBacklinks = initialView ? initialView.backlinksHtml : "";
   const initialNav = initialView ? initialView.navHtml : "";
 
   return `<!doctype html>
-<html lang="ko">
+<html lang="${locale}">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 ${headMeta}
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preload" as="style" href="${escapeHtmlAttribute(symbolFontStylesheet)}" />
-    <link rel="stylesheet" href="${escapeHtmlAttribute(symbolFontStylesheet)}" media="print" onload="this.media='all'" />
-    <noscript><link rel="stylesheet" href="${escapeHtmlAttribute(symbolFontStylesheet)}" /></noscript>
     <link rel="stylesheet" href="${escapeHtmlAttribute(assets.cssHref)}" />
   </head>
   <body>
-    <a class="skip-link" href="#viewer-panel">본문으로 건너뛰기</a>
+    ${renderAppIconSprite()}
+    <a class="skip-link" href="#viewer-panel">${text(messages.skipToContent)}</a>
     <div id="a11y-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     <div class="app-root">
       <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true" hidden></div>
-      <aside id="sidebar-panel" class="sidebar" role="complementary" aria-label="문서 탐색기 패널">
+      <aside id="sidebar-panel" class="sidebar" role="complementary" aria-label="${text(messages.documentExplorerPanel)}">
         <div class="sidebar-header">
-          <h1 class="sidebar-title">
-            <span class="material-symbols-outlined icon-terminal">terminal</span>
-            ${escapeHtmlAttribute(appTitle)}
-          </h1>
-          <button id="sidebar-close" class="sidebar-close" type="button" aria-label="탐색기 닫기">
-            <span class="material-symbols-outlined">close</span>
-          </button>
-          <div class="sidebar-branch">
-            <span class="branch-badge" aria-hidden="true">
-              <span class="material-symbols-outlined icon-branch">call_split</span>branch
-            </span>
-            <div id="sidebar-branch-pills" class="branch-pills" role="group" aria-label="브랜치 선택"></div>
-            <span id="sidebar-branch-info" class="branch-info">publish: true</span>
+          <div class="sidebar-heading">
+            <h1 class="sidebar-title">${escapeHtmlAttribute(appTitle)}</h1>
+            <button id="sidebar-close" class="sidebar-close" type="button" aria-label="${text(messages.closeExplorer)}">
+              ${renderAppIcon("close")}
+            </button>
           </div>
+          <label class="sidebar-branch" for="sidebar-branch-select">
+            <span class="branch-label">${text(messages.branchLabel)}</span>
+            <select id="sidebar-branch-select" class="branch-select"></select>
+          </label>
         </div>
         <div class="sidebar-search">
           <div class="sidebar-search-box">
-            <span class="material-symbols-outlined sidebar-search-icon" aria-hidden="true">search</span>
+            ${renderAppIcon("search", "sidebar-search-icon")}
             <input
               id="tree-search-input"
               class="tree-search-input"
               type="search"
               autocomplete="off"
               spellcheck="false"
-              aria-label="문서 검색"
-              placeholder="Search"
+              aria-label="${text(messages.searchDocuments)}"
+              placeholder="${text(messages.searchPlaceholder)}"
             />
-            <button id="tree-search-clear" class="tree-search-clear" type="button" aria-label="검색 지우기" title="검색 지우기" hidden>
-              <span class="material-symbols-outlined">close</span>
+            <button id="tree-search-clear" class="tree-search-clear" type="button" aria-label="${text(messages.clearSearch)}" title="${text(messages.clearSearch)}" hidden>
+              ${renderAppIcon("close")}
             </button>
           </div>
-          <div class="sidebar-search-actions" aria-live="polite">
+          <div id="sidebar-search-actions" class="sidebar-search-actions" aria-live="polite" hidden>
             <span id="tree-search-count" class="tree-search-count"></span>
             <div class="tree-search-nav">
-              <button id="tree-search-prev" class="tree-search-step" type="button" aria-label="이전 검색 결과" title="이전 검색 결과" disabled>
-                <span class="material-symbols-outlined">keyboard_arrow_up</span>
+              <button id="tree-search-prev" class="tree-search-step" type="button" aria-label="${text(messages.previousSearchResult)}" title="${text(messages.previousSearchResult)}" disabled>
+                ${renderAppIcon("chevron-up")}
               </button>
-              <button id="tree-search-next" class="tree-search-step" type="button" aria-label="다음 검색 결과" title="다음 검색 결과" disabled>
-                <span class="material-symbols-outlined">keyboard_arrow_down</span>
+              <button id="tree-search-next" class="tree-search-step" type="button" aria-label="${text(messages.nextSearchResult)}" title="${text(messages.nextSearchResult)}" disabled>
+                ${renderAppIcon("chevron-down")}
               </button>
             </div>
           </div>
         </div>
-        <nav id="tree-root" class="tree-root" aria-label="문서 탐색기" tabindex="0"></nav>
-        <div class="sidebar-footer">
-          <div class="status-online">
-            <span class="status-dot"></span>
-            <span>Online</span>
-          </div>
-          <div class="sidebar-footer-actions">
-            <div class="status-encoding">UTF-8</div>
-            <button
-              id="settings-toggle"
-              class="settings-toggle"
-              type="button"
-              aria-controls="sidebar-settings"
-              aria-expanded="false"
-              aria-label="탐색기 설정 열기"
-            >
-              <span class="material-symbols-outlined">tune</span>
-            </button>
-          </div>
-          <section id="sidebar-settings" class="sidebar-settings" hidden aria-label="탐색기 설정">
-            <p class="sidebar-settings-title">탐색기 설정</p>
+        <nav id="tree-root" class="tree-root" aria-label="${text(messages.documentExplorer)}" tabindex="0"></nav>
+        <div class="sidebar-tools">
+          <button
+            id="settings-toggle"
+            class="settings-toggle"
+            type="button"
+            aria-controls="sidebar-settings"
+            aria-expanded="false"
+            aria-label="${text(messages.openExplorerSettings)}"
+          >
+            ${renderAppIcon("settings")}
+          </button>
+          <section id="sidebar-settings" class="sidebar-settings" hidden aria-label="${text(messages.explorerSettings)}">
+            <p class="sidebar-settings-title">${text(messages.explorerSettings)}</p>
             <fieldset class="settings-group">
-              <legend>메뉴 버튼 위치</legend>
-              <label class="settings-option">
-                <input type="radio" name="menu-toggle-position" value="right" checked />
-                <span>오른쪽 하단</span>
-              </label>
-              <label class="settings-option">
-                <input type="radio" name="menu-toggle-position" value="left" />
-                <span>왼쪽 하단</span>
-              </label>
-            </fieldset>
-            <fieldset class="settings-group">
-              <legend>테마</legend>
-              <div class="settings-segment" role="radiogroup" aria-label="테마 선택">
+              <legend>${text(messages.theme)}</legend>
+              <div class="settings-segment" role="radiogroup" aria-label="${text(messages.selectTheme)}">
                 <label class="settings-segment-option">
                   <input type="radio" name="theme-mode" value="light" />
-                  <span>Light</span>
+                  <span>${text(messages.lightTheme)}</span>
                 </label>
                 <label class="settings-segment-option">
                   <input type="radio" name="theme-mode" value="system" checked />
-                  <span>System</span>
+                  <span>${text(messages.systemTheme)}</span>
                 </label>
                 <label class="settings-segment-option">
                   <input type="radio" name="theme-mode" value="dark" />
-                  <span>Dark</span>
+                  <span>${text(messages.darkTheme)}</span>
                 </label>
               </div>
             </fieldset>
-            <button id="settings-close" class="settings-close" type="button">닫기</button>
+            <button id="settings-close" class="settings-close" type="button">${text(messages.close)}</button>
           </section>
         </div>
       </aside>
@@ -350,30 +328,33 @@ ${headMeta}
         role="separator"
         aria-orientation="vertical"
         aria-controls="sidebar-panel viewer-panel"
-        aria-label="탐색기 너비 조절"
+        aria-label="${text(messages.resizeExplorer)}"
         tabindex="0"
       ></div>
       <main id="viewer-panel" class="viewer" tabindex="-1">
-        <button
-          id="sidebar-toggle"
-          class="mobile-menu-toggle"
-          type="button"
-          aria-controls="sidebar-panel"
-          aria-expanded="false"
-          aria-label="탐색기 열기"
-        >
-          <span class="material-symbols-outlined">menu</span>
-          <span>Files</span>
-        </button>
+        <header class="mobile-reader-header">
+          <button
+            id="sidebar-toggle"
+            class="mobile-menu-toggle"
+            type="button"
+            aria-controls="sidebar-panel"
+            aria-expanded="false"
+            aria-label="${text(messages.openExplorer)}"
+          >
+            ${renderAppIcon("menu")}
+            <span>${text(messages.files)}</span>
+          </button>
+          <p id="mobile-reader-title" class="mobile-reader-title">${initialTitle}</p>
+        </header>
         <div class="viewer-container">
-          <nav id="viewer-breadcrumb" class="viewer-breadcrumb" aria-label="경로">${initialBreadcrumb}</nav>
+          <nav id="viewer-breadcrumb" class="viewer-breadcrumb" aria-label="${text(messages.path)}">${initialBreadcrumb}</nav>
           <header id="viewer-header" class="viewer-header">
             <h1 id="viewer-title" class="viewer-title">${initialTitle}</h1>
             <div id="viewer-meta" class="viewer-meta">${initialMeta}</div>
           </header>
           <article id="viewer-content" class="viewer-content">${initialContent}</article>
-          <section id="viewer-backlinks" class="viewer-backlinks" aria-label="문서를 참조한 링크" ${initialBacklinks ? "" : "hidden"}>${initialBacklinks}</section>
-          <nav id="viewer-nav" class="viewer-nav" aria-label="문서 이전/다음 탐색">${initialNav}</nav>
+          <section id="viewer-backlinks" class="viewer-backlinks" aria-label="${text(messages.referencingDocuments)}" ${initialBacklinks ? "" : "hidden"}>${initialBacklinks}</section>
+          <nav id="viewer-nav" class="viewer-nav" aria-label="${text(messages.documentNavigation)}">${initialNav}</nav>
         </div>
       </main>
     </div>
@@ -390,33 +371,30 @@ export function render404Html(
   assets: AppShellAssets = DEFAULT_ASSETS,
   homeHref = "/",
   siteTitle = DEFAULT_SITE_TITLE,
+  locale: unknown = undefined,
 ): string {
-  const symbolFontStylesheet =
-    "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap";
-
+  const normalizedLocale = normalizeUiLocale(locale);
+  const messages = getUiMessages(normalizedLocale);
+  const text = escapeHtmlAttribute;
   return `<!doctype html>
-<html lang="ko">
+<html lang="${normalizedLocale}">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>404 - ${escapeHtmlAttribute(siteTitle.trim() || DEFAULT_SITE_TITLE)}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preload" as="style" href="${escapeHtmlAttribute(symbolFontStylesheet)}" />
-    <link rel="stylesheet" href="${escapeHtmlAttribute(symbolFontStylesheet)}" media="print" onload="this.media='all'" />
-    <noscript><link rel="stylesheet" href="${escapeHtmlAttribute(symbolFontStylesheet)}" /></noscript>
     <link rel="stylesheet" href="${escapeHtmlAttribute(assets.cssHref)}" />
   </head>
   <body>
+    ${renderAppIconSprite()}
     <main class="not-found">
       <div class="not-found-icon">
-        <span class="material-symbols-outlined">folder_off</span>
+        ${renderAppIcon("folder-off")}
       </div>
       <h1>404</h1>
-      <p>요청한 문서를 찾을 수 없습니다.</p>
+      <p>${text(messages.notFoundMessage)}</p>
       <a href="${escapeHtmlAttribute(homeHref)}" class="not-found-link">
-        <span class="material-symbols-outlined">home</span>
-        홈으로 이동
+        ${renderAppIcon("home")}
+        ${text(messages.goHome)}
       </a>
     </main>
   </body>

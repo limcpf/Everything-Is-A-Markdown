@@ -117,9 +117,6 @@ class FakeElement extends FakeTarget {
   querySelectorAll(selector: string): FakeElement[] {
     const descendants = this.children.flatMap((child) => [child, ...child.querySelectorAll("*")]);
     if (selector === "*") return descendants;
-    if (selector === ".branch-pill") {
-      return descendants.filter((child) => child.className.split(/\s+/).includes("branch-pill"));
-    }
     return [];
   }
 
@@ -229,10 +226,6 @@ function createFakeDocument() {
   const appRoot = new FakeElement();
   const viewer = new FakeElement();
   const inputs = {
-    menu: [
-      Object.assign(new FakeInput(), { value: "left" }),
-      Object.assign(new FakeInput(), { value: "right" }),
-    ],
     theme: [
       Object.assign(new FakeInput(), { value: "system" }),
       Object.assign(new FakeInput(), { value: "light" }),
@@ -262,7 +255,6 @@ function createFakeDocument() {
       return null;
     },
     querySelectorAll(selector: string) {
-      if (selector === 'input[name="menu-toggle-position"]') return inputs.menu;
       if (selector === 'input[name="theme-mode"]') return inputs.theme;
       return [];
     },
@@ -378,14 +370,14 @@ test.describe("runtime controller module contracts", () => {
   test("tree controller lifecycle은 branch UI와 search listener를 소유한다", () => {
     const documentRef = createFakeDocument();
     const windowRef = createFakeWindow();
-    const pills = documentRef.register("sidebar-branch-pills");
-    const branchInfo = documentRef.register("sidebar-branch-info");
+    const branchSelect = documentRef.register("sidebar-branch-select");
     documentRef.register("tree-root");
     const search = documentRef.register("tree-search-input");
     documentRef.register("tree-search-clear");
     documentRef.register("tree-search-prev");
     documentRef.register("tree-search-next");
     documentRef.register("tree-search-count");
+    const searchActions = documentRef.register("sidebar-search-actions");
     const navigation = {
       activeBranch: "dev",
       availableBranches: ["dev", "main"],
@@ -417,14 +409,19 @@ test.describe("runtime controller module contracts", () => {
 
     controller.setup();
     controller.setup();
-    expect(pills.children).toHaveLength(2);
-    expect(pills.listenerCount("click")).toBe(1);
+    expect(branchSelect.children).toHaveLength(2);
+    expect(branchSelect.children.map((option) => option.textContent)).toEqual([
+      "dev (기본값)",
+      "main",
+    ]);
+    expect(branchSelect.value).toBe("dev");
+    expect(branchSelect.listenerCount("change")).toBe(1);
     expect(search.listenerCount("input")).toBe(1);
-    expect(branchInfo.textContent).toContain("dev + unclassified");
+    expect(searchActions.hidden).toBe(true);
 
     controller.destroy();
     controller.destroy();
-    expect(pills.listenerCount("click")).toBe(0);
+    expect(branchSelect.listenerCount("change")).toBe(0);
     expect(search.listenerCount("input")).toBe(0);
   });
 

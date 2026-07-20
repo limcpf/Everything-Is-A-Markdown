@@ -1,5 +1,6 @@
 import { createEventScope } from "./controller-lifecycle.js";
 import { pickHomeRoute, resolveRouteFromLocation, toPathWithBase } from "./navigation-state.js";
+import { getUiMessages } from "../i18n.ts";
 
 const BRANCH_KEY = "fsblog.branch";
 const TREE_RUNTIME_STATE_ATTR = "data-tree-runtime";
@@ -81,7 +82,7 @@ function decorateTreeLabels(host, documentRef) {
     label.className = "tree-item-label";
     if (prefix) {
       const prefixBadge = documentRef.createElement("span");
-      prefixBadge.className = "tree-item-prefix-badge";
+      prefixBadge.className = "tree-item-prefix";
       prefixBadge.textContent = prefix;
       label.appendChild(prefixBadge);
     }
@@ -183,6 +184,7 @@ export function createTreeController(options) {
     treeModuleUrl,
     navigate,
     announce = () => {},
+    messages = getUiMessages(),
     isCompactLayout = () => false,
     documentRef = globalThis.document,
     windowRef = globalThis.window,
@@ -202,8 +204,10 @@ export function createTreeController(options) {
     documentRef.getElementById("tree-search-next")
   );
   const treeSearchCount = documentRef.getElementById("tree-search-count");
-  const sidebarBranchPills = documentRef.getElementById("sidebar-branch-pills");
-  const sidebarBranchInfo = documentRef.getElementById("sidebar-branch-info");
+  const sidebarSearchActions = documentRef.getElementById("sidebar-search-actions");
+  const sidebarBranchSelect = /** @type {HTMLSelectElement | null} */ (
+    documentRef.getElementById("sidebar-branch-select")
+  );
   /** @type {EventScope | null} */
   let events = null;
   /** @type {FileTree | null} */
@@ -235,36 +239,24 @@ export function createTreeController(options) {
     documentRef.documentElement?.setAttribute(TREE_RUNTIME_STATE_ATTR, state);
   };
 
-  const renderBranchPills = () => {
-    if (!sidebarBranchPills) {
+  const renderBranchOptions = () => {
+    if (!sidebarBranchSelect) {
       return;
     }
-    sidebarBranchPills.replaceChildren();
+    sidebarBranchSelect.replaceChildren();
     for (const branch of navigation.availableBranches) {
-      const pill = documentRef.createElement("button");
-      pill.type = "button";
-      pill.className = "branch-pill";
-      pill.dataset.branch = branch;
-      pill.textContent = branch;
-      pill.setAttribute("aria-pressed", "false");
-      sidebarBranchPills.appendChild(pill);
+      const option = documentRef.createElement("option");
+      option.value = branch;
+      option.textContent =
+        branch === navigation.defaultBranch ? messages.branchDefault(branch) : branch;
+      sidebarBranchSelect.appendChild(option);
     }
+    sidebarBranchSelect.disabled = navigation.availableBranches.length < 2;
   };
 
-  const updateBranchInfo = () => {
-    if (sidebarBranchInfo) {
-      sidebarBranchInfo.textContent =
-        navigation.activeBranch === navigation.defaultBranch
-          ? `publish: true · ${navigation.activeBranch} + unclassified`
-          : `publish: true · ${navigation.activeBranch} only`;
-    }
-    for (const pill of sidebarBranchPills?.querySelectorAll(".branch-pill") ?? []) {
-      if (!(pill instanceof windowRef.HTMLElement)) {
-        continue;
-      }
-      const isActive = pill.dataset.branch === navigation.activeBranch;
-      pill.classList.toggle("is-active", isActive);
-      pill.setAttribute("aria-pressed", String(isActive));
+  const updateBranchControl = () => {
+    if (sidebarBranchSelect) {
+      sidebarBranchSelect.value = navigation.activeBranch;
     }
   };
 
@@ -283,7 +275,10 @@ export function createTreeController(options) {
       }
     }
     if (treeSearchCount) {
-      treeSearchCount.textContent = hasSearch ? `${matchCount}개 일치` : "";
+      treeSearchCount.textContent = hasSearch ? messages.searchMatches(matchCount) : "";
+    }
+    if (sidebarSearchActions) {
+      sidebarSearchActions.hidden = !hasSearch;
     }
   };
 
@@ -412,7 +407,7 @@ export function createTreeController(options) {
     if (metadata?.kind !== "file" || metadata.isNew !== true) {
       return null;
     }
-    return { text: "NEW", title: "New document" };
+    return { text: messages.newBadge, title: messages.newDocument };
   };
 
   /**
@@ -438,7 +433,7 @@ export function createTreeController(options) {
     const link = documentRef.createElement("a");
     link.className = "tree-context-link";
     link.href = toPathWithBase(route, pathBase);
-    link.textContent = "Open";
+    link.textContent = messages.open;
     Object.assign(link.style, {
       borderRadius: "4px",
       color: "inherit",
@@ -543,7 +538,7 @@ export function createTreeController(options) {
     const status = documentRef.createElement("p");
     status.className = "tree-load-status";
     status.setAttribute("role", "status");
-    status.textContent = "문서 탐색기를 불러오는 중입니다.";
+    status.textContent = messages.treeLoading;
     treeRoot.replaceChildren(status);
   };
 
@@ -554,15 +549,15 @@ export function createTreeController(options) {
     }
     const fallback = documentRef.createElement("section");
     fallback.className = "tree-load-fallback";
-    fallback.setAttribute("aria-label", "간이 문서 탐색기");
+    fallback.setAttribute("aria-label", messages.simpleDocumentExplorer);
     const message = documentRef.createElement("p");
     message.className = "tree-load-fallback-message";
     message.setAttribute("role", "alert");
-    message.textContent = "문서 트리를 불러오지 못했습니다. 아래 링크로 계속 탐색할 수 있습니다.";
+    message.textContent = messages.treeLoadFailed;
     const retry = documentRef.createElement("button");
     retry.className = "tree-load-retry";
     retry.type = "button";
-    retry.textContent = "탐색기 다시 불러오기";
+    retry.textContent = messages.retryExplorer;
     retry.addEventListener("click", () => {
       void requestLoad("retry", { retry: true });
     });
@@ -652,7 +647,7 @@ export function createTreeController(options) {
         treeRoot?.setAttribute("aria-busy", "false");
         setTreeRuntimeState("error");
         renderTreeFallback(error);
-        announce("문서 트리를 불러오지 못했습니다. 간이 링크 탐색기를 사용할 수 있습니다.");
+        announce(messages.treeFallbackAnnouncement);
         console.error("Tree runtime load failed:", error);
         return false;
       })
@@ -682,7 +677,7 @@ export function createTreeController(options) {
   /** @param {string} branch */
   const handleBranchChange = (branch) => {
     storage.setItem(BRANCH_KEY, branch);
-    updateBranchInfo();
+    updateBranchControl();
     if (treeRuntime) {
       renderTree();
     }
@@ -704,17 +699,8 @@ export function createTreeController(options) {
     return true;
   };
 
-  /** @param {Event} event */
-  const handleBranchPillClick = (event) => {
-    const target = event.target;
-    if (!(target instanceof windowRef.Element)) {
-      return;
-    }
-    const pill = target.closest(".branch-pill");
-    if (!(pill instanceof windowRef.HTMLElement) || !sidebarBranchPills?.contains(pill)) {
-      return;
-    }
-    void setActiveBranch(pill.dataset.branch);
+  const handleBranchSelectChange = () => {
+    void setActiveBranch(sidebarBranchSelect?.value);
   };
 
   const handleSearchFocus = () => {
@@ -763,29 +749,31 @@ export function createTreeController(options) {
     deferredFrame = windowRef.requestAnimationFrame(() => {
       deferredFrame = null;
       paintFrame = windowRef.requestAnimationFrame(() => {
-        paintFrame = null;
-        if (!events) {
-          return;
-        }
-        treeLoadAllowed = true;
-        windowRef.performance?.mark?.("eiam-first-content-paint-opportunity");
-        if (pendingTreeLoadReason) {
-          void requestLoad(pendingTreeLoadReason);
-          return;
-        }
-        if (isCompactLayout()) {
-          return;
-        }
-        const loadForDesktop = () => {
-          idleHandle = null;
-          idleFallbackTimer = null;
-          void requestLoad("desktop-idle");
-        };
-        if (typeof windowRef.requestIdleCallback === "function") {
-          idleHandle = windowRef.requestIdleCallback(loadForDesktop, { timeout: 500 });
-        } else {
-          idleFallbackTimer = windowRef.setTimeout(loadForDesktop, 0);
-        }
+        paintFrame = windowRef.requestAnimationFrame(() => {
+          paintFrame = null;
+          if (!events) {
+            return;
+          }
+          treeLoadAllowed = true;
+          windowRef.performance?.mark?.("eiam-first-content-paint-opportunity");
+          if (pendingTreeLoadReason) {
+            void requestLoad(pendingTreeLoadReason);
+            return;
+          }
+          if (isCompactLayout()) {
+            return;
+          }
+          const loadForDesktop = () => {
+            idleHandle = null;
+            idleFallbackTimer = null;
+            void requestLoad("desktop-idle");
+          };
+          if (typeof windowRef.requestIdleCallback === "function") {
+            idleHandle = windowRef.requestIdleCallback(loadForDesktop, { timeout: 500 });
+          } else {
+            idleFallbackTimer = windowRef.setTimeout(loadForDesktop, 0);
+          }
+        });
       });
     });
   };
@@ -816,7 +804,7 @@ export function createTreeController(options) {
         return;
       }
       events = createEventScope();
-      events.listen(sidebarBranchPills, "click", handleBranchPillClick);
+      events.listen(sidebarBranchSelect, "change", handleBranchSelectChange);
       events.listen(treeSearchInput, "focus", handleSearchFocus);
       events.listen(treeSearchInput, "input", handleSearchInput);
       events.listen(treeSearchInput, "keydown", handleSearchKeydown);
@@ -826,8 +814,8 @@ export function createTreeController(options) {
       });
       events.listen(treeSearchPrev, "click", () => moveTreeSearchFocus(-1));
       events.listen(treeSearchNext, "click", () => moveTreeSearchFocus(1));
-      renderBranchPills();
-      updateBranchInfo();
+      renderBranchOptions();
+      updateBranchControl();
       updateTreeSearchControls();
       if (treeRuntime) {
         renderTree();

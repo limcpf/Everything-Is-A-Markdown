@@ -210,7 +210,7 @@ test.describe("pathBase 정식 지원", () => {
 
       const setupRow = page
         .locator(
-          '#tree-root [data-type="item"][data-item-type="file"][data-item-path="Recent/BC-VO-02 Setup Guide"]',
+          '#tree-root [data-type="item"][data-item-type="file"][data-item-path="최근 문서/BC-VO-02 Setup Guide"]',
         )
         .first();
       await expect(setupRow).toBeVisible();

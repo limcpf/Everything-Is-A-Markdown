@@ -467,6 +467,7 @@ function buildInitialView(
   manifestDocById: Map<string, Manifest["docsById"][string]>,
   pathBase: string,
   defaultBranch: string,
+  locale: BuildOptions["locale"],
 ): AppShellInitialView {
   const manifestDoc = manifestDocById.get(doc.id);
   const activeBranch =
@@ -477,6 +478,7 @@ function buildInitialView(
     doc: { ...doc, backlinks: manifestDoc?.backlinks ?? [] },
     docs: visibleDocs,
     pathBase,
+    locale,
   });
   return {
     route: doc.route,
@@ -514,6 +516,7 @@ async function writeShellPages(
         manifestDocById,
         pathBase,
         manifest.defaultBranch,
+        options.locale,
       )
     : null;
   const shell = renderAppShellHtml(
@@ -531,6 +534,7 @@ async function writeShellPages(
       buildAppShellAssetsForOutput("404.html", runtimeAssets),
       toViewPathWithBase("/", pathBase),
       resolveSiteTitle(options),
+      options.locale,
     ),
   );
 
@@ -543,6 +547,7 @@ async function writeShellPages(
       manifestDocById,
       pathBase,
       manifest.defaultBranch,
+      options.locale,
     );
     await writeOutputIfChanged(
       context,

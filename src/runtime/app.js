@@ -15,10 +15,12 @@ import {
   renderViewBreadcrumb,
   renderViewChrome,
 } from "../view-contract.ts";
+import { getUiMessages } from "../i18n.ts";
 
 const BRANCH_KEY = "fsblog.branch";
 const APP_READY_STATE_ATTR = "data-app-ready";
 const TREE_RUNTIME_STATE_ATTR = "data-tree-runtime";
+let appMessages = getUiMessages(globalThis.document?.documentElement?.lang);
 
 /**
  * @typedef {import("./contracts").A11yAnnouncer} A11yAnnouncer
@@ -41,6 +43,7 @@ function collectViewerElements() {
   return {
     breadcrumb: document.getElementById("viewer-breadcrumb"),
     title: document.getElementById("viewer-title"),
+    mobileTitle: document.getElementById("mobile-reader-title"),
     meta: document.getElementById("viewer-meta"),
     content: document.getElementById("viewer-content"),
     backlinks: document.getElementById("viewer-backlinks"),
@@ -111,6 +114,7 @@ async function start() {
   setRuntimeState(TREE_RUNTIME_STATE_ATTR, "idle");
 
   const bootstrap = await loadRuntimeBootstrap();
+  appMessages = getUiMessages(bootstrap.manifest.locale);
   const elements = collectViewerElements();
   const announcer = createA11yAnnouncer(document.getElementById("a11y-status"));
   const navigation = createNavigationState(bootstrap.manifest, {
@@ -125,10 +129,13 @@ async function start() {
     closeSettings: () => settingsController.close(),
     requestTreeLoad: (reason) => treeController?.requestLoad(reason) ?? Promise.resolve(false),
   });
-  const mermaidController = createMermaidController(resolveMermaidConfig(bootstrap.manifest));
+  const mermaidController = createMermaidController(resolveMermaidConfig(bootstrap.manifest), {
+    messages: appMessages,
+  });
   const enhancementController = createContentEnhancementController({
     root: elements.content,
     mermaidController,
+    messages: appMessages,
   });
 
   const contentController = createContentController({
@@ -137,9 +144,10 @@ async function start() {
     initialViewData: bootstrap.initialViewData,
     pathBase: bootstrap.pathBase,
     siteTitle: bootstrap.siteTitle,
+    messages: appMessages,
     renderers: {
       breadcrumb: renderViewBreadcrumb,
-      chrome: renderViewChrome,
+      chrome: (options) => renderViewChrome({ ...options, locale: bootstrap.manifest.locale }),
       documentTitle: composeViewDocumentTitle,
     },
     lifecycle: {
@@ -169,6 +177,7 @@ async function start() {
     treeModuleUrl: bootstrap.treeModuleUrl,
     navigate: (route, push) => contentController.navigate(route, push),
     announce: (message) => announcer.announce(message),
+    messages: appMessages,
     isCompactLayout: () => layoutController.isCompact(),
   });
 
@@ -209,7 +218,7 @@ start().catch((error) => {
     content.replaceChildren();
     const placeholder = document.createElement("p");
     placeholder.className = "placeholder";
-    placeholder.textContent = `초기화 실패: ${message}`;
+    placeholder.textContent = appMessages.initializationFailed(message);
     content.appendChild(placeholder);
   }
   console.error(error);

@@ -38,6 +38,7 @@ function createBuildOptions(vaultDir: string, outDir: string): BuildOptions {
       theme: "default",
     },
     layout: { ...DEFAULT_RUNTIME_LAYOUT },
+    locale: "ko",
     newWithinDays: 7,
     outDir,
     pinnedMenu: null,

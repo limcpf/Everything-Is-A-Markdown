@@ -8,6 +8,8 @@ import jsonLanguage from "@shikijs/langs/json";
 import markdownLanguage from "@shikijs/langs/markdown";
 import typescriptLanguage from "@shikijs/langs/typescript";
 import githubDarkTheme from "@shikijs/themes/github-dark";
+import { APP_ICON_NAMES, renderAppIcon } from "./icons";
+import { getUiMessages, type UiMessages } from "./i18n";
 import type { BuildOptions, WikiResolver } from "./types";
 import { isRemoteUrl } from "./utils";
 
@@ -37,6 +39,7 @@ const DEFAULT_SHIKI_LANGUAGES: LanguageInput[] = [
   javascriptLanguage,
 ];
 const SAFE_COLOR_VALUE = /^#[0-9a-f]{3,8}$/i;
+const SAFE_APP_ICON_HREFS = new Set(APP_ICON_NAMES.map((name) => `#eiam-icon-${name}`));
 const SAFE_HTML_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
     "p",
@@ -82,6 +85,8 @@ const SAFE_HTML_OPTIONS: sanitizeHtml.IOptions = {
     "dd",
     "abbr",
     "time",
+    "svg",
+    "use",
   ],
   allowedAttributes: {
     "*": ["class"],
@@ -94,9 +99,11 @@ const SAFE_HTML_OPTIONS: sanitizeHtml.IOptions = {
     ol: ["start"],
     pre: ["tabindex", "style"],
     span: ["style"],
+    svg: ["aria-hidden", "focusable"],
     td: ["colspan", "rowspan"],
     th: ["colspan", "rowspan", "scope"],
     time: ["datetime"],
+    use: ["href"],
   },
   allowedStyles: {
     pre: {
@@ -115,6 +122,9 @@ const SAFE_HTML_OPTIONS: sanitizeHtml.IOptions = {
   allowProtocolRelative: false,
   disallowedTagsMode: "discard",
   enforceHtmlBoundary: false,
+  exclusiveFilter(frame) {
+    return frame.tag === "use" && !SAFE_APP_ICON_HREFS.has(frame.attribs.href ?? "");
+  },
   nestingLimit: 100,
   nonTextTags: ["script", "style", "textarea", "option", "noscript", "xmp"],
   transformTags: {
@@ -174,6 +184,7 @@ function preprocessMarkdown(
   resolver: WikiResolver,
   imagePolicy: BuildOptions["imagePolicy"],
   wikilinks: boolean,
+  messages: UiMessages,
 ): {
   markdown: string;
   warnings: string[];
@@ -184,7 +195,7 @@ function preprocessMarkdown(
     const { target, label } = parseWikiInner(inner);
     if (imagePolicy === "omit-local") {
       warnings.push(`Local image omitted: ${target}`);
-      return `*(image omitted: ${label ?? target})*`;
+      return `*${messages.imageOmitted(escapeMarkdownLabel(label ?? target))}*`;
     }
     return `![${escapeMarkdownLabel(label ?? target)}](${target})`;
   });
@@ -197,7 +208,7 @@ function preprocessMarkdown(
       return full;
     }
     warnings.push(`Local image omitted: ${src.trim()}`);
-    return `*(image omitted: ${alt || src.trim()})*`;
+    return `*${messages.imageOmitted(escapeMarkdownLabel(alt || src.trim()))}*`;
   });
 
   if (wikilinks) {
@@ -345,7 +356,12 @@ function isStandaloneImageParagraph(tokens: RuleTokens, idx: number): boolean {
   return children.length === 1 && children[0]?.type === "image";
 }
 
-function createMarkdownIt(highlighter: HighlighterCore, theme: string, gfm: boolean): MarkdownIt {
+function createMarkdownIt(
+  highlighter: HighlighterCore,
+  theme: string,
+  gfm: boolean,
+  messages: UiMessages,
+): MarkdownIt {
   const md = new MarkdownIt({
     // Parse raw HTML so the configured sanitizer can apply one policy to generated and authored markup.
     html: true,
@@ -398,8 +414,8 @@ function createMarkdownIt(highlighter: HighlighterCore, theme: string, gfm: bool
         <span class="dot dot-green"></span>
       </div>
       <span class="code-filename">${fileName ? escapeHtmlAttr(fileName) : lang}</span>
-      <button class="code-copy" title="Copy code" data-code="${escapeHtmlAttr(token.content)}">
-        <span class="material-symbols-outlined">content_copy</span>
+      <button class="code-copy" type="button" title="${escapeHtmlAttr(messages.copyCode)}" aria-label="${escapeHtmlAttr(messages.copyCode)}" data-code="${escapeHtmlAttr(token.content)}">
+        ${renderAppIcon("copy")}
       </button>
     </div>`;
 
@@ -486,6 +502,7 @@ function createMarkdownIt(highlighter: HighlighterCore, theme: string, gfm: bool
 }
 
 export async function createMarkdownRenderer(options: BuildOptions): Promise<MarkdownRenderer> {
+  const messages = getUiMessages(options.locale);
   const theme = await loadShikiTheme(options.shikiTheme);
   const highlighter = await createHighlighterCore({
     themes: [theme],
@@ -496,7 +513,7 @@ export async function createMarkdownRenderer(options: BuildOptions): Promise<Mar
   const unavailableLanguages = new Set<string>();
   let languageLoadQueue = Promise.resolve();
 
-  const md = createMarkdownIt(highlighter, theme.name ?? options.shikiTheme, options.gfm);
+  const md = createMarkdownIt(highlighter, theme.name ?? options.shikiTheme, options.gfm, messages);
   if (options.allowUnsafeHtml) {
     console.warn(
       "[security] markdown.allowUnsafeHtml=true disables rendered HTML sanitization. Only use trusted vault content.",
@@ -510,6 +527,7 @@ export async function createMarkdownRenderer(options: BuildOptions): Promise<Mar
         resolver,
         options.imagePolicy,
         options.wikilinks,
+        messages,
       );
       const languageLoad = languageLoadQueue.then(() =>
         loadFenceLanguages(highlighter, loadedLanguages, unavailableLanguages, preprocessed),
