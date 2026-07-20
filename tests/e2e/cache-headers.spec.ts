@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -62,6 +63,17 @@ function effectiveCacheControl(headersFile: string, pathname: string): string | 
   }
 
   return cacheControl;
+}
+
+function findBuildCacheIndex(workDir: string): string {
+  const cacheRoot = path.join(workDir, ".cache", "eiam");
+  const namespace = fs
+    .readdirSync(cacheRoot, { withFileTypes: true })
+    .find((entry) => entry.isDirectory());
+  if (!namespace) {
+    throw new Error("EIAM cache namespace was not created");
+  }
+  return path.join(cacheRoot, namespace.name, "build-index.json");
 }
 
 test.describe("Cloudflare Pages cache headers", () => {
@@ -207,6 +219,50 @@ Last successful output.
       );
       expect(fs.readFileSync(path.join(outDir, "_headers"), "utf8")).toBe(generatedHeaders);
       expect(fs.existsSync(path.join(outDir, "_headers", "keep.txt"))).toBe(false);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("migrates a legacy _headers directory to the generated policy file", () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "eiam-headers-migration-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+    const headersPath = path.join(outDir, "_headers");
+    const legacyContents = "legacy child output\n";
+
+    try {
+      writeText(
+        path.join(vaultDir, "migration.md"),
+        `---
+publish: true
+prefix: MIGRATION-01
+category_path: deployment
+---
+
+Legacy header migration.
+`,
+      );
+      runBuild(workDir, vaultDir, outDir);
+      const expectedGeneratedHeaders = fs.readFileSync(headersPath, "utf8");
+
+      fs.rmSync(headersPath);
+      writeText(path.join(headersPath, "keep.txt"), legacyContents);
+      const cachePath = findBuildCacheIndex(workDir);
+      const cache = JSON.parse(fs.readFileSync(cachePath, "utf8")) as {
+        outputHashes: Record<string, string>;
+      };
+      delete cache.outputHashes._headers;
+      cache.outputHashes["_headers/keep.txt"] = crypto
+        .createHash("sha1")
+        .update(legacyContents)
+        .digest("hex");
+      writeText(cachePath, `${JSON.stringify(cache, null, 2)}\n`);
+
+      runBuild(workDir, vaultDir, outDir);
+      expect(fs.statSync(headersPath).isFile()).toBe(true);
+      expect(fs.readFileSync(headersPath, "utf8")).toBe(expectedGeneratedHeaders);
+      expect(fs.existsSync(path.join(headersPath, "keep.txt"))).toBe(false);
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

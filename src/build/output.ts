@@ -226,6 +226,21 @@ async function copyStaticPaths(context: OutputWriteContext, options: BuildOption
   }
 }
 
+async function removeCloudflareHeadersTargetCollision(context: OutputWriteContext): Promise<void> {
+  const headersPath = path.join(context.outDir, CLOUDFLARE_HEADERS_FILE_NAME);
+  try {
+    const targetStat = await fs.lstat(headersPath);
+    if (targetStat.isFile()) {
+      return;
+    }
+    await fs.rm(headersPath, { force: true, recursive: targetStat.isDirectory() });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
 async function removeStaleOutputs(context: OutputWriteContext): Promise<void> {
   for (const previousPath of Object.keys(context.previousHashes)) {
     if (Object.hasOwn(context.nextHashes, previousPath)) {
@@ -666,6 +681,7 @@ export async function prepareOutputPhase(
     nextHashes: {},
   };
   const runtimeAssets = await writeRuntimeAssets(context, options.layout, includeSelfHostedMermaid);
+  await removeCloudflareHeadersTargetCollision(context);
   await copyStaticPaths(context, options);
   if (!Object.hasOwn(context.nextHashes, CLOUDFLARE_HEADERS_FILE_NAME)) {
     await writeOutputIfChanged(
