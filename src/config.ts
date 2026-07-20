@@ -297,21 +297,38 @@ export function parseCliArgs(argv: string[]): CliArgs {
   return parsed;
 }
 
+async function importUserConfig(absolutePath: string): Promise<ValidatedUserConfig> {
+  const imported = await import(pathToFileURL(absolutePath).href);
+  const raw =
+    imported.default ??
+    Object.fromEntries(Object.entries(imported).filter(([key]) => key !== "default"));
+  return validateUserConfig(raw);
+}
+
+export async function loadUserConfigFile(
+  configPath: string,
+  cwd = process.cwd(),
+): Promise<ValidatedUserConfig> {
+  if (!configPath.trim()) {
+    throw new Error("[config] explicit config path must not be empty");
+  }
+
+  const absolute = path.resolve(cwd, configPath);
+  if (!(await Bun.file(absolute).exists())) {
+    throw new Error(`[config] file not found: ${absolute}`);
+  }
+  return importUserConfig(absolute);
+}
+
 export async function loadUserConfig(cwd = process.cwd()): Promise<ValidatedUserConfig> {
   const candidates = ["blog.config.ts", "blog.config.js", "blog.config.mjs", "blog.config.cjs"];
 
   for (const fileName of candidates) {
     const absolute = path.join(cwd, fileName);
-    const file = Bun.file(absolute);
-    if (!(await file.exists())) {
+    if (!(await Bun.file(absolute).exists())) {
       continue;
     }
-
-    const imported = await import(pathToFileURL(absolute).href);
-    const raw =
-      imported.default ??
-      Object.fromEntries(Object.entries(imported).filter(([key]) => key !== "default"));
-    return validateUserConfig(raw);
+    return importUserConfig(absolute);
   }
 
   return validateUserConfig({});

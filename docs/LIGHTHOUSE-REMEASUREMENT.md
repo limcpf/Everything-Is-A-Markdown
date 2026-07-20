@@ -36,9 +36,14 @@
 ## 4) 로컬 사전 검증 (배포 전)
 
 ```bash
-bun run build -- --vault ./test-vault --out ./dist
+bun run validate:production -- \
+  --config ./blog.config.ts \
+  --out ./dist \
+  --report-dir ./.reports/production-validation
 python3 -m http.server 4173 --bind 127.0.0.1 --directory ./dist
 ```
+
+`production-validation-report.json`이 `passed`인지 확인한 뒤 실서비스 측정을 진행한다.
 
 로컬 확인 URL 예시:
 

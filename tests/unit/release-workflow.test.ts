@@ -33,9 +33,10 @@ describe("release workflow contract", () => {
       "bun run typecheck",
       "bun run test:unit",
       "bun run build -- --vault ./test-vault --out ./dist",
+      "bun run validate:production",
       "bun run test:e2e",
       "Pack and inspect exact npm artifact",
-      "actions/upload-artifact@v4",
+      "Transfer verified npm artifact",
       "actions/download-artifact@v4",
       "Verify transferred artifact",
       "Check npm registry state",
@@ -56,5 +57,7 @@ describe("release workflow contract", () => {
     expect(workflow).toContain("--verify-tag --generate-notes");
     expect(workflow).toContain("NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}");
     expect(workflow).not.toMatch(/echo[^\n]*\$NPM_CONFIG_TOKEN/);
+    expect(workflow).toContain("Upload production validation report on failure");
+    expect(workflow).toContain("steps.production-validation.outcome == 'failure'");
   });
 });

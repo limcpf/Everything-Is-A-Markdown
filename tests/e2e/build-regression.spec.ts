@@ -444,6 +444,7 @@ cached code
         "wikilinks-on",
         "safe-html-v1",
         "",
+        "",
       ];
       const legacyHash = crypto
         .createHash("sha1")

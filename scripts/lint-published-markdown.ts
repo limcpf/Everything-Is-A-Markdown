@@ -3,7 +3,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { lint as lintMarkdown } from "markdownlint/promise";
-import { loadUserConfig, resolveBuildOptions, type CliArgs } from "../src/config";
+import {
+  loadUserConfig,
+  loadUserConfigFile,
+  resolveBuildOptions,
+  type CliArgs,
+} from "../src/config";
 import {
   formatPublicationDiagnostic,
   scanPublicationTargets,
@@ -20,6 +25,7 @@ const SETEXT_H1_UNDERLINE_RE = /^\s*=+\s*$/;
 const FENCE_RE = /^\s{0,3}(```+|~~~+)/;
 
 interface LintCliArgs {
+  configPath?: string;
   outDir?: string;
   strict: boolean;
   vaultDir?: string;
@@ -45,11 +51,12 @@ interface LintIssue {
 function printHelp(): void {
   console.log(`
 Usage:
-  bun run lint:md:publish -- --out-dir <path> [--strict] [--vault <path>] [--exclude <glob>]
+  bun run lint:md:publish -- --out-dir <path> [--strict] [--config <path>] [--vault <path>] [--exclude <glob>]
 
 Options:
   --out-dir <path>      JSON 리포트 저장 디렉터리 (필수)
   --strict              위반이 있으면 종료 코드 1
+  --config <path>       blog.config.* 파일 경로 재지정 (선택)
   --vault <path>        Markdown 루트 디렉터리 (선택, 기본 config/기본값 사용)
   --exclude <glob>      제외 패턴 추가 (반복 가능)
   -h, --help            도움말 출력
@@ -79,6 +86,14 @@ function parseCliArgs(argv: string[]): LintCliArgs {
     }
     if (token === "--strict") {
       parsed.strict = true;
+      continue;
+    }
+    if (token === "--config") {
+      const value = argv[++i];
+      if (!value) {
+        throw new Error("Missing value for --config");
+      }
+      parsed.configPath = value;
       continue;
     }
     if (token === "--vault") {
@@ -242,7 +257,9 @@ async function main(): Promise<void> {
     throw new Error("Missing required option: --out-dir <path>");
   }
 
-  const userConfig = await loadUserConfig();
+  const userConfig = cli.configPath
+    ? await loadUserConfigFile(cli.configPath)
+    : await loadUserConfig();
   const buildCli: CliArgs = {
     command: "build",
     help: false,

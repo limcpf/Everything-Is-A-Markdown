@@ -9,7 +9,12 @@
     "eiam": "src/cli.ts"
   },
   "files": [
+    ".markdownlint.cjs",
     "src",
+    "scripts/check-output-size.ts",
+    "scripts/lint-published-markdown.ts",
+    "scripts/production-validation.ts",
+    "scripts/validate-production.ts",
     "README.md",
     "bun.lock",
     "tsconfig.json"
@@ -24,6 +29,7 @@
     "clean": "bun run src/cli.ts clean",
     "check:size": "bun run scripts/check-output-size.ts --out ./dist",
     "check:reproducible": "bun run scripts/check-build-reproducibility.ts --vault ./test-vault --out ./dist",
+    "validate:production": "bun run scripts/validate-production.ts",
     "format": "prettier --write src scripts tests package.json tsconfig.json playwright.config.ts eslint.config.js .github/workflows",
     "format:check": "prettier --check src scripts tests package.json tsconfig.json playwright.config.ts eslint.config.js .github/workflows",
     "lint:source": "eslint src scripts --max-warnings=0",
@@ -43,6 +49,7 @@
     "chokidar": "^5.0.0",
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.2.0",
+    "markdownlint": "^0.40.0",
     "mermaid": "11.16.0",
     "picomatch": "^4.0.4",
     "sanitize-html": "2.17.6"
@@ -56,7 +63,6 @@
     "bun-types": "^1.3.14",
     "eslint": "10.7.0",
     "globals": "17.7.0",
-    "markdownlint": "^0.40.0",
     "prettier": "3.9.5",
     "typescript": "6.0.3",
     "typescript-eslint": "8.64.0"

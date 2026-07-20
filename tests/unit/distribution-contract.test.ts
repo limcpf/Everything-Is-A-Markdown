@@ -13,9 +13,24 @@ describe("CLI distribution contract", () => {
 
     const packageJson = JSON.parse(
       fs.readFileSync(path.join(repositoryRoot, "package.json"), "utf8"),
-    ) as { name?: unknown; bin?: unknown };
+    ) as {
+      name?: unknown;
+      bin?: unknown;
+      files?: unknown;
+      dependencies?: Record<string, unknown>;
+    };
     expect(packageJson.name).toBe("@limcpf/everything-is-a-markdown");
     expect(packageJson.bin).toEqual({ eiam: "src/cli.ts" });
+    expect(packageJson.files).toEqual(
+      expect.arrayContaining([
+        ".markdownlint.cjs",
+        "scripts/check-output-size.ts",
+        "scripts/lint-published-markdown.ts",
+        "scripts/production-validation.ts",
+        "scripts/validate-production.ts",
+      ]),
+    );
+    expect(packageJson.dependencies?.markdownlint).toBe("^0.40.0");
 
     const readme = fs.readFileSync(path.join(repositoryRoot, "README.md"), "utf8");
     const koreanReadme = fs.readFileSync(path.join(repositoryRoot, "README.ko.md"), "utf8");
