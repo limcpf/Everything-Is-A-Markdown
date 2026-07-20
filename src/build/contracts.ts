@@ -45,6 +45,14 @@ export interface BuildStorageState {
   previousOutputHashes: BuildCache["outputHashes"];
 }
 
+export interface BuildStorageTransaction {
+  cacheLocation: CacheLocation;
+  outputRoot: string;
+  stagingRoot: string;
+  backupRoot: string;
+  hadPreviousOutput: boolean;
+}
+
 export interface DocumentGraphResult {
   tree: TreeNode[];
   manifest: Manifest;

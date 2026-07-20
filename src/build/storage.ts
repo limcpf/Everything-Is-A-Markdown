@@ -1,11 +1,12 @@
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { BuildCache, BuildOptions, DocRecord } from "../types";
-import { ensureDir, fileExists, makeHash, removeEmptyParents, removeFileIfExists } from "../utils";
-import type { BuildStorageState, CacheLocation } from "./contracts";
+import type { BuildCache, BuildOptions } from "../types";
+import { ensureDir, fileExists, makeHash } from "../utils";
+import type { BuildStorageState, BuildStorageTransaction, CacheLocation } from "./contracts";
 import { normalizeCategoryPath } from "../publication";
 import { parseBranch, parseStringArray } from "./source";
-import { OUTPUT_MARKER_FILE_NAME, toContentFileName } from "./shared";
+import { OUTPUT_MARKER_FILE_NAME } from "./shared";
 
 const CACHE_VERSION = 6;
 export const BUILD_CACHE_VERSION = CACHE_VERSION;
@@ -185,21 +186,6 @@ async function writeOutputMarker(outputRoot: string, cacheNamespace: string): Pr
     path.join(outputRoot, OUTPUT_MARKER_FILE_NAME),
     `${JSON.stringify(marker, null, 2)}\n`,
   );
-}
-
-async function prepareOwnedOutputDirectory(
-  options: BuildOptions,
-  cacheLocation: CacheLocation,
-  outputRoot: string,
-): Promise<void> {
-  await assertClaimableOutputDirectory(options, cacheLocation, outputRoot);
-
-  const requestedOutputRoot = path.resolve(options.outDir);
-  await fs.mkdir(requestedOutputRoot, { recursive: true });
-
-  if (!(await hasValidOutputMarker(outputRoot, cacheLocation.namespace))) {
-    await writeOutputMarker(outputRoot, cacheLocation.namespace);
-  }
 }
 
 async function assertClaimableOutputDirectory(
@@ -450,41 +436,28 @@ async function writeCache(location: CacheLocation, cache: BuildCache): Promise<v
   await assertSafeCacheLocation(location);
   await ensureDir(location.namespaceDir);
   await assertSafeCacheLocation(location);
-  await Bun.write(location.cachePath, `${JSON.stringify(cache, null, 2)}\n`);
+  const temporaryCachePath = `${location.cachePath}.${process.pid}-${crypto.randomUUID()}.tmp`;
+  try {
+    await Bun.write(temporaryCachePath, `${JSON.stringify(cache, null, 2)}\n`);
+    await fs.rename(temporaryCachePath, location.cachePath);
+  } finally {
+    await fs.rm(temporaryCachePath, { force: true });
+  }
 }
 
-async function cleanRemovedOutputs(
-  outDir: string,
-  oldCache: BuildCache,
-  currentDocs: DocRecord[],
-): Promise<void> {
-  const currentIds = new Set(currentDocs.map((doc) => doc.id));
-  const currentRouteById = new Map(currentDocs.map((doc) => [doc.id, doc.route]));
+function createTransactionPath(outputRoot: string, kind: "backup" | "staging", token: string) {
+  return path.join(path.dirname(outputRoot), `.${path.basename(outputRoot)}.eiam-${kind}-${token}`);
+}
 
-  for (const [id, entry] of Object.entries(oldCache.docs)) {
-    if (currentIds.has(id)) {
-      const currentRoute = currentRouteById.get(id);
-      if (currentRoute && currentRoute !== entry.route) {
-        const previousRouteDir = path.join(
-          outDir,
-          entry.route.replace(/^\//, "").replace(/\/$/, ""),
-        );
-        const previousRouteIndex = path.join(previousRouteDir, "index.html");
-        await removeFileIfExists(previousRouteIndex);
-        await removeEmptyParents(previousRouteDir, outDir);
-      }
-      continue;
+async function outputDirectoryExists(outputRoot: string): Promise<boolean> {
+  try {
+    const outputStat = await fs.lstat(outputRoot);
+    return outputStat.isDirectory() && !outputStat.isSymbolicLink();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
     }
-
-    const legacyContentPath = path.join(outDir, "content", `${id}.html`);
-    const hashedContentPath = path.join(outDir, "content", toContentFileName(id));
-    await removeFileIfExists(legacyContentPath);
-    await removeFileIfExists(hashedContentPath);
-
-    const routeDir = path.join(outDir, entry.route.replace(/^\//, "").replace(/\/$/, ""));
-    const routeIndex = path.join(routeDir, "index.html");
-    await removeFileIfExists(routeIndex);
-    await removeEmptyParents(routeDir, outDir);
+    throw error;
   }
 }
 
@@ -543,16 +516,98 @@ export async function inspectBuildStorage(options: BuildOptions): Promise<BuildS
   };
 }
 
-export async function claimBuildStorage(
+export async function beginBuildStorageTransaction(
   options: BuildOptions,
   storage: BuildStorageState,
-  docs: DocRecord[],
-): Promise<void> {
-  await prepareOwnedOutputDirectory(options, storage.cacheLocation, storage.outputRoot);
-  await ensureDir(path.join(options.outDir, "content"));
-  await cleanRemovedOutputs(options.outDir, storage.previousCache, docs);
+): Promise<BuildStorageTransaction> {
+  await assertClaimableOutputDirectory(options, storage.cacheLocation, storage.outputRoot);
+
+  const token = `${process.pid}-${crypto.randomUUID()}`;
+  const transaction: BuildStorageTransaction = {
+    cacheLocation: storage.cacheLocation,
+    outputRoot: storage.outputRoot,
+    stagingRoot: createTransactionPath(storage.outputRoot, "staging", token),
+    backupRoot: createTransactionPath(storage.outputRoot, "backup", token),
+    hadPreviousOutput: await outputDirectoryExists(storage.outputRoot),
+  };
+
+  await ensureDir(path.dirname(storage.outputRoot));
+  try {
+    if (transaction.hadPreviousOutput) {
+      await fs.cp(storage.outputRoot, transaction.stagingRoot, {
+        errorOnExist: true,
+        force: false,
+        recursive: true,
+      });
+    } else {
+      await fs.mkdir(transaction.stagingRoot);
+    }
+
+    if (!(await hasValidOutputMarker(transaction.stagingRoot, storage.cacheLocation.namespace))) {
+      await writeOutputMarker(transaction.stagingRoot, storage.cacheLocation.namespace);
+    }
+    await ensureDir(path.join(transaction.stagingRoot, "content"));
+    return transaction;
+  } catch (error) {
+    await fs.rm(transaction.stagingRoot, { force: true, recursive: true });
+    throw error;
+  }
 }
 
-export async function persistBuildCache(location: CacheLocation, cache: BuildCache): Promise<void> {
-  await writeCache(location, cache);
+async function rollbackBuildStorageTransaction(
+  transaction: BuildStorageTransaction,
+  previousMoved: boolean,
+  stagedPublished: boolean,
+): Promise<void> {
+  if (stagedPublished) {
+    await fs.rename(transaction.outputRoot, transaction.stagingRoot);
+  }
+  if (previousMoved) {
+    await fs.rename(transaction.backupRoot, transaction.outputRoot);
+  }
+}
+
+export async function commitBuildStorageTransaction(
+  transaction: BuildStorageTransaction,
+  cache: BuildCache,
+): Promise<void> {
+  let previousMoved = false;
+  let stagedPublished = false;
+
+  try {
+    if (transaction.hadPreviousOutput) {
+      await fs.rename(transaction.outputRoot, transaction.backupRoot);
+      previousMoved = true;
+    }
+    await fs.rename(transaction.stagingRoot, transaction.outputRoot);
+    stagedPublished = true;
+    await writeCache(transaction.cacheLocation, cache);
+  } catch (error) {
+    try {
+      await rollbackBuildStorageTransaction(transaction, previousMoved, stagedPublished);
+    } catch (rollbackError) {
+      throw new AggregateError(
+        [error, rollbackError],
+        `[build] Failed to publish staged output and restore the previous output. Backup retained at ${transaction.backupRoot}`,
+        { cause: rollbackError },
+      );
+    }
+    throw error;
+  }
+
+  if (previousMoved) {
+    try {
+      await fs.rm(transaction.backupRoot, { force: true, recursive: true });
+    } catch (error) {
+      console.warn(
+        `[build] Published output but could not remove transaction backup ${transaction.backupRoot}: ${String(error)}`,
+      );
+    }
+  }
+}
+
+export async function abortBuildStorageTransaction(
+  transaction: BuildStorageTransaction,
+): Promise<void> {
+  await fs.rm(transaction.stagingRoot, { force: true, recursive: true });
 }
