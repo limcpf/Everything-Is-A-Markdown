@@ -23,6 +23,8 @@ Everything-Is-A-Markdown은 로컬 Markdown 볼트를 정적 웹사이트로 빌
 
 생성되는 `dist/`는 입력 vault와 배포 설정에 종속됩니다. 따라서 이 프로젝트는 범용 사이트 archive나 "single-file" GitHub Release asset을 배포하지 않습니다. 자신의 vault를 빌드해 생성된 디렉터리를 배포하세요.
 
+정확한 tag, 품질 gate, 게시 순서, 실패 복구 절차는 [릴리스 절차](docs/RELEASING.md)에 정리되어 있습니다.
+
 ## 설치
 
 지원하는 Bun 버전의 단일 기준은 `package.json`의 정확한 `packageManager` 값입니다.

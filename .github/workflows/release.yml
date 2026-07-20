@@ -1,0 +1,340 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to verify and publish (for example, v0.9.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    outputs:
+      package_name: ${{ steps.identity.outputs.package_name }}
+      package_version: ${{ steps.identity.outputs.package_version }}
+      release_sha: ${{ steps.identity.outputs.release_sha }}
+      release_tag: ${{ steps.identity.outputs.release_tag }}
+      tarball_name: ${{ steps.package.outputs.tarball_name }}
+    steps:
+      - name: Validate requested tag format
+        shell: bash
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error title=Invalid release tag::Expected a stable v-prefixed semantic version, received: $RELEASE_TAG"
+            exit 1
+          fi
+
+      - name: Checkout exact release tag
+        uses: actions/checkout@v6
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Validate release identity
+        id: identity
+        shell: bash
+        run: |
+          package_name="$(bun -e 'const value = await Bun.file("package.json").json(); process.stdout.write(String(value.name ?? ""));')"
+          package_version="$(bun -e 'const value = await Bun.file("package.json").json(); process.stdout.write(String(value.version ?? ""));')"
+          expected_tag="v${package_version}"
+          release_sha="$(git rev-parse HEAD)"
+          tag_sha="$(git rev-list -n 1 "$RELEASE_TAG")"
+
+          if [[ "$package_name" != "@limcpf/everything-is-a-markdown" || -z "$package_version" ]]; then
+            echo "::error title=Invalid package metadata::Expected @limcpf/everything-is-a-markdown with a non-empty version"
+            exit 1
+          fi
+          if [[ "$RELEASE_TAG" != "$expected_tag" ]]; then
+            echo "::error title=Release version mismatch::Tag $RELEASE_TAG does not match package version $package_version"
+            exit 1
+          fi
+          if [[ "$release_sha" != "$tag_sha" ]]; then
+            echo "::error title=Release checkout mismatch::HEAD $release_sha does not match $RELEASE_TAG at $tag_sha"
+            exit 1
+          fi
+
+          echo "package_name=$package_name" >> "$GITHUB_OUTPUT"
+          echo "package_version=$package_version" >> "$GITHUB_OUTPUT"
+          echo "release_sha=$release_sha" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "Release identity: $RELEASE_TAG -> $release_sha ($package_name@$package_version)"
+
+      - name: Lint source
+        run: bun run lint:source
+
+      - name: Check formatting
+        run: bun run format:check
+
+      - name: Typecheck TypeScript and browser runtime
+        run: bun run typecheck
+
+      - name: Run unit tests
+        run: bun run test:unit
+
+      - name: Install Playwright browser
+        run: bunx playwright install --with-deps chromium
+
+      - name: Build site
+        run: bun run build -- --vault ./test-vault --out ./dist
+
+      - name: Enforce generated asset size budgets
+        run: bun run check:size
+
+      - name: Verify reproducible no-op builds
+        run: bun run check:reproducible
+
+      - name: Run E2E tests
+        run: bun run test:e2e
+
+      - name: Pack and inspect exact npm artifact
+        id: package
+        shell: bash
+        env:
+          PACKAGE_NAME: ${{ steps.identity.outputs.package_name }}
+          PACKAGE_VERSION: ${{ steps.identity.outputs.package_version }}
+          RELEASE_SHA: ${{ steps.identity.outputs.release_sha }}
+          RELEASE_TAG: ${{ steps.identity.outputs.release_tag }}
+        run: |
+          tarball_name="everything-is-a-markdown-${PACKAGE_VERSION}.tgz"
+          tarball_path="$RUNNER_TEMP/$tarball_name"
+          metadata_path="$RUNNER_TEMP/release-metadata.json"
+
+          bun pm pack --filename "$tarball_path"
+          echo "Exact tarball contents to be published:"
+          tar -tzf "$tarball_path" | LC_ALL=C sort
+
+          tarball_integrity="sha512-$(openssl dgst -sha512 -binary "$tarball_path" | openssl base64 -A)"
+          tarball_sha256="$(sha256sum "$tarball_path" | cut -d ' ' -f 1)"
+          METADATA_PATH="$metadata_path" TARBALL_INTEGRITY="$tarball_integrity" TARBALL_NAME="$tarball_name" TARBALL_SHA256="$tarball_sha256" bun -e '
+            const metadata = {
+              packageName: process.env.PACKAGE_NAME,
+              packageVersion: process.env.PACKAGE_VERSION,
+              releaseSha: process.env.RELEASE_SHA,
+              releaseTag: process.env.RELEASE_TAG,
+              tarballIntegrity: process.env.TARBALL_INTEGRITY,
+              tarballName: process.env.TARBALL_NAME,
+              tarballSha256: process.env.TARBALL_SHA256,
+            };
+            await Bun.write(process.env.METADATA_PATH, `${JSON.stringify(metadata, null, 2)}\n`);
+          '
+          echo "tarball_name=$tarball_name" >> "$GITHUB_OUTPUT"
+          echo "Packed $tarball_name with sha256:$tarball_sha256"
+
+      - name: Transfer verified npm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package-${{ steps.identity.outputs.package_version }}
+          path: |
+            ${{ runner.temp }}/${{ steps.package.outputs.tarball_name }}
+            ${{ runner.temp }}/release-metadata.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Report safe quality failure context
+        if: failure()
+        shell: bash
+        run: |
+          echo "::error title=Release quality gate failed::Tag $RELEASE_TAG was not published and no npm credential was used. Review the first failed named step."
+
+  publish:
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    env:
+      PACKAGE_NAME: ${{ needs.quality.outputs.package_name }}
+      PACKAGE_VERSION: ${{ needs.quality.outputs.package_version }}
+      RELEASE_SHA: ${{ needs.quality.outputs.release_sha }}
+      RELEASE_TAG: ${{ needs.quality.outputs.release_tag }}
+      TARBALL_NAME: ${{ needs.quality.outputs.tarball_name }}
+    steps:
+      - name: Checkout exact release tag
+        uses: actions/checkout@v6
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Verify release tag did not move
+        shell: bash
+        run: |
+          actual_sha="$(git rev-parse HEAD)"
+          if [[ "$actual_sha" != "$RELEASE_SHA" ]]; then
+            echo "::error title=Release tag moved::Quality verified $RELEASE_SHA but $RELEASE_TAG now resolves to $actual_sha"
+            exit 1
+          fi
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Download verified npm artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-package-${{ env.PACKAGE_VERSION }}
+          path: ${{ runner.temp }}/npm-package
+
+      - name: Verify transferred artifact
+        id: artifact
+        shell: bash
+        run: |
+          package_tarball="$RUNNER_TEMP/npm-package/$TARBALL_NAME"
+          metadata_path="$RUNNER_TEMP/npm-package/release-metadata.json"
+          metadata_json="$(<"$metadata_path")"
+          metadata_value() {
+            METADATA_JSON="$metadata_json" METADATA_FIELD="$1" bun -e '
+              const value = JSON.parse(process.env.METADATA_JSON ?? "null");
+              const field = value?.[process.env.METADATA_FIELD ?? ""];
+              if (typeof field === "string") process.stdout.write(field);
+            '
+          }
+          metadata_package_name="$(metadata_value packageName)"
+          metadata_package_version="$(metadata_value packageVersion)"
+          metadata_release_sha="$(metadata_value releaseSha)"
+          metadata_release_tag="$(metadata_value releaseTag)"
+          expected_integrity="$(metadata_value tarballIntegrity)"
+          metadata_tarball_name="$(metadata_value tarballName)"
+          expected_sha256="$(metadata_value tarballSha256)"
+          actual_integrity="sha512-$(openssl dgst -sha512 -binary "$package_tarball" | openssl base64 -A)"
+          actual_sha256="$(sha256sum "$package_tarball" | cut -d ' ' -f 1)"
+
+          if [[ "$metadata_package_name" != "$PACKAGE_NAME" || "$metadata_package_version" != "$PACKAGE_VERSION" || "$metadata_release_sha" != "$RELEASE_SHA" || "$metadata_release_tag" != "$RELEASE_TAG" || "$metadata_tarball_name" != "$TARBALL_NAME" ]]; then
+            echo "::error title=Artifact identity mismatch::The transferred metadata differs from the verified release identity"
+            exit 1
+          fi
+          if [[ "$actual_integrity" != "$expected_integrity" || "$actual_sha256" != "$expected_sha256" ]]; then
+            echo "::error title=Artifact integrity mismatch::The downloaded tarball differs from the quality job output"
+            exit 1
+          fi
+          echo "PACKAGE_TARBALL=$package_tarball" >> "$GITHUB_ENV"
+          echo "TARBALL_INTEGRITY=$actual_integrity" >> "$GITHUB_ENV"
+          echo "TARBALL_SHA256=$actual_sha256" >> "$GITHUB_ENV"
+
+      - name: Check npm registry state
+        id: registry
+        shell: bash
+        env:
+          PACKAGE_SPEC: ${{ env.PACKAGE_NAME }}@${{ env.PACKAGE_VERSION }}
+        run: |
+          registry_error="$RUNNER_TEMP/npm-view-error.log"
+          if registry_json="$(npm view "$PACKAGE_SPEC" dist.integrity --json 2>"$registry_error")"; then
+            published_integrity="$(printf '%s' "$registry_json" | bun -e 'const value = JSON.parse(await Bun.stdin.text()); if (typeof value === "string") process.stdout.write(value);')"
+            if [[ -z "$published_integrity" ]]; then
+              echo "::error title=Missing npm integrity::Registry returned no integrity for $PACKAGE_SPEC"
+              exit 1
+            fi
+            if [[ "$published_integrity" != "$TARBALL_INTEGRITY" ]]; then
+              echo "::error title=Published package mismatch::$PACKAGE_SPEC already exists with integrity $published_integrity, expected $TARBALL_INTEGRITY"
+              exit 1
+            fi
+            echo "publish_needed=false" >> "$GITHUB_OUTPUT"
+            echo "$PACKAGE_SPEC already exists with matching integrity; npm publication is reconciled"
+          else
+            if grep -q "E404" "$registry_error"; then
+              echo "publish_needed=true" >> "$GITHUB_OUTPUT"
+              echo "$PACKAGE_SPEC is not published yet"
+            else
+              echo "::error title=npm registry lookup failed::Unable to determine whether $PACKAGE_SPEC already exists"
+              cat "$registry_error" >&2
+              exit 1
+            fi
+          fi
+
+      - name: Validate npm credentials
+        if: steps.registry.outputs.publish_needed == 'true'
+        shell: bash
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [[ -z "$NPM_CONFIG_TOKEN" ]]; then
+            echo "::error title=Missing npm credentials::Configure the NPM_TOKEN Actions secret before publishing"
+            exit 1
+          fi
+          echo "NPM_TOKEN is configured; its value is not printed"
+
+      - name: Publish verified npm artifact
+        if: steps.registry.outputs.publish_needed == 'true'
+        shell: bash
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: bun publish "$PACKAGE_TARBALL" --access public
+
+      - name: Verify npm publication integrity
+        shell: bash
+        env:
+          PACKAGE_SPEC: ${{ env.PACKAGE_NAME }}@${{ env.PACKAGE_VERSION }}
+        run: |
+          registry_error="$RUNNER_TEMP/npm-verify-error.log"
+          for attempt in 1 2 3 4 5; do
+            if registry_json="$(npm view "$PACKAGE_SPEC" dist.integrity --json 2>"$registry_error")"; then
+              published_integrity="$(printf '%s' "$registry_json" | bun -e 'const value = JSON.parse(await Bun.stdin.text()); if (typeof value === "string") process.stdout.write(value);')"
+              if [[ "$published_integrity" == "$TARBALL_INTEGRITY" ]]; then
+                echo "$PACKAGE_SPEC is published with the verified integrity"
+                exit 0
+              fi
+              if [[ -n "$published_integrity" ]]; then
+                echo "::error title=Published package mismatch::Registry integrity $published_integrity does not match $TARBALL_INTEGRITY"
+                exit 1
+              fi
+            fi
+            if [[ "$attempt" -lt 5 ]]; then
+              sleep 5
+            fi
+          done
+          echo "::error title=npm publication verification failed::Registry did not expose the expected integrity for $PACKAGE_SPEC"
+          cat "$registry_error" >&2
+          exit 1
+
+      - name: Reconcile GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if release_json="$(gh release view "$RELEASE_TAG" --json isDraft,url 2>/dev/null)"; then
+            release_is_draft="$(printf '%s' "$release_json" | bun -e 'const value = JSON.parse(await Bun.stdin.text()); process.stdout.write(String(value.isDraft));')"
+            if [[ "$release_is_draft" == "true" ]]; then
+              echo "::error title=Draft GitHub Release::A draft already exists for $RELEASE_TAG and requires explicit maintainer review"
+              exit 1
+            fi
+            release_url="$(printf '%s' "$release_json" | bun -e 'const value = JSON.parse(await Bun.stdin.text()); process.stdout.write(String(value.url));')"
+            echo "GitHub Release already exists: $release_url"
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --generate-notes
+          fi
+
+      - name: Summarize release
+        shell: bash
+        run: |
+          {
+            echo "### Release reconciled"
+            echo "- Tag: \`$RELEASE_TAG\`"
+            echo "- Commit: \`$RELEASE_SHA\`"
+            echo "- Package: \`$PACKAGE_NAME@$PACKAGE_VERSION\`"
+            echo "- Tarball SHA-256: \`$TARBALL_SHA256\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report safe failure context
+        if: failure()
+        shell: bash
+        run: |
+          echo "::error title=Release failed::Tag $RELEASE_TAG at $RELEASE_SHA did not fully reconcile. Review the first failed named step; credential values are never printed."

@@ -56,6 +56,8 @@ The supported user-facing distribution is the [npm package `@limcpf/everything-i
 
 Generated `dist/` output belongs to the input vault and deployment configuration that produced it. The project therefore does not publish a generic site archive or a "single-file" GitHub Release asset; build your own vault and deploy that resulting directory.
 
+Maintainers can find the exact tag, quality-gate, publication, and recovery contract in [the release process](docs/RELEASING.md).
+
 ## Install
 
 For local development in this repository:
