@@ -1,6 +1,6 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { OUTPUT_MARKER_FILE_NAME } from "./build/shared";
+import { CLOUDFLARE_HEADERS_FILE_NAME, OUTPUT_MARKER_FILE_NAME } from "./build/shared";
 import { DEFAULT_RUNTIME_CONFIG } from "./defaults";
 import { SUPPORTED_UI_LOCALES, type UiLocale } from "./i18n";
 import { normalizeSeoConfig } from "./seo";
@@ -181,23 +181,19 @@ function normalizeStringArray(raw: unknown, field: string): string[] {
 }
 
 function normalizeMermaidCdnUrl(
-  value: string | undefined,
+  value: string,
   warn: ConfigWarningHandler = defaultConfigWarning,
-): string {
-  if (value === undefined) {
-    return DEFAULTS.mermaid.cdnUrl;
-  }
-
+): string | undefined {
   const normalized = value.trim();
   if (!normalized) {
-    return DEFAULTS.mermaid.cdnUrl;
+    return undefined;
   }
 
   if (normalized.length > MERMAID_URL_MAX_LENGTH || !MERMAID_CDN_URL_PATTERN.test(normalized)) {
     warn(
-      `[config] "markdown.mermaid.cdnUrl" has an invalid string value ${JSON.stringify(value)}; using default ${JSON.stringify(DEFAULTS.mermaid.cdnUrl)}`,
+      `[config] "markdown.mermaid.cdnUrl" has an invalid string value ${JSON.stringify(value)}; using the self-hosted Mermaid runtime`,
     );
-    return DEFAULTS.mermaid.cdnUrl;
+    return undefined;
   }
 
   return normalized;
@@ -301,21 +297,38 @@ export function parseCliArgs(argv: string[]): CliArgs {
   return parsed;
 }
 
+async function importUserConfig(absolutePath: string): Promise<ValidatedUserConfig> {
+  const imported = await import(pathToFileURL(absolutePath).href);
+  const raw =
+    imported.default ??
+    Object.fromEntries(Object.entries(imported).filter(([key]) => key !== "default"));
+  return validateUserConfig(raw);
+}
+
+export async function loadUserConfigFile(
+  configPath: string,
+  cwd = process.cwd(),
+): Promise<ValidatedUserConfig> {
+  if (!configPath.trim()) {
+    throw new Error("[config] explicit config path must not be empty");
+  }
+
+  const absolute = path.resolve(cwd, configPath);
+  if (!(await Bun.file(absolute).exists())) {
+    throw new Error(`[config] file not found: ${absolute}`);
+  }
+  return importUserConfig(absolute);
+}
+
 export async function loadUserConfig(cwd = process.cwd()): Promise<ValidatedUserConfig> {
   const candidates = ["blog.config.ts", "blog.config.js", "blog.config.mjs", "blog.config.cjs"];
 
   for (const fileName of candidates) {
     const absolute = path.join(cwd, fileName);
-    const file = Bun.file(absolute);
-    if (!(await file.exists())) {
+    if (!(await Bun.file(absolute).exists())) {
       continue;
     }
-
-    const imported = await import(pathToFileURL(absolute).href);
-    const raw =
-      imported.default ??
-      Object.fromEntries(Object.entries(imported).filter(([key]) => key !== "default"));
-    return validateUserConfig(raw);
+    return importUserConfig(absolute);
   }
 
   return validateUserConfig({});
@@ -430,7 +443,8 @@ function normalizeStaticPaths(raw: unknown, errorPrefix = "[config]"): string[] 
     }
     if (
       normalizedPath === OUTPUT_MARKER_FILE_NAME ||
-      normalizedPath.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`)
+      normalizedPath.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`) ||
+      normalizedPath.startsWith(`${CLOUDFLARE_HEADERS_FILE_NAME}/`)
     ) {
       throw new Error(
         `${errorPrefix} "staticPaths[${index}]" is invalid: Refusing reserved static output path; received ${receivedValue(value)}`,

@@ -17,7 +17,19 @@ Everything-Is-A-Markdown은 로컬 Markdown 볼트를 정적 웹사이트로 빌
 - Obsidian에서 평소처럼 작성한 뒤, 공개할 문서만 빌드할 수 있습니다.
 - Obsidian 스타일 위키링크(`[[...]]`)를 지원합니다.
 
+## 배포 패키지
+
+사용자용 공식 배포 경로는 Bun으로 실행하는 [npm 패키지 `@limcpf/everything-is-a-markdown`](https://www.npmjs.com/package/@limcpf/everything-is-a-markdown)입니다. 아래의 정확한 Bun 버전이 지원하는 플랫폼에서 사용하는 소스 패키지이며, 컴파일된 단일 실행 파일이나 플랫폼별 바이너리가 아닙니다. 패키지 버전과 package manager가 검증하는 무결성 checksum은 npm registry metadata로 제공됩니다.
+
+생성되는 `dist/`는 입력 vault와 배포 설정에 종속됩니다. 따라서 이 프로젝트는 범용 사이트 archive나 "single-file" GitHub Release asset을 배포하지 않습니다. 자신의 vault를 빌드해 생성된 디렉터리를 배포하세요.
+
+정확한 tag, 품질 gate, 게시 순서, 실패 복구 절차는 [릴리스 절차](docs/RELEASING.md)에 정리되어 있습니다.
+
 ## 설치
+
+지원하는 Bun 버전의 단일 기준은 `package.json`의 정확한 `packageManager` 값입니다.
+CI와 릴리스 workflow도 `oven-sh/setup-bun`을 통해 같은 값을 읽습니다. 버전을 올릴 때는
+그 값 하나를 변경하고 install, build, package, unit, E2E 검증을 함께 통과해야 합니다.
 
 ```bash
 bun install
@@ -37,6 +49,10 @@ bun run blog [build|dev|clean] [options]
 - `bun run typecheck`: TypeScript와 브라우저 런타임 JavaScript 정적 타입 검사
 
 빌드는 vault를 검증하고 읽은 뒤 전용 출력 디렉터리에 `.eiam-output.json` 소유권 마커를 기록하고 canonical vault/output/cache-root 경로에서 파생한 cache namespace에 결속합니다. 비어 있지 않은 미소유 또는 namespace 불일치 디렉터리, cache root를 포함하거나 그 안에 놓인 경로는 출력으로 사용하지 않으며, symlink인 cache path component, namespace, index도 거부합니다. `staticPaths`는 output 밖으로 벗어나거나 예약된 `.eiam-output.json` 마커와 충돌할 수 없습니다. `dev`는 초기 build가 이 안전 검사를 통과하지 못하면 watcher와 server를 시작하지 않고 종료하며, 안전하게 시작된 뒤의 rebuild 실패만 로그로 남깁니다. `clean`도 광범위한 경로나 선택한 실행 context와 마커가 일치하지 않는 디렉터리를 삭제하지 않습니다. build migration과 `clean`은 과거 EIAM cache schema로 확인된 `.cache/build-index.json`만 제거하며, pre-marker output을 거부하는 경로에서도 이 migration을 수행합니다. 예약 static path는 migration이나 storage 검사보다 앞선 config 검증에서 거부합니다. sibling EIAM cache namespace와 일반 `.cache`의 다른 파일은 보존합니다.
+
+각 build는 output과 같은 파일시스템의 sibling staging 디렉터리에서 완성됩니다. 렌더링,
+번들링, static copy, cache 준비가 모두 성공한 뒤에만 디렉터리를 교체하므로 rebuild가
+실패하면 마지막 성공 output과 그 cache를 그대로 보존합니다.
 
 자주 쓰는 옵션:
 
@@ -68,6 +84,7 @@ bun run lint:md:publish -- --out-dir ./reports --strict
 
 - `--out-dir <path>`: 리포트 출력 디렉터리 (필수)
 - `--strict`: 위반이 있으면 종료 코드 `1`
+- `--config <path>`: 명시적인 config module 경로
 - `--vault <path>`: Markdown 루트 디렉터리 재지정 (선택)
 - `--exclude <glob>`: 제외 패턴 추가 (반복 가능)
 
@@ -77,6 +94,56 @@ draft가 아니며 `prefix`와 `category_path`가 모두 있는 문서만 동일
 Markdown 규칙 위반을 `markdownStyleIssues`에 분리하고, 호환용 통합 `issues`도 제공합니다.
 publication metadata 진단은 warning이지만 `--strict`에서는 Markdown style finding이나 parse
 error와 마찬가지로 종료 코드 `1`을 반환합니다.
+
+## 프로덕션 검증
+
+실제로 배포할 config와 output을 대상으로 다음 gate를 실행합니다.
+
+```bash
+bun run validate:production -- \
+  --config ./blog.config.ts \
+  --out ./dist \
+  --report-dir ./.reports/production-validation
+```
+
+프로덕션 모드는 `seo.siteUrl`을 필수로 요구합니다. 값이 없으면 output 디렉터리를
+소유하거나 변경하기 전에 실패합니다. 이후 동일 입력을 두 번 빌드해 모든 파일의 byte가
+같은지 확인하고, 게시 Markdown strict 결과, manifest route/content URL, wikilink/backlink,
+생성·정적 내부 참조, sitemap/robots/canonical/404/pathBase/bootstrap, Cloudflare cache
+정책과 output size budget을 한 번에 검사합니다.
+
+기계 판독 보고서는 `--report-dir`의
+`production-validation-report.json`에 저장됩니다. CI와 release workflow는 이 gate가
+실패하면 보고서 디렉터리를 artifact로 업로드합니다. output과 report 디렉터리는 서로
+겹칠 수 없습니다.
+
+의도적으로 유지하는 Markdown finding은 `--markdown-baseline <path>`로 고정할 수
+있습니다.
+
+```json
+{
+  "schemaVersion": 1,
+  "fingerprints": []
+}
+```
+
+보고서의 `markdown-publication.details.fingerprints` 배열을 복사합니다. 정렬된 목록이
+정확히 같아야 하므로 finding 추가·삭제·위치·내용 변화는 baseline을 명시적으로 검토해야
+합니다. `--vault`와 반복 가능한 `--exclude` override도 지원합니다.
+
+## Cloudflare Pages 배포
+
+Vault 저장소는 재사용 가능한
+[`deploy-cloudflare-pages.yml`](.github/workflows/deploy-cloudflare-pages.yml)을 호출해 lockfile에
+고정된 EIAM으로 자체 vault를 빌드·검증한 뒤, 분리된 job에서 검증된 output만 배포할 수
+있습니다. vault, output, config, Pages project, production/preview branch, exclude, Markdown
+baseline을 명시적으로 입력받습니다. `artifact-only` 모드는 Cloudflare secret을 읽지 않으므로
+fork PR과 배포 전 검토에 사용할 수 있습니다.
+
+완전한 caller workflow 예제, `Pages Write` token 범위, GitHub environment 보호 규칙,
+root 배포와 prefix 배포의 `pathBase` 차이, 실패 artifact, host smoke check, production rollback
+절차는 [Cloudflare Pages 배포 문서](docs/CLOUDFLARE-PAGES.md)에 정리되어 있습니다. Generator
+npm package publish는 별도 release workflow이며 caller vault를 배포하지 않습니다.
 
 ## 개발 품질 검사
 
@@ -116,7 +183,6 @@ const config = {
     allowUnsafeHtml: false,
     mermaid: {
       enabled: true,
-      cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
       theme: "default",
     },
   },
@@ -133,8 +199,8 @@ Config module은 신뢰되지 않은 런타임 입력으로 취급합니다. 지
 정규화한 뒤에만 `build`, `dev`, `clean`이 output/cache 경로를 생성·변경·삭제할 수 있습니다.
 잘못된 값은 정확한 점 표기 필드 경로와 실제 런타임 타입을 포함한 오류로 명령을 중단합니다.
 알 수 없는 필드는 오타를 확인할 수 있도록 경고한 뒤 무시합니다. 안전하지 않은 Mermaid
-URL/theme 문자열은 기존 정책대로 안전한 기본값을 사용하지만, 런타임 타입이 잘못된 값은
-거부합니다.
+URL은 self-hosted runtime으로, 안전하지 않은 theme 문자열은 `default`로 폴백하지만,
+런타임 타입이 잘못된 값은 거부합니다.
 
 `staticPaths`:
 
@@ -174,6 +240,45 @@ bun run dev -- --vault ./test-vault --out ./dist
 bun run build -- --vault ./test-vault --out ./dist
 ```
 
+## Cloudflare Pages 캐시 헤더
+
+빌드는 기본적으로 Cloudflare Pages가 읽는 `dist/_headers`를 생성합니다. HTML route,
+`manifest.json`, `content/*`, `robots.txt`, `sitemap.xml`, 라이선스 및 복사된 정적 파일은 다음
+정책으로 매번 재검증합니다.
+
+```text
+Cache-Control: public, max-age=0, must-revalidate
+```
+
+최종 byte에서 content hash를 만든 EIAM 소유 JS/CSS 파일의 정확한 경로만 다음 정책으로
+교체합니다.
+
+```text
+Cache-Control: public, max-age=31536000, immutable
+```
+
+`assets/social.png`처럼 같은 이름으로 내용이 바뀔 수 있는 사용자 파일을 영구 cache하지 않도록
+`/assets/*` 전체에는 immutable을 적용하지 않습니다. `seo.pathBase: "/blog"`이면 모든 규칙도
+`/blog`와 `/blog/*` 아래에 생성됩니다. 자체 정책이 필요하면 vault의 `_headers`를
+`staticPaths`에 지정할 수 있으며, 이 경우 custom 파일을 그대로 사용하고 생성 preset과
+자동 병합하지 않습니다. override는 파일이어야 하며, host 정책과 static output이 충돌하지
+않도록 `_headers/*` 하위 경로와 `_headers` 디렉터리는 거부합니다.
+
+압축은 host 책임입니다. EIAM은 결정적인 원본 파일만 만들고 precompressed 파일이나
+`Content-Encoding`을 생성하지 않습니다. Cloudflare Pages는 가능한 경우 Gzip/Brotli를
+협상하므로, 배포 후 실제 응답을 확인합니다.
+
+```bash
+# 파일명은 dist/assets/에 실제 생성된 값으로 바꿉니다.
+curl -sI -H 'Accept-Encoding: br' https://example.com/assets/app.0123456789ab.js
+```
+
+응답의 immutable `Cache-Control`과, Brotli가 협상된 경우 `Content-Encoding: br`를 확인합니다.
+HTML route와 `manifest.json`도 같은 방식으로 재검증 정책을 확인합니다. `_headers`는 Pages의
+정적 asset 응답에만 적용되며 Pages Functions 응답에는 적용되지 않습니다. 자세한 형식과 동작은
+[Cloudflare Pages headers](https://developers.cloudflare.com/pages/configuration/headers/)와
+[serving behavior](https://developers.cloudflare.com/pages/configuration/serving-pages/)를 참고합니다.
+
 ## Markdown Frontmatter
 
 공개 여부를 결정하는 핵심 필드는 `publish`입니다.
@@ -183,7 +288,7 @@ bun run build -- --vault ./test-vault --out ./dist
 - `publish: true`  
   이 값이 `true`인 문서만 빌드 결과에 포함됩니다.
 - `prefix: "A-01"`  
-  문서의 공개 식별자이자 라우트(`/A-01/`) 기준입니다.  
+  문서의 공개 식별자이자 라우트(`/A-01/`) 기준입니다.
 - `category_path: "engineering/blog/frontend"`  
   사이드바 폴더 구조 기준입니다.
   `publish: true`인데 `prefix`나 `category_path`가 없으면 빌드 경고를 출력하고 문서를 제외합니다.
@@ -286,7 +391,17 @@ flowchart LR
 Mermaid fence는 일반 코드 블록 UI와 분리된 전용 컨테이너(`.mermaid-block`)에서 렌더링되므로 코드 헤더/파일명/복사 버튼이 표시되지 않습니다.
 렌더된 SVG는 데스크톱/모바일 모두에서 중앙 정렬되며 `min(100%, 720px)` 기준으로 자동 축소됩니다.
 본문 이미지도 동일한 폭 정책을 적용해 글 읽기 흐름을 유지합니다.
-설정에서 Mermaid를 비활성화하거나 CDN 로드가 실패하면, 같은 컨테이너 안에서 소스 코드 텍스트를 유지하고 하단에 경고 메시지를 표시합니다.
+기본값은 exact dependency인 Mermaid `11.16.0`을 `assets/mermaid.<content-hash>.js`와
+해당 `LICENSE.txt`로 self-host합니다. 활성화된 게시 문서에 Mermaid fence가 있을 때만 asset을 만들고, 현재
+문서에 실제 Mermaid block이 나타날 때만 브라우저가 lazy-load합니다. 설정에서 Mermaid를
+비활성화하거나 runtime 로드가 실패하면 같은 컨테이너 안에서 소스 코드 텍스트를 유지하고
+하단에 경고 메시지를 표시합니다.
+
+기본 runtime은 same-origin이므로 생성 사이트를 HTTP로 제공하는 한 외부 네트워크 없이도
+동작하고 CSP의 `script-src 'self'`를 유지할 수 있습니다. Mermaid SVG가 inline presentation
+style을 사용하므로 더 엄격한 `style-src`/`style-src-attr` 정책은 실제 사이트에서 검증해야
+합니다. 외부 runtime을 명시하면 해당 고정 origin만 `script-src`에 추가해야 하며 offline
+동작은 보장되지 않습니다.
 
 ## 본문 이미지 레이아웃
 
@@ -323,7 +438,7 @@ markdown: {
   allowUnsafeHtml: false, // true면 렌더 HTML sanitize를 비활성화하므로 신뢰된 볼트에서만 사용
   mermaid: {
     enabled: true, // false면 코드 블록만 표시
-    cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js", // http/https 또는 /, ./, ../ 경로
+    // cdnUrl: "https://cdn.example.test/mermaid/11.16.0/mermaid.min.js", // 선택적 외부 override
     theme: "default", // mermaid.initialize({ theme }) 값
   },
 },
@@ -331,7 +446,7 @@ markdown: {
 
 유효성 검증 및 런타임 가드레일:
 
-- `markdown.mermaid.cdnUrl`에 잘못된 값(예: `javascript:`)이 들어오면 빌드 시 기본 CDN URL로 자동 폴백합니다.
+- `markdown.mermaid.cdnUrl`을 생략하거나 잘못된 값(예: `javascript:`)을 넣으면 exact dependency의 self-hosted runtime을 사용합니다.
 - `markdown.mermaid.theme`이 유효한 식별자 형식이 아니면 빌드 시 `default`로 자동 폴백합니다.
 - 런타임 로더는 실패 후 남은 Mermaid 스크립트를 정리하고, 중복 삽입을 피하며, 다음 렌더에서 재시도합니다.
 

@@ -36,9 +36,14 @@
 ## 4) 로컬 사전 검증 (배포 전)
 
 ```bash
-bun run build -- --vault ./test-vault --out ./dist
+bun run validate:production -- \
+  --config ./blog.config.ts \
+  --out ./dist \
+  --report-dir ./.reports/production-validation
 python3 -m http.server 4173 --bind 127.0.0.1 --directory ./dist
 ```
+
+`production-validation-report.json`이 `passed`인지 확인한 뒤 실서비스 측정을 진행한다.
 
 로컬 확인 URL 예시:
 
@@ -76,10 +81,21 @@ npx lighthouse "https://limc.dev/log/programming/java/core/j-c-08-%EA%B2%BD%EC%9
 
 ## 6) Cloudflare 배포 체크
 
-- 정적 에셋(`assets/app.<hash>.*`)은 long-cache + immutable
-  - 예: `Cache-Control: public, max-age=31536000, immutable`
-- HTML 문서는 짧은 TTL 또는 `stale-while-revalidate`
-- Brotli 압축 활성화
+- 생성된 `dist/_headers`가 배포 artifact에 포함되는지 확인
+- EIAM 소유 해시 에셋(`assets/app.<hash>.*`, `assets/tree.<hash>.js`)은
+  `Cache-Control: public, max-age=31536000, immutable`
+- HTML, `manifest.json`, `content/*`, sitemap, robots 및 이름이 고정된 static file은
+  `Cache-Control: public, max-age=0, must-revalidate`
+- `seo.pathBase`가 있으면 `_headers` 규칙도 같은 prefix를 사용하는지 확인
+- 압축은 build가 아니라 host 책임: `Accept-Encoding: br` 요청에서 실제
+  `Content-Encoding: br` 응답을 확인
+
+```bash
+# 파일명은 dist/assets/에 실제 생성된 값으로 바꾼다.
+curl -sI -H 'Accept-Encoding: br' https://example.com/assets/app.0123456789ab.js
+curl -sI -H 'Accept-Encoding: br' https://example.com/manifest.json
+```
+
 - Early Hints/HTTP3 사용 시 리소스 힌트 동작 점검
 
 ## 7) 합격 기준 (권장)

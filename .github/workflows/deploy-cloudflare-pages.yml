@@ -1,0 +1,395 @@
+name: Deploy validated site to Cloudflare Pages
+
+on:
+  workflow_call:
+    inputs:
+      vault-path:
+        description: Repository-relative Markdown vault directory
+        required: true
+        type: string
+      output-path:
+        description: Repository-relative deployable output directory
+        required: false
+        default: dist
+        type: string
+      config-path:
+        description: Repository-relative production config module
+        required: true
+        type: string
+      project-name:
+        description: Existing Cloudflare Pages project (optional in artifact-only mode)
+        required: false
+        default: ""
+        type: string
+      deployment-environment:
+        description: Cloudflare Pages environment selected by branch
+        required: false
+        default: preview
+        type: string
+      production-branch:
+        description: Branch configured as production in the Cloudflare Pages project
+        required: false
+        default: main
+        type: string
+      preview-branch:
+        description: Preview alias branch; defaults to the caller head branch
+        required: false
+        default: ""
+        type: string
+      artifact-only:
+        description: Build, validate, and upload artifacts without reading Cloudflare secrets
+        required: false
+        default: false
+        type: boolean
+      exclude-patterns:
+        description: Optional newline-separated vault exclusion patterns
+        required: false
+        default: ""
+        type: string
+      markdown-baseline-path:
+        description: Optional repository-relative strict Markdown baseline
+        required: false
+        default: ""
+        type: string
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        description: API token scoped to Cloudflare Pages Write
+        required: false
+      CLOUDFLARE_ACCOUNT_ID:
+        description: Cloudflare account identifier containing the Pages project
+        required: false
+    outputs:
+      artifact-name:
+        description: Validated site artifact uploaded by the build job
+        value: ${{ jobs.build-validate.outputs.artifact-name }}
+      artifact-digest:
+        description: SHA-256 digest reported by actions/upload-artifact
+        value: ${{ jobs.build-validate.outputs.artifact-digest }}
+      validation-report-artifact-name:
+        description: Production validation report artifact uploaded by the build job
+        value: ${{ jobs.build-validate.outputs.report-artifact-name }}
+      deployment-url:
+        description: Immutable Cloudflare Pages deployment URL; empty in artifact-only mode
+        value: ${{ jobs.deploy.outputs.deployment-url }}
+      deployment-alias-url:
+        description: Production or preview alias URL; empty in artifact-only mode
+        value: ${{ jobs.deploy.outputs.deployment-alias-url }}
+      deployment-id:
+        description: Cloudflare Pages deployment identifier; empty in artifact-only mode
+        value: ${{ jobs.deploy.outputs.deployment-id }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-pages-${{ github.repository }}-${{ inputs.project-name || 'artifact-only' }}-${{ inputs.deployment-environment }}
+  cancel-in-progress: false
+
+jobs:
+  build-validate:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: ${{ steps.inputs.outputs.artifact-name }}
+      artifact-digest: ${{ steps.site-artifact.outputs.artifact-digest }}
+      deploy-branch: ${{ steps.inputs.outputs.deploy-branch }}
+      output-path: ${{ steps.inputs.outputs.output-path }}
+      project-name: ${{ steps.inputs.outputs.project-name }}
+      report-artifact-name: ${{ steps.inputs.outputs.report-artifact-name }}
+      report-path: ${{ steps.inputs.outputs.report-path }}
+    steps:
+      - name: Checkout caller repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate deployment inputs
+        id: inputs
+        shell: bash
+        env:
+          ARTIFACT_ONLY: ${{ inputs.artifact-only }}
+          CONFIG_PATH: ${{ inputs.config-path }}
+          DEPLOYMENT_ENVIRONMENT: ${{ inputs.deployment-environment }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork || false }}
+          MARKDOWN_BASELINE_PATH: ${{ inputs.markdown-baseline-path }}
+          OUTPUT_PATH: ${{ inputs.output-path }}
+          PREVIEW_BRANCH: ${{ inputs.preview-branch }}
+          PRODUCTION_BRANCH: ${{ inputs.production-branch }}
+          PROJECT_NAME: ${{ inputs.project-name }}
+          VAULT_PATH: ${{ inputs.vault-path }}
+        run: |
+          fail() {
+            echo "::error title=Invalid Cloudflare deployment input::$1"
+            exit 1
+          }
+
+          validate_relative_path() {
+            local label="$1"
+            local value="$2"
+            local allow_root="$3"
+            [[ -n "$value" ]] || fail "$label must not be empty"
+            [[ "$value" != *$'\n'* && "$value" != *$'\r'* ]] || fail "$label must be one path"
+            [[ "$value" != /* && "$value" != \\* ]] || fail "$label must be repository-relative"
+
+            local resolved
+            resolved="$(realpath -m -- "$value")"
+            case "$resolved" in
+              "$GITHUB_WORKSPACE")
+                [[ "$allow_root" == "true" ]] || fail "$label must not select the repository root"
+                ;;
+              "$GITHUB_WORKSPACE"/*) ;;
+              *) fail "$label must stay inside the caller repository" ;;
+            esac
+          }
+
+          validate_branch() {
+            local label="$1"
+            local value="$2"
+            [[ "$value" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || fail "$label contains unsupported characters"
+            [[ "$value" != *..* && "$value" != *//* && "$value" != */ && "$value" != *.lock ]] || fail "$label is not a safe Git branch name"
+          }
+
+          validate_relative_path "vault-path" "$VAULT_PATH" true
+          validate_relative_path "output-path" "$OUTPUT_PATH" false
+          validate_relative_path "config-path" "$CONFIG_PATH" false
+          [[ -d "$VAULT_PATH" ]] || fail "vault-path must be an existing directory"
+          [[ -f "$CONFIG_PATH" ]] || fail "config-path must be an existing file"
+          package_manager="$(jq -er '.packageManager | select(type == "string")' package.json 2>/dev/null || true)"
+          [[ "$package_manager" =~ ^bun@[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "caller packageManager must pin one exact stable Bun version"
+
+          if [[ -n "$MARKDOWN_BASELINE_PATH" ]]; then
+            validate_relative_path "markdown-baseline-path" "$MARKDOWN_BASELINE_PATH" false
+            [[ -f "$MARKDOWN_BASELINE_PATH" ]] || fail "markdown-baseline-path must be an existing file"
+          fi
+
+          [[ "$DEPLOYMENT_ENVIRONMENT" == "preview" || "$DEPLOYMENT_ENVIRONMENT" == "production" ]] || fail "deployment-environment must be preview or production"
+          validate_branch "production-branch" "$PRODUCTION_BRANCH"
+
+          if [[ "$ARTIFACT_ONLY" != "true" ]]; then
+            [[ "$PROJECT_NAME" =~ ^[a-z0-9]([a-z0-9-]{0,56}[a-z0-9])?$ ]] || fail "project-name must be a lowercase Cloudflare Pages project name"
+          elif [[ -n "$PROJECT_NAME" && ! "$PROJECT_NAME" =~ ^[a-z0-9]([a-z0-9-]{0,56}[a-z0-9])?$ ]]; then
+            fail "project-name must be a lowercase Cloudflare Pages project name when provided"
+          fi
+
+          if [[ "$IS_FORK" == "true" && "$ARTIFACT_ONLY" != "true" ]]; then
+            fail "fork pull requests must use artifact-only mode"
+          fi
+
+          if [[ "$DEPLOYMENT_ENVIRONMENT" == "production" ]]; then
+            deploy_branch="$PRODUCTION_BRANCH"
+            if [[ "$ARTIFACT_ONLY" != "true" && "$GITHUB_REF" != "refs/heads/$PRODUCTION_BRANCH" ]]; then
+              fail "production deployment must run from refs/heads/$PRODUCTION_BRANCH"
+            fi
+          else
+            deploy_branch="$PREVIEW_BRANCH"
+            if [[ -z "$deploy_branch" ]]; then
+              deploy_branch="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+            fi
+            validate_branch "preview-branch" "$deploy_branch"
+            if [[ "$ARTIFACT_ONLY" != "true" && "$deploy_branch" == "$PRODUCTION_BRANCH" ]]; then
+              fail "preview-branch must differ from production-branch"
+            fi
+          fi
+
+          invocation_id="$(openssl rand -hex 16)"
+          report_path=".eiam-reports/production-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${invocation_id}"
+          artifact_name="eiam-site-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${invocation_id}"
+          report_artifact_name="production-validation-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${invocation_id}"
+          output_resolved="$(realpath -m -- "$OUTPUT_PATH")"
+          report_resolved="$(realpath -m -- "$report_path")"
+          if [[ "$output_resolved" == "$report_resolved" || "$output_resolved" == "$report_resolved"/* || "$report_resolved" == "$output_resolved"/* ]]; then
+            fail "output-path must not overlap the workflow validation report directory"
+          fi
+          {
+            echo "artifact-name=$artifact_name"
+            echo "deploy-branch=$deploy_branch"
+            echo "output-path=$OUTPUT_PATH"
+            echo "project-name=$PROJECT_NAME"
+            echo "report-artifact-name=$report_artifact_name"
+            echo "report-path=$report_path"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Setup caller-pinned Bun toolchain
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Install caller dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Locate pinned production validator
+        id: validator
+        shell: bash
+        run: |
+          dependency_validator="node_modules/@limcpf/everything-is-a-markdown/scripts/validate-production.ts"
+          local_validator="scripts/validate-production.ts"
+          package_name="$(bun -e 'const value = await Bun.file("package.json").json(); process.stdout.write(String(value.name ?? ""));')"
+
+          if [[ -f "$dependency_validator" ]]; then
+            declared_version="$(bun -e '
+              const value = await Bun.file("package.json").json();
+              const name = "@limcpf/everything-is-a-markdown";
+              process.stdout.write(String(value.dependencies?.[name] ?? value.devDependencies?.[name] ?? ""));
+            ')"
+            installed_version="$(bun -e '
+              const value = await Bun.file("node_modules/@limcpf/everything-is-a-markdown/package.json").json();
+              process.stdout.write(String(value.version ?? ""));
+            ')"
+            if [[ ! "$declared_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ || "$installed_version" != "$declared_version" ]]; then
+              echo "::error title=Unpinned EIAM dependency::Declare one exact stable @limcpf/everything-is-a-markdown version and commit its frozen lockfile"
+              exit 1
+            fi
+            validator_path="$dependency_validator"
+          elif [[ "$package_name" == "@limcpf/everything-is-a-markdown" && -f "$local_validator" ]]; then
+            validator_path="$local_validator"
+          else
+            echo "::error title=Missing EIAM production validator::Pin an @limcpf/everything-is-a-markdown release containing scripts/validate-production.ts in the caller lockfile"
+            exit 1
+          fi
+
+          echo "path=$validator_path" >> "$GITHUB_OUTPUT"
+
+      - name: Build and validate production output
+        id: production-validation
+        shell: bash
+        env:
+          CONFIG_PATH: ${{ inputs.config-path }}
+          EXCLUDE_PATTERNS: ${{ inputs.exclude-patterns }}
+          MARKDOWN_BASELINE_PATH: ${{ inputs.markdown-baseline-path }}
+          OUTPUT_PATH: ${{ steps.inputs.outputs.output-path }}
+          REPORT_PATH: ${{ steps.inputs.outputs.report-path }}
+          VALIDATOR_PATH: ${{ steps.validator.outputs.path }}
+          VAULT_PATH: ${{ inputs.vault-path }}
+        run: |
+          validation_args=(
+            --config "$CONFIG_PATH"
+            --vault "$VAULT_PATH"
+            --out "$OUTPUT_PATH"
+            --report-dir "$REPORT_PATH"
+          )
+
+          if [[ -n "$MARKDOWN_BASELINE_PATH" ]]; then
+            validation_args+=(--markdown-baseline "$MARKDOWN_BASELINE_PATH")
+          fi
+
+          while IFS= read -r pattern || [[ -n "$pattern" ]]; do
+            [[ -z "$pattern" ]] && continue
+            validation_args+=(--exclude "$pattern")
+          done <<< "$EXCLUDE_PATTERNS"
+
+          bun run "$VALIDATOR_PATH" "${validation_args[@]}"
+
+      - name: Upload production validation report
+        if: always() && steps.inputs.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.inputs.outputs.report-artifact-name }}
+          path: ${{ steps.inputs.outputs.report-path }}/**
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 14
+
+      - name: Upload exact validated site
+        id: site-artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.inputs.outputs.artifact-name }}
+          path: ${{ steps.inputs.outputs.output-path }}/
+          if-no-files-found: error
+          include-hidden-files: true
+          compression-level: 0
+          retention-days: 7
+
+  deploy:
+    if: ${{ !inputs.artifact-only }}
+    needs: build-validate
+    runs-on: ubuntu-latest
+    environment:
+      name: cloudflare-${{ inputs.deployment-environment }}
+    outputs:
+      deployment-url: ${{ steps.deploy.outputs.deployment-url }}
+      deployment-alias-url: ${{ steps.deploy.outputs.pages-deployment-alias-url }}
+      deployment-id: ${{ steps.deploy.outputs.pages-deployment-id }}
+    steps:
+      - name: Download exact validated site
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: ${{ needs.build-validate.outputs.artifact-name }}
+          path: .eiam-pages-site
+
+      - name: Verify Cloudflare project environment
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DEPLOY_BRANCH: ${{ needs.build-validate.outputs.deploy-branch }}
+          DEPLOYMENT_ENVIRONMENT: ${{ inputs.deployment-environment }}
+          EXPECTED_PRODUCTION_BRANCH: ${{ inputs.production-branch }}
+          PROJECT_NAME: ${{ needs.build-validate.outputs.project-name }}
+        run: |
+          [[ "$CLOUDFLARE_ACCOUNT_ID" =~ ^[0-9a-fA-F]{32}$ ]] || {
+            echo "::error title=Invalid Cloudflare account::CLOUDFLARE_ACCOUNT_ID must be a 32-character account identifier"
+            exit 1
+          }
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || {
+            echo "::error title=Missing Cloudflare credential::CLOUDFLARE_API_TOKEN is required outside artifact-only mode"
+            exit 1
+          }
+
+          response_path="$RUNNER_TEMP/cloudflare-pages-project.json"
+          curl --silent --show-error --fail-with-body \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT_NAME" \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            --output "$response_path"
+
+          if ! actual_production_branch="$(jq -er 'select(.success == true) | .result.production_branch | select(type == "string" and length > 0)' "$response_path")"; then
+            echo "::error title=Cloudflare project preflight failed::Project lookup did not return a production branch"
+            exit 1
+          fi
+          if [[ "$actual_production_branch" != "$EXPECTED_PRODUCTION_BRANCH" ]]; then
+            echo "::error title=Cloudflare production branch mismatch::Project uses $actual_production_branch, workflow requires $EXPECTED_PRODUCTION_BRANCH"
+            exit 1
+          fi
+          if [[ "$DEPLOYMENT_ENVIRONMENT" == "production" && "$DEPLOY_BRANCH" != "$actual_production_branch" ]] || \
+             [[ "$DEPLOYMENT_ENVIRONMENT" == "preview" && "$DEPLOY_BRANCH" == "$actual_production_branch" ]]; then
+            echo "::error title=Cloudflare environment mismatch::The selected branch would deploy to a different Pages environment"
+            exit 1
+          fi
+
+      - name: Deploy validated artifact
+        id: deploy
+        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          packageManager: npm
+          wranglerVersion: 4.112.0
+          command: >-
+            pages deploy .eiam-pages-site
+            --project-name=${{ needs.build-validate.outputs.project-name }}
+            --branch=${{ needs.build-validate.outputs.deploy-branch }}
+            --commit-hash=${{ github.sha }}
+            --commit-dirty=false
+
+      - name: Verify deployment result
+        shell: bash
+        env:
+          ACTUAL_ENVIRONMENT: ${{ steps.deploy.outputs.pages-environment }}
+          DEPLOYMENT_ALIAS_URL: ${{ steps.deploy.outputs.pages-deployment-alias-url }}
+          DEPLOYMENT_ID: ${{ steps.deploy.outputs.pages-deployment-id }}
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment-url }}
+          EXPECTED_ENVIRONMENT: ${{ inputs.deployment-environment }}
+        run: |
+          [[ -n "$DEPLOYMENT_ID" && -n "$DEPLOYMENT_URL" ]] || {
+            echo "::error title=Missing Cloudflare deployment identity::Wrangler did not return a deployment ID and URL"
+            exit 1
+          }
+          [[ "$ACTUAL_ENVIRONMENT" == "$EXPECTED_ENVIRONMENT" ]] || {
+            echo "::error title=Unexpected Cloudflare environment::Expected $EXPECTED_ENVIRONMENT but Wrangler reported $ACTUAL_ENVIRONMENT"
+            exit 1
+          }
+          {
+            echo "### Cloudflare Pages deployment"
+            echo
+            echo "- Environment: \`$ACTUAL_ENVIRONMENT\`"
+            echo "- Deployment ID: \`$DEPLOYMENT_ID\`"
+            echo "- Immutable URL: $DEPLOYMENT_URL"
+            [[ -z "$DEPLOYMENT_ALIAS_URL" ]] || echo "- Alias URL: $DEPLOYMENT_ALIAS_URL"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -322,6 +322,81 @@ ALPHA
     }
   });
 
+  test("실패한 rebuild는 마지막 성공 output과 cache를 원자적으로 보존한다", () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-atomic-build-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+    const configPath = path.join(workDir, "blog.config.mjs");
+    const sourcePath = path.join(vaultDir, "atomic.md");
+    const transactionArtifacts = () =>
+      fs
+        .readdirSync(workDir)
+        .filter(
+          (entry) =>
+            entry.startsWith(".dist.eiam-backup-") || entry.startsWith(".dist.eiam-staging-"),
+        );
+
+    try {
+      writeText(
+        sourcePath,
+        `---
+publish: true
+prefix: ATOMIC-01
+category_path: build/atomic
+title: Atomic output
+---
+
+LAST_SUCCESSFUL_OUTPUT
+`,
+      );
+
+      const firstBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(firstBuild.status, firstBuild.output).toBe(0);
+      const outputBeforeFailure = snapshotOutputHashes(outDir);
+      const cachePath = findOnlyCacheIndexPath(workDir);
+      const cacheBeforeFailure = fs.readFileSync(cachePath, "utf8");
+
+      writeText(
+        sourcePath,
+        fs
+          .readFileSync(sourcePath, "utf8")
+          .replace("LAST_SUCCESSFUL_OUTPUT", "FAILED_BUILD_MUST_NOT_PUBLISH"),
+      );
+      writeText(
+        configPath,
+        'export default { markdown: { highlight: { theme: "../invalid-theme" } } };\n',
+      );
+
+      const failedBuild = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(failedBuild.status).not.toBe(0);
+      expect(failedBuild.output).toContain("Invalid Shiki theme");
+      expect(snapshotOutputHashes(outDir)).toEqual(outputBeforeFailure);
+      expect(fs.readFileSync(cachePath, "utf8")).toBe(cacheBeforeFailure);
+      expect(readDocContentHtml(outDir, "/ATOMIC-01/")).toContain("LAST_SUCCESSFUL_OUTPUT");
+      expect(readDocContentHtml(outDir, "/ATOMIC-01/")).not.toContain(
+        "FAILED_BUILD_MUST_NOT_PUBLISH",
+      );
+      expect(transactionArtifacts()).toEqual([]);
+
+      fs.rmSync(configPath);
+      const recoveredBuild = runCli(workDir, [
+        cliPath,
+        "build",
+        "--vault",
+        vaultDir,
+        "--out",
+        outDir,
+      ]);
+      expect(recoveredBuild.status, recoveredBuild.output).toBe(0);
+      expect(readDocContentHtml(outDir, "/ATOMIC-01/")).toContain("FAILED_BUILD_MUST_NOT_PUBLISH");
+      expect(snapshotOutputHashes(outDir)).not.toEqual(outputBeforeFailure);
+      expect(fs.readFileSync(cachePath, "utf8")).not.toBe(cacheBeforeFailure);
+      expect(transactionArtifacts()).toEqual([]);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
   test("content renderer version은 기존 Markdown fragment cache를 무효화한다", () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-content-renderer-version-"));
     const vaultDir = path.join(workDir, "vault");
@@ -368,6 +443,7 @@ cached code
         "omit-local",
         "wikilinks-on",
         "safe-html-v1",
+        "",
         "",
       ];
       const legacyHash = crypto

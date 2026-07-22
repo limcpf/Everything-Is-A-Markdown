@@ -16,7 +16,7 @@ export const DEFAULT_SITE_TITLE = "File-System Blog";
 
 export const DEFAULT_MERMAID_CONFIG = Object.freeze({
   enabled: true,
-  cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
+  cdnUrl: null,
   theme: "default",
 });
 

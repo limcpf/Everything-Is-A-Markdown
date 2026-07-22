@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import type { BuildOptions, DocRecord, Manifest } from "../types";
 import { DEFAULT_BRANCH, type RuntimeLayoutConfig } from "../defaults";
@@ -15,10 +16,12 @@ import {
   renderViewChrome,
   toViewPathWithBase,
 } from "../view-contract";
+import { renderCloudflarePagesHeaders } from "./cache-headers";
 import type { OutputPhaseState, OutputWriteContext, RuntimeAssets } from "./contracts";
-import { OUTPUT_MARKER_FILE_NAME, resolveSiteTitle } from "./shared";
+import { CLOUDFLARE_HEADERS_FILE_NAME, OUTPUT_MARKER_FILE_NAME, resolveSiteTitle } from "./shared";
 
 const DEFAULT_SITE_DESCRIPTION = "File-system style static blog with markdown explorer UI.";
+const require = createRequire(import.meta.url);
 
 function pickSeoImageDefaults(seo: BuildOptions["seo"]): {
   social: string | null;
@@ -149,7 +152,8 @@ function assertSafeStaticOutputPath(relOutputPath: string): void {
   }
   if (
     normalized === OUTPUT_MARKER_FILE_NAME ||
-    normalized.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`)
+    normalized.startsWith(`${OUTPUT_MARKER_FILE_NAME}/`) ||
+    normalized.startsWith(`${CLOUDFLARE_HEADERS_FILE_NAME}/`)
   ) {
     throw new Error(`[safety] Refusing reserved static output path: ${relOutputPath}`);
   }
@@ -196,6 +200,12 @@ async function copyStaticPaths(context: OutputWriteContext, options: BuildOption
       continue;
     }
 
+    if (staticPath === CLOUDFLARE_HEADERS_FILE_NAME && sourceStat.isDirectory()) {
+      throw new Error(
+        `[static] "${CLOUDFLARE_HEADERS_FILE_NAME}" must be a file when used as a custom Cloudflare Pages header policy`,
+      );
+    }
+
     if (sourceStat.isDirectory()) {
       const files = await listFilesRecursively(sourcePath);
       for (const file of files) {
@@ -213,6 +223,21 @@ async function copyStaticPaths(context: OutputWriteContext, options: BuildOption
     }
 
     console.warn(`[static] unsupported path type, skipped: ${staticPath}`);
+  }
+}
+
+async function removeCloudflareHeadersTargetCollision(context: OutputWriteContext): Promise<void> {
+  const headersPath = path.join(context.outDir, CLOUDFLARE_HEADERS_FILE_NAME);
+  try {
+    const targetStat = await fs.lstat(headersPath);
+    if (targetStat.isFile()) {
+      return;
+    }
+    await fs.rm(headersPath, { force: true, recursive: targetStat.isDirectory() });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
   }
 }
 
@@ -379,12 +404,31 @@ async function bundleRuntimeCss(entrypoint: string, layout: RuntimeLayoutConfig)
   return output.text();
 }
 
+async function readSelfHostedMermaidRuntime(): Promise<{ license: string; source: string }> {
+  const mermaidEntryPath = require.resolve("mermaid");
+  const mermaidRuntimePath = path.join(path.dirname(mermaidEntryPath), "mermaid.min.js");
+  const mermaidLicensePath = path.join(path.dirname(path.dirname(mermaidEntryPath)), "LICENSE");
+  try {
+    const [source, license] = await Promise.all([
+      fs.readFile(mermaidRuntimePath, "utf8"),
+      fs.readFile(mermaidLicensePath, "utf8"),
+    ]);
+    return { license, source };
+  } catch (error) {
+    throw new Error(
+      `[build] Unable to read the pinned Mermaid browser runtime or license from ${path.dirname(mermaidRuntimePath)}`,
+      { cause: error },
+    );
+  }
+}
+
 async function writeRuntimeAssets(
   context: OutputWriteContext,
   layout: RuntimeLayoutConfig,
+  includeSelfHostedMermaid: boolean,
 ): Promise<RuntimeAssets> {
   const runtimeDir = path.join(import.meta.dir, "..", "runtime");
-  const [runtimeJs, treeRuntimeJs, runtimeCss] = await Promise.all([
+  const [runtimeJs, treeRuntimeJs, runtimeCss, mermaidRuntime] = await Promise.all([
     bundleRuntimeJs(path.join(runtimeDir, "app.js"), {
       label: "app.js",
       replaceTreeIcons: false,
@@ -394,11 +438,15 @@ async function writeRuntimeAssets(
       replaceTreeIcons: true,
     }),
     bundleRuntimeCss(path.join(runtimeDir, "app.css"), layout),
+    includeSelfHostedMermaid ? readSelfHostedMermaidRuntime() : Promise.resolve(null),
   ]);
 
   const jsRelPath = `assets/app.${makeHash(runtimeJs).slice(0, 12)}.js`;
   const treeJsRelPath = `assets/tree.${makeHash(treeRuntimeJs).slice(0, 12)}.js`;
   const cssRelPath = `assets/app.${makeHash(runtimeCss).slice(0, 12)}.css`;
+  const mermaidHash = mermaidRuntime ? makeHash(mermaidRuntime.source).slice(0, 12) : null;
+  const mermaidJsRelPath = mermaidHash ? `assets/mermaid.${mermaidHash}.js` : null;
+  const mermaidLicenseRelPath = mermaidHash ? `assets/mermaid.${mermaidHash}.LICENSE.txt` : null;
 
   for (const previousPath of Object.keys(context.previousHashes)) {
     const isLegacyRuntimeAsset =
@@ -416,11 +464,17 @@ async function writeRuntimeAssets(
   await writeOutputIfChanged(context, jsRelPath, runtimeJs);
   await writeOutputIfChanged(context, treeJsRelPath, treeRuntimeJs);
   await writeOutputIfChanged(context, cssRelPath, runtimeCss);
+  if (mermaidRuntime && mermaidJsRelPath && mermaidLicenseRelPath) {
+    await writeOutputIfChanged(context, mermaidJsRelPath, mermaidRuntime.source);
+    await writeOutputIfChanged(context, mermaidLicenseRelPath, mermaidRuntime.license);
+  }
 
   return {
     cssRelPath,
     jsRelPath,
     treeJsRelPath,
+    ...(mermaidJsRelPath ? { mermaidJsRelPath } : {}),
+    ...(mermaidLicenseRelPath ? { mermaidLicenseRelPath } : {}),
   };
 }
 
@@ -619,15 +673,27 @@ export function validateStaticOutputPlan(options: BuildOptions): void {
 export async function prepareOutputPhase(
   options: BuildOptions,
   previousHashes: Record<string, string>,
+  includeSelfHostedMermaid = false,
 ): Promise<OutputPhaseState> {
   const context: OutputWriteContext = {
     outDir: options.outDir,
     previousHashes,
     nextHashes: {},
   };
-  const runtimeAssets = await writeRuntimeAssets(context, options.layout);
+  const runtimeAssets = await writeRuntimeAssets(context, options.layout, includeSelfHostedMermaid);
+  await removeCloudflareHeadersTargetCollision(context);
   await copyStaticPaths(context, options);
-  return { context, runtimeAssets };
+  if (!Object.hasOwn(context.nextHashes, CLOUDFLARE_HEADERS_FILE_NAME)) {
+    await writeOutputIfChanged(
+      context,
+      CLOUDFLARE_HEADERS_FILE_NAME,
+      renderCloudflarePagesHeaders(runtimeAssets, options.seo?.pathBase ?? ""),
+    );
+  }
+  const mermaidRuntimeUrl = runtimeAssets.mermaidJsRelPath
+    ? toViewPathWithBase(`/${runtimeAssets.mermaidJsRelPath}`, options.seo?.pathBase ?? "")
+    : null;
+  return { context, runtimeAssets, mermaidRuntimeUrl };
 }
 
 export async function emitOutputPhase(

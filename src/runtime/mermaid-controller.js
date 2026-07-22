@@ -182,10 +182,15 @@ async function loadMermaidLibrary(config, { documentRef, windowRef, messages }) 
     return null;
   }
 
+  const cdnUrl = normalizeMermaidUrl(config.cdnUrl);
+  if (!cdnUrl) {
+    throw new Error(messages.mermaidLibraryLoadFailed("self-hosted runtime"));
+  }
+
   const normalized = {
     ...config,
     theme: normalizeMermaidTheme(config.theme),
-    cdnUrl: normalizeMermaidUrl(config.cdnUrl),
+    cdnUrl,
   };
 
   if (windowRef.mermaid) {

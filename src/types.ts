@@ -91,7 +91,7 @@ export interface BuildOptions {
   shikiTheme: string;
   mermaid: {
     enabled: boolean;
-    cdnUrl: string;
+    cdnUrl: string | null;
     theme: string;
   };
   layout: RuntimeLayoutConfig;
@@ -166,7 +166,7 @@ export interface Manifest {
   branches: string[];
   mermaid: {
     enabled: boolean;
-    cdnUrl: string;
+    cdnUrl: string | null;
     theme: string;
   };
   layout: RuntimeLayoutConfig;

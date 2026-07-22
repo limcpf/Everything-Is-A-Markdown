@@ -45,10 +45,18 @@ If two notes normalize to the same public route, the builder keeps both and auto
 
 ## Requirements
 
-- `bun` installed
+- The exact Bun version declared by `packageManager` in `package.json`
 - A Markdown vault directory
 
-This repository is authored around Bun. The CLI entry point is `src/cli.ts`, and package scripts assume Bun is available.
+This repository is authored around Bun. The CLI entry point is `src/cli.ts`, and package scripts assume Bun is available. The exact `packageManager` value is the single source of truth for the supported version; GitHub Actions lets `oven-sh/setup-bun` read it directly, so CI and release jobs cannot silently move to a different Bun release. Toolchain upgrades must update that one value and pass install, build, package, unit, and E2E verification.
+
+## Distribution
+
+The supported user-facing distribution is the [npm package `@limcpf/everything-is-a-markdown`](https://www.npmjs.com/package/@limcpf/everything-is-a-markdown), run with Bun. It is a source package for platforms supported by the exact Bun version above, not a compiled standalone executable or a platform-specific binary. The npm registry records the package version and integrity checksum used by package managers.
+
+Generated `dist/` output belongs to the input vault and deployment configuration that produced it. The project therefore does not publish a generic site archive or a "single-file" GitHub Release asset; build your own vault and deploy that resulting directory.
+
+Maintainers can find the exact tag, quality-gate, publication, and recovery contract in [the release process](docs/RELEASING.md).
 
 ## Install
 
@@ -189,6 +197,7 @@ Typical output:
 
 ```text
 dist/
+  _headers                # Cloudflare Pages cache policy
   404.html
   index.html
   manifest.json
@@ -209,11 +218,14 @@ dist/
 Key points:
 
 - Every published route gets its own `index.html` for direct access.
+- `_headers` gives mutable output an explicit revalidation policy and gives only build-owned,
+  content-hashed runtime assets a one-year immutable policy.
 - Rendered article bodies are stored separately under `dist/content/`.
 - Production JavaScript and CSS are minified, then content-hashed from the final emitted bytes.
 - `manifest.json` uses schema v2: `docIds` preserves order, `docsById` is the canonical metadata index, and tree file nodes carry document references instead of duplicated metadata. The runtime adapter also accepts legacy unversioned/v1 `docs` arrays during migration.
 - Route HTML embeds only a small path-aware runtime bootstrap; the shared manifest is fetched once from `manifest.json` instead of being copied into every generated page.
 - Generated files omit wall-clock build metadata and derived current-time flags, so two builds with unchanged content and config produce byte-identical output. The runtime derives each `NEW` badge from the manifest `date` and configured `newWithinDays` when the page loads.
+- Every build is assembled in a sibling staging directory. EIAM publishes it with a same-filesystem directory swap only after rendering, bundling, static copying, and cache preparation succeed; a failed rebuild leaves both the last successful output and its cache unchanged.
 - Static files declared in config are copied into the same relative paths under `dist/`.
 - Build cache is stored under `.cache/eiam/v2-<namespace>/build-index.json`.
 
@@ -235,6 +247,45 @@ overhead dominates when there is not yet enough duplicated payload to measure
 reliably.
 
 Run `bun run check:reproducible` to perform two no-op builds into the same output and compare SHA-256 hashes for every generated file. CI applies the same double-build check.
+
+### Cloudflare Pages cache headers
+
+By default, each build writes a Cloudflare Pages-compatible `dist/_headers` file. HTML routes,
+`manifest.json`, `content/*`, `robots.txt`, `sitemap.xml`, licenses, and copied static files use:
+
+```text
+Cache-Control: public, max-age=0, must-revalidate
+```
+
+Only the exact JS/CSS filenames generated from final content bytes receive:
+
+```text
+Cache-Control: public, max-age=31536000, immutable
+```
+
+The generated file deliberately does not use a broad `/assets/*` immutable rule, because a copied
+file such as `assets/social.png` may keep the same name when its contents change. For
+`seo.pathBase: "/blog"`, every rule is emitted under `/blog` and `/blog/*`. If the vault declares
+`_headers` in `staticPaths`, that custom file is copied unchanged and replaces the generated preset;
+EIAM does not merge potentially conflicting host rules. The override must be a file: `_headers/*`
+child paths and an `_headers` directory are rejected so the host policy cannot collide with static
+output.
+
+Compression is a host concern: EIAM emits the original deterministic files and does not write
+precompressed variants or a `Content-Encoding` header. Cloudflare Pages negotiates Gzip or Brotli
+when possible. After deployment, verify the actual response instead of inferring it from the build:
+
+```bash
+# Replace the sample filename with the one emitted in dist/assets/.
+curl -sI -H 'Accept-Encoding: br' https://example.com/assets/app.0123456789ab.js
+```
+
+The response should show the immutable `Cache-Control` value above and, when Brotli is negotiated,
+`Content-Encoding: br`. Repeat against an HTML route and `manifest.json` to confirm the revalidation
+policy. `_headers` applies to Cloudflare Pages static asset responses, not Pages Functions; attach
+equivalent headers in a Function response if one handles these routes. See the official
+[Pages headers](https://developers.cloudflare.com/pages/configuration/headers/) and
+[serving behavior](https://developers.cloudflare.com/pages/configuration/serving-pages/) docs.
 
 ## Config File
 
@@ -274,7 +325,6 @@ export default {
     },
     mermaid: {
       enabled: true,
-      cdnUrl: "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js",
       theme: "default",
     },
   },
@@ -316,7 +366,10 @@ export default {
 - `markdown.gfm`: enable or disable GFM table/strikethrough support.
 - `markdown.allowUnsafeHtml`: disables rendered HTML sanitization only when explicitly set to `true`; default `false`.
 - `markdown.highlight.theme`: Shiki theme.
-- `markdown.mermaid.*`: Mermaid runtime settings.
+- `markdown.mermaid.enabled`: render Mermaid fences; default `true`.
+- `markdown.mermaid.theme`: value passed to `mermaid.initialize`.
+- `markdown.mermaid.cdnUrl`: optional explicit external or local runtime override. When omitted,
+  the exact Mermaid dependency is self-hosted.
 - `seo.*`: canonical URL, social metadata, sitemap, robots, and path-base behavior.
 
 `ui.locale` controls application copy and accessibility names. `seo.locale` remains an independent
@@ -328,8 +381,8 @@ Config modules are treated as untrusted runtime input. Every supported field is 
 normalized before `build`, `dev`, or `clean` can create, modify, or remove output/cache paths. An
 invalid value stops the command with its exact dotted field path and received runtime type.
 Unknown fields are ignored after a warning so spelling mistakes remain visible without breaking
-forward-compatible configs. Unsafe Mermaid URL/theme strings keep their documented safe-default
-fallback; values with the wrong runtime type are rejected.
+forward-compatible configs. Unsafe Mermaid URLs fall back to the self-hosted runtime and unsafe
+theme strings fall back to `default`; values with the wrong runtime type are rejected.
 
 ### `staticPaths`
 
@@ -468,7 +521,28 @@ Behavior:
 - rendered on first load and on document navigation
 - centered and width-constrained in the viewer
 - if rendering fails, source remains visible and an error message is shown
-- invalid Mermaid CDN URLs or invalid theme values are normalized back to safe defaults
+- Mermaid `11.16.0` is an exact dependency; by default its browser runtime is copied byte-for-byte
+  to `assets/mermaid.<content-hash>.js` with its matching `LICENSE.txt`
+- the self-hosted asset is emitted only when an enabled published document contains a Mermaid fence
+- the script is still loaded lazily only when the current document contains a Mermaid block
+- an invalid `cdnUrl` falls back to self-hosting; a valid `cdnUrl` is an explicit external override
+
+The default is same-origin and continues to work when the generated site is served without network
+access. A basic Content Security Policy can keep `script-src 'self'`; test your `style-src` and
+`style-src-attr` directives because Mermaid-generated SVG uses inline presentation styles. If you
+set an external `cdnUrl`, add only that pinned origin to `script-src`; external mode is no longer
+offline-capable. EIAM preserves Mermaid source and shows a localized error when the runtime or an
+individual diagram fails.
+
+```ts
+markdown: {
+  mermaid: {
+    enabled: true,
+    cdnUrl: "https://cdn.example.test/mermaid/11.16.0/mermaid.min.js",
+    theme: "default",
+  },
+},
+```
 
 ## Body Image Layout
 
@@ -589,6 +663,7 @@ Options:
 
 - `--out-dir <path>`: required report directory
 - `--strict`: exits with status `1` when issues exist
+- `--config <path>`: load an explicit config module
 - `--vault <path>`: override vault root
 - `--exclude <glob>`: extra exclude patterns
 
@@ -604,6 +679,59 @@ What it checks:
 Publication metadata diagnostics are warnings in the report, while frontmatter parse and Markdown
 style findings are errors. `--strict` exits with status `1` when any of those diagnostics or findings
 exists, including a publication warning.
+
+## Production Validation
+
+Run the deployment gate against the same config and output directory that will be
+published:
+
+```bash
+bun run validate:production -- \
+  --config ./blog.config.ts \
+  --out ./dist \
+  --report-dir ./.reports/production-validation
+```
+
+Production validation requires `seo.siteUrl`; when it is absent, the command fails
+before claiming or changing the output directory. It then builds twice and requires
+byte-identical output, strict-clean published Markdown, valid manifest routes,
+wikilinks, backlinks and generated/static references, correct sitemap, robots,
+canonical metadata, `404.html`, `pathBase` and runtime bootstrap values, the
+generated Cloudflare cache policy, and all output size budgets.
+
+The machine-readable result is
+`production-validation-report.json` in `--report-dir`. CI and release jobs upload
+that directory when this gate fails. The output and report directories must not
+overlap.
+
+Intentional Markdown findings may be frozen with
+`--markdown-baseline <path>`. The file must use this exact schema:
+
+```json
+{
+  "schemaVersion": 1,
+  "fingerprints": []
+}
+```
+
+Copy fingerprints from the report's
+`markdown-publication.details.fingerprints` array. The gate compares the sorted
+lists exactly, so a new, removed, moved, or changed finding requires an explicit
+baseline review. Other useful overrides are `--vault` and repeatable `--exclude`.
+
+## Cloudflare Pages Deployment
+
+Vault repositories can call the reusable
+[`deploy-cloudflare-pages.yml`](.github/workflows/deploy-cloudflare-pages.yml) workflow to build and
+validate their own locked EIAM dependency before a separate job deploys the exact output directory.
+It accepts explicit vault, output, config, Pages project, production/preview branch, exclusion, and
+Markdown baseline inputs. `artifact-only` mode never reads Cloudflare secrets, so it is suitable for
+fork pull requests and pre-deployment review.
+
+The complete caller template, required `Pages Write` token scope, GitHub environment protection,
+root-versus-prefix `pathBase` behavior, failure artifacts, host smoke checks, and production rollback
+procedure are documented in [Cloudflare Pages deployment](docs/CLOUDFLARE-PAGES.md). Generator npm
+publication remains a separate release workflow and never deploys a caller's vault.
 
 ## Example Vault
 
@@ -659,7 +787,7 @@ E2E coverage in `tests/e2e/` includes:
 - Published docs without `prefix` are skipped.
 - Local images may be omitted depending on config.
 - Wikilinks resolve only to published docs.
-- Mermaid rendering depends on runtime script loading in the browser.
+- Mermaid rendering requires JavaScript, but its default runtime is included in the generated site.
 - Sidebar rename, drag/drop, git status indicators, and bulk actions are intentionally out of scope.
 - SEO files are not generated unless `seo.siteUrl` is configured.
 

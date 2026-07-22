@@ -1,0 +1,15 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Keep the supported Bun runtime upgrade explicit",
+      "managerFilePatterns": ["/^package\\.json$/"],
+      "matchStrings": ["\"packageManager\"\\s*:\\s*\"bun@(?<currentValue>[^\"]+)\""],
+      "depNameTemplate": "oven-sh/bun",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^bun-v(?<version>.*)$"
+    }
+  ]
+}

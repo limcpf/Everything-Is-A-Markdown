@@ -35,6 +35,8 @@ export interface RuntimeAssets {
   cssRelPath: string;
   jsRelPath: string;
   treeJsRelPath: string;
+  mermaidJsRelPath?: string;
+  mermaidLicenseRelPath?: string;
 }
 
 export interface BuildStorageState {
@@ -43,6 +45,14 @@ export interface BuildStorageState {
   previousCache: BuildCache;
   previousDocs: BuildCache["docs"];
   previousOutputHashes: BuildCache["outputHashes"];
+}
+
+export interface BuildStorageTransaction {
+  cacheLocation: CacheLocation;
+  outputRoot: string;
+  stagingRoot: string;
+  backupRoot: string;
+  hadPreviousOutput: boolean;
 }
 
 export interface DocumentGraphResult {
@@ -61,4 +71,5 @@ export interface RenderDocumentsResult {
 export interface OutputPhaseState {
   context: OutputWriteContext;
   runtimeAssets: RuntimeAssets;
+  mermaidRuntimeUrl: string | null;
 }

@@ -1,13 +1,27 @@
 import path from "node:path";
-import type { BuildCache, BuildOptions, DocRecord } from "../types";
+import MarkdownIt from "markdown-it";
+import type { BuildCache, BuildOptions, DocRecord, WikiResolver } from "../types";
 import { createMarkdownRenderer } from "../markdown";
 import { makeHash } from "../utils";
+import { toViewPathWithBase } from "../view-contract";
 import type { OutputWriteContext, RenderDocumentsResult, WikiLookup } from "./contracts";
 import { buildWikiResolutionSignature, createWikiResolver } from "./source";
 import { toContentFileName } from "./shared";
 
 // Bump whenever renderer-owned HTML changes in a way that is incompatible with cached fragments.
-export const CONTENT_RENDERER_VERSION = "content-html-v3";
+export const CONTENT_RENDERER_VERSION = "content-html-v4";
+const mermaidFenceDetector = new MarkdownIt({ html: true });
+
+export function hasMermaidDocuments(docs: DocRecord[]): boolean {
+  return docs.some((doc) =>
+    mermaidFenceDetector
+      .parse(doc.body, {})
+      .some(
+        (token) =>
+          token.type === "fence" && token.info.trim().split(/\s+/)[0]?.toLowerCase() === "mermaid",
+      ),
+  );
+}
 
 export async function renderDocuments(
   docs: DocRecord[],
@@ -34,6 +48,7 @@ export async function renderDocuments(
         options.imagePolicy,
         options.wikilinks ? "wikilinks-on" : "wikilinks-off",
         options.allowUnsafeHtml ? "unsafe-html-v1" : "safe-html-v1",
+        options.seo?.pathBase ?? "",
         wikiSignature,
       ].join("::"),
     );
@@ -55,7 +70,18 @@ export async function renderDocuments(
       }
     }
 
-    const resolver = createWikiResolver(wikiLookup, doc);
+    const sourceResolver = createWikiResolver(wikiLookup, doc);
+    const resolver: WikiResolver = {
+      resolve(input) {
+        const resolved = sourceResolver.resolve(input);
+        return resolved
+          ? {
+              ...resolved,
+              route: toViewPathWithBase(resolved.route, options.seo?.pathBase ?? ""),
+            }
+          : null;
+      },
+    };
     const renderResult = await markdownRenderer.render(doc.body, resolver);
     for (const warning of renderResult.warnings) {
       console.warn(`[markdown] ${doc.relPath}: ${warning}`);
