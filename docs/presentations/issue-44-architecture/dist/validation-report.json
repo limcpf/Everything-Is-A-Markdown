@@ -1,0 +1,321 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "presentation": {
+    "file": "eiam-issue-44-architecture-kit-ko.pptx",
+    "bytes": 1619997,
+    "slides": 32,
+    "notes": 32,
+    "language": "ko-KR",
+    "editableVector": true
+  },
+  "checks": [
+    {
+      "id": "package-integrity",
+      "status": "passed",
+      "summary": "PPTX ZIP package를 CRC32까지 읽을 수 있다.",
+      "details": {
+        "bytes": 1619997,
+        "entries": 163
+      }
+    },
+    {
+      "id": "slide-contract",
+      "status": "passed",
+      "summary": "32개 슬라이드와 32개 speaker notes가 manifest와 일치한다.",
+      "details": {
+        "slides": 32,
+        "notes": 32,
+        "manifestSlides": 32
+      }
+    },
+    {
+      "id": "slide-titles",
+      "status": "passed",
+      "summary": "모든 manifest 제목이 해당 슬라이드에 존재한다.",
+      "details": {
+        "checked": 32
+      }
+    },
+    {
+      "id": "placeholder-scan",
+      "status": "passed",
+      "summary": "TODO, TBD, 템플릿 placeholder가 남아 있지 않다.",
+      "details": {
+        "checked": 32
+      }
+    },
+    {
+      "id": "geometry-bounds",
+      "status": "passed",
+      "summary": "모든 벡터 shape가 16:9 슬라이드 경계 안에 있다.",
+      "details": {
+        "widthInches": 13.333,
+        "heightInches": 7.5,
+        "toleranceEmu": 5000
+      }
+    },
+    {
+      "id": "self-contained",
+      "status": "passed",
+      "summary": "외부 relationship와 raster media 없이 편집 가능한 벡터로 구성된다.",
+      "details": {
+        "slideRelationships": 32,
+        "externalRelationships": 0,
+        "mediaFiles": 0
+      }
+    },
+    {
+      "id": "korean-font",
+      "status": "passed",
+      "summary": "한글 기본 글꼴이 OOXML에 명시되어 있다.",
+      "details": {
+        "requiredFont": "Noto Sans CJK KR",
+        "occurrences": 3303
+      }
+    },
+    {
+      "id": "manifest-sections",
+      "status": "passed",
+      "summary": "manifest의 섹션별 슬라이드 수 합계가 전체 슬라이드 수와 같다.",
+      "details": {
+        "sections": {
+          "Architecture kit": 1,
+          "사용 가이드": 1,
+          "컴포넌트": 5,
+          "EIAM 실제 구조": 14,
+          "WAS 선택형 예시": 10,
+          "마무리": 1
+        },
+        "total": 32
+      }
+    }
+  ],
+  "failures": [],
+  "slideStats": [
+    {
+      "number": 1,
+      "characters": 209,
+      "shapesWithBounds": 18,
+      "maxRightInches": 15.1,
+      "maxBottomInches": 7.8
+    },
+    {
+      "number": 2,
+      "characters": 329,
+      "shapesWithBounds": 61,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 3,
+      "characters": 481,
+      "shapesWithBounds": 55,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 4,
+      "characters": 481,
+      "shapesWithBounds": 71,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 5,
+      "characters": 411,
+      "shapesWithBounds": 68,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 6,
+      "characters": 373,
+      "shapesWithBounds": 51,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 7,
+      "characters": 320,
+      "shapesWithBounds": 75,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 8,
+      "characters": 272,
+      "shapesWithBounds": 17,
+      "maxRightInches": 14.45,
+      "maxBottomInches": 7.6
+    },
+    {
+      "number": 9,
+      "characters": 554,
+      "shapesWithBounds": 55,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 10,
+      "characters": 496,
+      "shapesWithBounds": 66,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 11,
+      "characters": 468,
+      "shapesWithBounds": 67,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 12,
+      "characters": 444,
+      "shapesWithBounds": 60,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 13,
+      "characters": 475,
+      "shapesWithBounds": 65,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 14,
+      "characters": 500,
+      "shapesWithBounds": 47,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 15,
+      "characters": 525,
+      "shapesWithBounds": 64,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 16,
+      "characters": 502,
+      "shapesWithBounds": 74,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 17,
+      "characters": 656,
+      "shapesWithBounds": 70,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 18,
+      "characters": 567,
+      "shapesWithBounds": 83,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 19,
+      "characters": 392,
+      "shapesWithBounds": 83,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 20,
+      "characters": 732,
+      "shapesWithBounds": 95,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 21,
+      "characters": 523,
+      "shapesWithBounds": 64,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 22,
+      "characters": 240,
+      "shapesWithBounds": 17,
+      "maxRightInches": 14.45,
+      "maxBottomInches": 7.6
+    },
+    {
+      "number": 23,
+      "characters": 528,
+      "shapesWithBounds": 81,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 24,
+      "characters": 595,
+      "shapesWithBounds": 87,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 25,
+      "characters": 481,
+      "shapesWithBounds": 56,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 26,
+      "characters": 536,
+      "shapesWithBounds": 80,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 27,
+      "characters": 511,
+      "shapesWithBounds": 73,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 28,
+      "characters": 459,
+      "shapesWithBounds": 71,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 29,
+      "characters": 524,
+      "shapesWithBounds": 71,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 30,
+      "characters": 539,
+      "shapesWithBounds": 71,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 31,
+      "characters": 539,
+      "shapesWithBounds": 59,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    },
+    {
+      "number": 32,
+      "characters": 469,
+      "shapesWithBounds": 54,
+      "maxRightInches": 12.75,
+      "maxBottomInches": 7.28
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "eiam-issue-44-architecture-presentation",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "scripts": {
+    "build": "bun run src/generate.mjs",
+    "validate": "bun run src/validate.mjs",
+    "check": "bun run build && bun run validate"
+  },
+  "dependencies": {
+    "jszip": "3.10.1",
+    "pptxgenjs": "4.0.1"
+  }
+}
