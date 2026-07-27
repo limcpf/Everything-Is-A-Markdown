@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import type { RuleBlock } from "markdown-it/lib/parser_block.mjs";
 import sanitizeHtml from "sanitize-html";
 import { createHighlighterCore, type HighlighterCore, type LanguageInput } from "@shikijs/core";
 import { createJavaScriptRegexEngine } from "@shikijs/engine-javascript";
@@ -40,6 +41,7 @@ const DEFAULT_SHIKI_LANGUAGES: LanguageInput[] = [
 ];
 const SAFE_COLOR_VALUE = /^#[0-9a-f]{3,8}$/i;
 const SAFE_APP_ICON_HREFS = new Set(APP_ICON_NAMES.map((name) => `#eiam-icon-${name}`));
+const STANDALONE_HTML_IMAGE_RE = /^<img\b[^<>]*\/?>$/i;
 const SAFE_HTML_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
     "p",
@@ -156,6 +158,7 @@ type RuleSelf = RenderRuleArgs[4];
 type LinkOpenRule = NonNullable<MarkdownIt["renderer"]["rules"]["link_open"]>;
 type ImageRule = NonNullable<MarkdownIt["renderer"]["rules"]["image"]>;
 type ParagraphRule = NonNullable<MarkdownIt["renderer"]["rules"]["paragraph_open"]>;
+type HorizontalRule = NonNullable<MarkdownIt["renderer"]["rules"]["hr"]>;
 
 function escapeMarkdownLabel(input: string): string {
   return input.replaceAll("[", "").replaceAll("]", "");
@@ -356,6 +359,29 @@ function isStandaloneImageParagraph(tokens: RuleTokens, idx: number): boolean {
   return children.length === 1 && children[0]?.type === "image";
 }
 
+const standaloneHtmlImageBlock: RuleBlock = (state, startLine, _endLine, silent) => {
+  if (!state.md.options.html || state.sCount[startLine] - state.blkIndent >= 4) {
+    return false;
+  }
+
+  const start = state.bMarks[startLine] + state.tShift[startLine];
+  const end = state.eMarks[startLine];
+  const imageHtml = state.src.slice(start, end).trim();
+  if (!STANDALONE_HTML_IMAGE_RE.test(imageHtml)) {
+    return false;
+  }
+
+  if (silent) {
+    return true;
+  }
+
+  state.line = startLine + 1;
+  const token = state.push("html_block", "", 0);
+  token.map = [startLine, state.line];
+  token.content = `<figure class="content-image">${imageHtml}</figure>\n`;
+  return true;
+};
+
 function createMarkdownIt(
   highlighter: HighlighterCore,
   theme: string,
@@ -371,8 +397,12 @@ function createMarkdownIt(
   });
 
   if (!gfm) {
-    md.disable(["table", "strikethrough"]);
+    md.disable(["table"]);
   }
+
+  md.block.ruler.before("html_block", "standalone_html_image", standaloneHtmlImageBlock, {
+    alt: ["paragraph", "reference", "blockquote"],
+  });
 
   const fenceRule: RenderRule = (
     tokens: RuleTokens,
@@ -422,6 +452,24 @@ function createMarkdownIt(
     return `<div class="code-block">${header}${codeHtml}</div>`;
   };
   md.renderer.rules.fence = fenceRule;
+
+  const defaultHorizontalRule = md.renderer.rules.hr as HorizontalRule | undefined;
+  const horizontalRule: HorizontalRule = (
+    tokens: RuleTokens,
+    idx: number,
+    options: RuleOptions,
+    env: RuleEnv,
+    self: RuleSelf,
+  ) => {
+    if (tokens[idx - 1]?.type === "heading_close") {
+      return "";
+    }
+    if (defaultHorizontalRule) {
+      return defaultHorizontalRule(tokens, idx, options, env, self);
+    }
+    return self.renderToken(tokens, idx, options);
+  };
+  md.renderer.rules.hr = horizontalRule;
 
   const defaultImage = md.renderer.rules.image as ImageRule | undefined;
   const imageRule: ImageRule = (

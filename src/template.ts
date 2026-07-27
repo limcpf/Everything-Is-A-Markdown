@@ -254,10 +254,15 @@ ${headMeta}
               ${renderAppIcon("close")}
             </button>
           </div>
-          <label class="sidebar-branch" for="sidebar-branch-select">
-            <span class="branch-label">${text(messages.branchLabel)}</span>
-            <select id="sidebar-branch-select" class="branch-select"></select>
-          </label>
+          <div class="sidebar-branch">
+            <span id="sidebar-branch-label" class="branch-label">${text(messages.branchLabel)}</span>
+            <div
+              id="sidebar-branch-pills"
+              class="branch-pills"
+              role="group"
+              aria-labelledby="sidebar-branch-label"
+            ></div>
+          </div>
         </div>
         <div class="sidebar-search">
           <div class="sidebar-search-box">

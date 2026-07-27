@@ -55,8 +55,6 @@
   --viewer-container-max-width: 1120px;
   --content-prose-max-width: 42rem;
   --content-visual-max-width: 880px;
-  --content-image-square-max-width: 720px;
-  --content-image-portrait-max-width: 560px;
   --content-image-radius: 8px;
   --content-image-frame-bg: linear-gradient(180deg, var(--color-canvas), var(--color-surface));
   --mermaid-wide-max-width: 820px;
@@ -368,32 +366,64 @@ a:hover {
   font-weight: 650;
 }
 
-.branch-select {
-  width: 100%;
+.branch-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  gap: 8px;
+  max-height: 88px;
   min-width: 0;
-  min-height: 34px;
-  padding: 0 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.branch-pill {
+  padding: 7px 14px;
   border: 1px solid var(--color-border-strong);
-  border-radius: 7px;
-  background: var(--elevated-surface);
-  color: var(--color-text);
-  font-family: var(--font-mono);
+  border-radius: 999px;
+  background: var(--elevated-surface-strong);
+  box-shadow: 0 1px 0 var(--elevated-inset-shadow) inset;
+  color: var(--color-text-secondary);
   font-size: var(--type-metadata);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0;
   cursor: pointer;
+  white-space: nowrap;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease;
 }
 
-.branch-select:hover {
+.branch-pill:hover:not(:disabled) {
   border-color: var(--color-border-emphasis);
+  background: var(--elevated-surface-hover);
+  color: var(--color-text);
+  transform: translateY(-1px);
 }
 
-.branch-select:focus-visible {
+.branch-pill:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 1px;
 }
 
-.branch-select:disabled {
+.branch-pill.is-active {
+  border-color: color-mix(in srgb, var(--color-accent) 48%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  box-shadow:
+    0 1px 0 var(--elevated-inset-shadow) inset,
+    0 2px 6px color-mix(in srgb, var(--color-accent) 22%, transparent);
+  color: var(--color-accent-strong);
+}
+
+.branch-pill:disabled {
   cursor: default;
-  opacity: 0.7;
+  opacity: 0.78;
 }
 
 /* Tree search */
@@ -942,8 +972,6 @@ a:hover {
   letter-spacing: 0;
   margin-top: 2.8rem;
   margin-bottom: 1.1rem;
-  padding-bottom: 0.4rem;
-  border-bottom: 1px solid var(--color-border);
 }
 
 .viewer-content h2 {
@@ -983,6 +1011,13 @@ a:hover {
 
 .viewer-content strong {
   color: var(--color-text);
+}
+
+.viewer-content s,
+.viewer-content del {
+  color: var(--color-text-muted);
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 0.1em;
 }
 
 .viewer-content a {
@@ -1249,58 +1284,38 @@ a:hover {
 /* Images */
 .viewer-content .content-image,
 .viewer-content .image-frame {
+  width: min(100%, var(--content-prose-max-width));
   margin: 1.5rem auto;
 }
 
 .viewer-content .content-image {
-  width: fit-content;
-  max-width: min(100%, var(--content-visual-max-width));
-}
-
-.viewer-content .content-image.is-square {
-  max-width: min(100%, var(--content-image-square-max-width));
-}
-
-.viewer-content .content-image.is-portrait {
-  max-width: min(100%, var(--content-image-portrait-max-width));
+  max-width: none;
 }
 
 .viewer-content img {
-  display: block;
-  width: auto;
-  max-width: min(100%, var(--content-visual-max-width));
+  max-width: 100%;
   height: auto;
-  margin: 0 auto;
   border-radius: var(--content-image-radius);
   border: 1px solid var(--color-border);
   background: var(--content-image-frame-bg);
 }
 
-.viewer-content img.is-square {
-  max-width: min(100%, var(--content-image-square-max-width));
-}
-
-.viewer-content img.is-portrait {
-  max-width: min(100%, var(--content-image-portrait-max-width));
-}
-
 .viewer-content .image-frame {
-  width: min(100%, var(--content-visual-max-width));
   overflow: hidden;
   border-radius: 12px;
   border: 1px solid var(--color-border);
   background: var(--content-image-frame-bg);
 }
 
-.viewer-content .image-frame.is-square {
-  width: min(100%, var(--content-image-square-max-width));
-}
-
-.viewer-content .image-frame.is-portrait {
-  width: min(100%, var(--content-image-portrait-max-width));
+.viewer-content .content-image > img {
+  display: block;
+  width: 100%;
+  max-width: none;
+  margin: 0 auto;
 }
 
 .viewer-content .image-frame > img {
+  display: block;
   width: 100%;
   max-width: none;
   height: 100%;
@@ -1339,6 +1354,10 @@ a:hover {
   border: none;
   border-top: 1px solid var(--color-border);
   margin: 2rem auto;
+}
+
+.viewer-content :is(h1, h2, h3, h4, h5, h6) + hr {
+  display: none;
 }
 
 /* Post navigation */
@@ -1692,8 +1711,8 @@ a:hover {
     margin-top: 8px;
   }
 
-  .branch-select {
-    min-height: 32px;
+  .branch-pill {
+    padding: 5px 9px;
   }
 
   .sidebar-search {

@@ -187,6 +187,7 @@ test.describe("configurable UI locale and copy", () => {
     expect(manifest.tree[0]).toMatchObject({ name: "Recent", virtual: true });
     expect(englishRouteHtml).toContain('<html lang="en">');
     expect(englishRouteHtml).toContain(">Branch<");
+    expect(englishRouteHtml).toContain('id="sidebar-branch-pills"');
     expect(englishRouteHtml).toContain('aria-label="Search documents"');
     expect(englishRouteHtml).toContain('aria-label="Copy code"');
     expect(englishRouteHtml).toContain("(image omitted: Local diagram)");
@@ -212,9 +213,13 @@ test.describe("configurable UI locale and copy", () => {
     await waitForTreeReady(page);
 
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
-    const branchSelect = page.getByRole("combobox", { name: "Branch" });
-    await expect(branchSelect).toBeVisible();
-    await expect(branchSelect.locator("option").first()).toContainText("(default)");
+    const branchGroup = page.getByRole("group", { name: "Branch" });
+    const defaultBranch = branchGroup.locator(
+      `.branch-pill[data-branch="${manifest.defaultBranch}"]`,
+    );
+    await expect(branchGroup).toBeVisible();
+    await expect(defaultBranch).toHaveAccessibleName(`${manifest.defaultBranch} (default)`);
+    await expect(defaultBranch).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("button", { name: "Open explorer settings" })).toBeVisible();
 
     await page.getByRole("searchbox", { name: "Search documents" }).fill("English");

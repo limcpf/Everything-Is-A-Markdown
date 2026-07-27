@@ -9,7 +9,7 @@ import { buildWikiResolutionSignature, createWikiResolver } from "./source";
 import { toContentFileName } from "./shared";
 
 // Bump whenever renderer-owned HTML changes in a way that is incompatible with cached fragments.
-export const CONTENT_RENDERER_VERSION = "content-html-v4";
+export const CONTENT_RENDERER_VERSION = "content-html-v5";
 const mermaidFenceDetector = new MarkdownIt({ html: true });
 
 export function hasMermaidDocuments(docs: DocRecord[]): boolean {

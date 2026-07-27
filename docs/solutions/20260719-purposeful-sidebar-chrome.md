@@ -7,7 +7,7 @@ Every persistent sidebar element has one user-facing purpose:
 | Element             | Purpose                                                                                   |
 | ------------------- | ----------------------------------------------------------------------------------------- |
 | Site title          | Identifies the generated knowledge base                                                   |
-| Branch selector     | Scopes navigation to one content branch; the default option is identified in its label    |
+| Branch pills        | Scope navigation to one content branch and expose the active branch as pressed state      |
 | Search field        | Filters the document tree; result count and stepping controls appear only during a search |
 | Folder chevrons     | Expose hierarchy and expansion state                                                      |
 | Prefix text         | Preserves the document's stable public identifier without pill decoration                 |
@@ -15,29 +15,33 @@ Every persistent sidebar element has one user-facing purpose:
 | Settings button     | Keeps the persisted theme preference available                                             |
 | Mobile close button | Exits the modal navigation panel                                                          |
 
-The terminal glyph, branch badge and pills, `publish: true` copy, animated
-`Online` status, and static `UTF-8` label did not represent actionable or live
-state, so they are removed. A compact bottom toolbar retains only the purposeful
-settings action and provides a stable light-DOM endpoint for the mobile focus
-loop after the shadow-DOM tree.
+The terminal glyph, branch badge, `publish: true` copy, animated `Online`
+status, and static `UTF-8` label did not represent actionable or live state, so
+they are removed. The branch pills remain because each one is an actionable
+view switch. A compact bottom toolbar retains only the purposeful settings
+action and provides a stable light-DOM endpoint for the mobile focus loop after
+the shadow-DOM tree.
 
 ## Branch and tree behavior
 
-Branch selection uses a labeled native `<select>`. It retains browser keyboard
-behavior, exposes the current value directly to assistive technology, and
-requires one control regardless of branch count. Runtime-driven and automatic
-branch changes update the same control and the existing persisted branch key.
+Branch selection uses a labeled group of native `<button>` pills. Native button
+keyboard behavior is preserved, `aria-pressed` exposes the current branch, and
+the default branch is identified through its accessible label and tooltip.
+Runtime-driven and automatic branch changes update the same pressed state and
+the existing persisted branch key.
 
-Document rows reclaim horizontal space in three ways: horizontal tree and row
-padding decrease, generic file icons are visually suppressed while folder
-chevrons remain, and prefixes become compact monospace text instead of bordered
-pills. Full prefix/title text remains available through the row title and the
-existing overflow tooltip behavior.
+Document rows reclaim horizontal space through tighter tree padding and hidden
+generic file icons while folder chevrons remain. Prefix and title stay in the
+canonical tree path rendered by `@pierre/trees`; EIAM does not mutate virtualized
+row contents after rendering. This prevents a recycled row from retaining a
+previous document label after folders are collapsed or expanded.
 
 ## Regression coverage
 
-Browser coverage verifies native keyboard branch switching and persistence,
-the absence of static chrome, conditional search controls, inline prefixes,
-and settings availability. Responsive tests additionally verify that file
-icons are suppressed, the tighter row padding is applied, and long labels stay
-inside the tree without overlapping `NEW` decorations.
+Browser coverage verifies keyboard branch switching and persistence, the
+absence of the select and static chrome, conditional search controls, native
+tree labels, and settings availability. Collapse/expand coverage repeatedly
+recycles tree rows and verifies that labels remain tied to their paths.
+Responsive tests additionally verify that file icons are suppressed, tighter
+row padding is applied, and long labels stay inside the tree without
+overlapping `NEW` decorations.

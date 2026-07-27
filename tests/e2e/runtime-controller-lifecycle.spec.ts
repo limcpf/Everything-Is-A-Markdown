@@ -117,6 +117,14 @@ class FakeElement extends FakeTarget {
   querySelectorAll(selector: string): FakeElement[] {
     const descendants = this.children.flatMap((child) => [child, ...child.querySelectorAll("*")]);
     if (selector === "*") return descendants;
+    if (selector.startsWith(".")) {
+      const className = selector.slice(1);
+      return descendants.filter(
+        (element) =>
+          element.classList.contains(className) ||
+          element.className.split(/\s+/).includes(className),
+      );
+    }
     return [];
   }
 
@@ -370,7 +378,7 @@ test.describe("runtime controller module contracts", () => {
   test("tree controller lifecycle은 branch UI와 search listener를 소유한다", () => {
     const documentRef = createFakeDocument();
     const windowRef = createFakeWindow();
-    const branchSelect = documentRef.register("sidebar-branch-select");
+    const branchPills = documentRef.register("sidebar-branch-pills");
     documentRef.register("tree-root");
     const search = documentRef.register("tree-search-input");
     documentRef.register("tree-search-clear");
@@ -409,19 +417,18 @@ test.describe("runtime controller module contracts", () => {
 
     controller.setup();
     controller.setup();
-    expect(branchSelect.children).toHaveLength(2);
-    expect(branchSelect.children.map((option) => option.textContent)).toEqual([
-      "dev (기본값)",
-      "main",
-    ]);
-    expect(branchSelect.value).toBe("dev");
-    expect(branchSelect.listenerCount("change")).toBe(1);
+    expect(branchPills.children).toHaveLength(2);
+    expect(branchPills.children.map((button) => button.textContent)).toEqual(["dev", "main"]);
+    expect(branchPills.children[0].getAttribute("aria-label")).toBe("dev (기본값)");
+    expect(branchPills.children[0].getAttribute("aria-pressed")).toBe("true");
+    expect(branchPills.children[1].getAttribute("aria-pressed")).toBe("false");
+    expect(branchPills.listenerCount("click")).toBe(1);
     expect(search.listenerCount("input")).toBe(1);
     expect(searchActions.hidden).toBe(true);
 
     controller.destroy();
     controller.destroy();
-    expect(branchSelect.listenerCount("change")).toBe(0);
+    expect(branchPills.listenerCount("click")).toBe(0);
     expect(search.listenerCount("input")).toBe(0);
   });
 

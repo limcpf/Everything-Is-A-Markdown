@@ -10,7 +10,7 @@
 
 - [ ] prefix route 이동 후 URL과 제목이 함께 일치한다.
 - [ ] backlinks 클릭 후 기대 route로 이동한다.
-- [ ] 자동 브랜치 전환 후 `#sidebar-branch-select` 값이 기대 브랜치를 가리킨다.
+- [ ] 자동 브랜치 전환 후 기대 `.branch-pill`이 `aria-pressed="true"`와 `.is-active`를 가진다.
 - [ ] 전환 후 nav target(`data-route`)이 현재 브랜치 가시 문서 기준과 일치한다.
 
 ## Mermaid Runtime

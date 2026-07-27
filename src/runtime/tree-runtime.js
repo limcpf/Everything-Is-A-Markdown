@@ -28,47 +28,8 @@ const TREE_UNSAFE_CSS = `
   line-height: 1;
 }
 
-[data-type='item'][data-item-type='file'] [data-item-section='content'] {
-  display: flex;
-  align-items: center;
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 [data-type='item'][data-item-type='file'] > [data-item-section='icon'] {
   display: none;
-}
-
-.tree-item-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-}
-
-.tree-item-prefix {
-  flex: 0 0 auto;
-  max-width: 6.5rem;
-  overflow: hidden;
-  color: var(--trees-fg-muted, currentColor);
-  font-family: var(--font-mono, monospace);
-  font-size: 0.66rem;
-  font-weight: 700;
-  line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tree-item-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 [data-type='item'][data-item-type='file'] [data-item-section='decoration'] {
