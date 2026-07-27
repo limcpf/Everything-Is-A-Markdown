@@ -370,8 +370,13 @@ a:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  align-content: flex-start;
   gap: 8px;
+  max-height: 88px;
   min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .branch-pill {
@@ -1288,11 +1293,8 @@ a:hover {
 }
 
 .viewer-content img {
-  display: block;
-  width: 100%;
   max-width: 100%;
   height: auto;
-  margin: 0 auto;
   border-radius: var(--content-image-radius);
   border: 1px solid var(--color-border);
   background: var(--content-image-frame-bg);
@@ -1306,11 +1308,14 @@ a:hover {
 }
 
 .viewer-content .content-image > img {
+  display: block;
   width: 100%;
   max-width: none;
+  margin: 0 auto;
 }
 
 .viewer-content .image-frame > img {
+  display: block;
   width: 100%;
   max-width: none;
   height: 100%;

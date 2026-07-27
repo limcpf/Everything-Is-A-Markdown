@@ -141,6 +141,8 @@ flowchart LR
 
 <img src="/assets/tall-diagram.svg" alt="Standalone Raw Tall Diagram" />
 
+Inline status <img src="/assets/large-diagram.svg" alt="Inline Badge" width="24" height="12" /> badge.
+
 <figure class="image-frame ratio-4x3 fit-cover">
   <img src="/assets/large-diagram.svg" alt="Framed Cover Diagram" />
 </figure>
@@ -465,6 +467,7 @@ No diagram here.
         const rawPortraitImage = page.locator(
           '#viewer-content img[alt="Standalone Raw Tall Diagram"]',
         );
+        const inlineBadge = page.locator('#viewer-content img[alt="Inline Badge"]');
         await expect(mermaidBlock).toHaveCount(1);
         await expect(mermaidBlock.locator(".code-header")).toHaveCount(0);
         await expect(mermaidBlock.locator(".code-copy")).toHaveCount(0);
@@ -507,6 +510,10 @@ No diagram here.
         await expect(portraitImage).toBeVisible();
         await expect(rawPortraitImage).toBeVisible();
         await expect(rawPortraitImage.locator("xpath=..")).toHaveClass(/content-image/);
+        await expect(inlineBadge).toBeVisible();
+        await expect(inlineBadge.locator("xpath=..")).toHaveJSProperty("tagName", "P");
+        await expect(inlineBadge).toHaveCSS("display", "inline");
+        expect(await inlineBadge.evaluate((image) => image.getBoundingClientRect().width)).toBe(24);
         const imageLayout = await page.locator("#viewer-content").evaluate(() => {
           const content = document.getElementById("viewer-content");
           const prose = document.querySelector("#viewer-content > h1");

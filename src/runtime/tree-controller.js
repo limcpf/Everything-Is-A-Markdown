@@ -579,6 +579,9 @@ export function createTreeController(options) {
     if (!(button instanceof windowRef.HTMLButtonElement) || !sidebarBranchPills?.contains(button)) {
       return;
     }
+    if (button.dataset.branch === navigation.activeBranch) {
+      return;
+    }
     void setActiveBranch(button.dataset.branch);
   };
 

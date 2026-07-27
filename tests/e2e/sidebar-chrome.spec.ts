@@ -21,6 +21,15 @@ test.describe("purposeful sidebar chrome", () => {
     await expect(defaultBranch).toHaveAttribute("aria-pressed", "true");
     await expect(defaultBranch).toHaveAttribute("aria-label", /기본값/);
 
+    const redundantRequest = page
+      .waitForRequest((request) => new URL(request.url()).pathname.endsWith("/BC-VO-00/"), {
+        timeout: 500,
+      })
+      .then(() => true)
+      .catch(() => false);
+    await defaultBranch.click();
+    expect(await redundantRequest).toBe(false);
+
     for (const removedChrome of [
       ".icon-terminal",
       ".branch-badge",
@@ -45,6 +54,40 @@ test.describe("purposeful sidebar chrome", () => {
     await expect
       .poll(() => page.evaluate(() => localStorage.getItem("fsblog.branch")))
       .toBe(manifest.defaultBranch);
+  });
+
+  test("bounds a large branch pill set without clipping sidebar controls", async ({ page }) => {
+    await page.goto("/BC-VO-00/");
+    await waitForAppReady(page);
+
+    const branchGroup = page.getByRole("group", { name: "브랜치" });
+    await branchGroup.evaluate((group) => {
+      for (let index = 0; index < 40; index += 1) {
+        const button = document.createElement("button");
+        button.className = "branch-pill";
+        button.type = "button";
+        button.textContent = `release-${index}`;
+        group.append(button);
+      }
+    });
+
+    const layout = await branchGroup.evaluate((group) => {
+      const search = document.querySelector(".sidebar-search");
+      const style = window.getComputedStyle(group);
+      return {
+        clientHeight: group.clientHeight,
+        scrollHeight: group.scrollHeight,
+        overflowY: style.overflowY,
+        searchTop: search?.getBoundingClientRect().top ?? null,
+        viewportHeight: window.innerHeight,
+      };
+    });
+
+    expect(layout.overflowY).toBe("auto");
+    expect(layout.clientHeight).toBeLessThanOrEqual(88);
+    expect(layout.scrollHeight).toBeGreaterThan(layout.clientHeight);
+    expect(layout.searchTop).not.toBeNull();
+    expect(layout.searchTop ?? Infinity).toBeLessThan(layout.viewportHeight);
   });
 
   test("keeps native tree labels, search, and settings affordances available", async ({ page }) => {
