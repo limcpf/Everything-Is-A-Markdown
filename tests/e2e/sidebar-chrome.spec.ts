@@ -3,7 +3,7 @@ import { waitForAppReady, waitForTreeReady } from "./utils/app-ready";
 import { getInitialManifest } from "./utils/manifest";
 
 test.describe("purposeful sidebar chrome", () => {
-  test("uses one keyboard-accessible branch control and removes static status chrome", async ({
+  test("uses keyboard-accessible branch pills and removes static status chrome", async ({
     page,
   }) => {
     await page.goto("/BC-VO-00/");
@@ -11,16 +11,20 @@ test.describe("purposeful sidebar chrome", () => {
     await waitForTreeReady(page);
     const manifest = await getInitialManifest(page);
 
-    const branchSelect = page.getByRole("combobox", { name: "브랜치" });
-    await expect(branchSelect).toBeVisible();
-    await expect(branchSelect).toHaveValue(manifest.defaultBranch);
-    await expect(branchSelect.locator("option")).toHaveCount(2);
-    await expect(branchSelect.locator("option").first()).toContainText("(기본값)");
+    const branchGroup = page.getByRole("group", { name: "브랜치" });
+    const defaultBranch = branchGroup.locator(
+      `.branch-pill[data-branch="${manifest.defaultBranch}"]`,
+    );
+    const mainBranch = branchGroup.locator('.branch-pill[data-branch="main"]');
+    await expect(branchGroup).toBeVisible();
+    await expect(branchGroup.getByRole("button")).toHaveCount(2);
+    await expect(defaultBranch).toHaveAttribute("aria-pressed", "true");
+    await expect(defaultBranch).toHaveAttribute("aria-label", /기본값/);
 
     for (const removedChrome of [
       ".icon-terminal",
       ".branch-badge",
-      ".branch-pill",
+      ".branch-select",
       ".status-online",
       ".status-encoding",
       ".sidebar-footer",
@@ -28,22 +32,22 @@ test.describe("purposeful sidebar chrome", () => {
       await expect(page.locator(removedChrome)).toHaveCount(0);
     }
 
-    await branchSelect.focus();
-    await branchSelect.press("End");
-    await expect(branchSelect).toHaveValue("main");
+    await mainBranch.focus();
+    await mainBranch.press("Enter");
+    await expect(mainBranch).toHaveAttribute("aria-pressed", "true");
     await expect
       .poll(() => page.evaluate(() => localStorage.getItem("fsblog.branch")))
       .toBe("main");
 
-    await branchSelect.focus();
-    await branchSelect.press("Home");
-    await expect(branchSelect).toHaveValue(manifest.defaultBranch);
+    await defaultBranch.focus();
+    await defaultBranch.press("Space");
+    await expect(defaultBranch).toHaveAttribute("aria-pressed", "true");
     await expect
       .poll(() => page.evaluate(() => localStorage.getItem("fsblog.branch")))
       .toBe(manifest.defaultBranch);
   });
 
-  test("keeps purposeful search, prefix, and settings affordances available", async ({ page }) => {
+  test("keeps native tree labels, search, and settings affordances available", async ({ page }) => {
     await page.goto("/BC-VO-00/");
     await waitForAppReady(page);
     await waitForTreeReady(page);
@@ -54,9 +58,11 @@ test.describe("purposeful sidebar chrome", () => {
     await expect(searchActions).toBeVisible();
     await expect(page.locator("#tree-search-count")).toContainText("개 일치");
 
-    const prefix = page.locator("#tree-root .tree-item-prefix").first();
-    await expect(prefix).toBeVisible();
-    await expect(page.locator("#tree-root .tree-item-prefix-badge")).toHaveCount(0);
+    const aboutRow = page.getByRole("treeitem", { name: "BC-VO-00 About", exact: true }).first();
+    await expect(aboutRow).toBeVisible();
+    await expect(aboutRow).toHaveAccessibleName("BC-VO-00 About");
+    await expect(page.locator("#tree-root .tree-item-label")).toHaveCount(0);
+    await expect(page.locator("#tree-root .tree-item-prefix")).toHaveCount(0);
 
     const settingsToggle = page.getByRole("button", { name: "탐색기 설정 열기" });
     await expect(settingsToggle).toBeVisible();

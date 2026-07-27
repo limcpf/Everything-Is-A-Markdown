@@ -363,7 +363,7 @@ export default {
 - `ui.recentLimit`: number of items in `Recent`.
 - `markdown.wikilinks`: enable or disable wikilink resolution.
 - `markdown.images`: `"keep"` or `"omit-local"`.
-- `markdown.gfm`: enable or disable GFM table/strikethrough support.
+- `markdown.gfm`: enable or disable GFM table support. Strikethrough remains available.
 - `markdown.allowUnsafeHtml`: disables rendered HTML sanitization only when explicitly set to `true`; default `false`.
 - `markdown.highlight.theme`: Shiki theme.
 - `markdown.mermaid.enabled`: render Mermaid fences; default `true`.
@@ -431,8 +431,8 @@ JSON shape:
 
 ### Supported
 
-- Common Markdown via `markdown-it`
-- GFM tables and strikethrough when enabled
+- Common Markdown and strikethrough via `markdown-it`
+- GFM tables when enabled
 - Raw HTML inside Markdown
 - Syntax-highlighted fenced code blocks with Shiki
 - External links opened with `target="_blank"` and `rel="noopener noreferrer"`
@@ -546,11 +546,11 @@ markdown: {
 
 ## Body Image Layout
 
-Body images now use orientation-aware sizing inside the viewer:
+Body images use one consistent content width inside the viewer:
 
-- Landscape images keep the standard reading width.
-- Portrait images are automatically constrained to a narrower max width so they do not dominate the article.
-- Near-square images get an intermediate width.
+- Standalone Markdown images align to the same reading-column boundary.
+- Intrinsic aspect ratios are preserved without orientation-dependent width changes.
+- Images shrink responsively on narrow screens and never overflow the article.
 
 When local Markdown images are enabled with `markdown.images: "keep"`, standalone image paragraphs are promoted into a dedicated `figure.content-image` wrapper automatically.
 Allowlisted raw HTML remains available for manual framing when you want a fixed ratio or a specific crop mode.
@@ -587,7 +587,7 @@ Main behaviors:
 - `Recent` virtual folder
 - optional pinned virtual folder
 - prefix/title file labels without visible `.md` extensions, plus NEW badges when `ui.newWithinDays` matches
-- a compact native branch selector in the sidebar
+- compact branch pills in the sidebar, with active-state and keyboard semantics
 - active document selection synced between the tree, browser history, and document viewer
 - model-level tree search with clear and previous/next match controls
 - direct-link loading from route HTML

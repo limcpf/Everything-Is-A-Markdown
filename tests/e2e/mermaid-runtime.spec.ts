@@ -25,9 +25,8 @@ interface MermaidFixtureOptions {
 }
 
 const DEFAULT_MERMAID_THEME = "default";
+const CONTENT_PROSE_MAX_WIDTH = 672;
 const CONTENT_VISUAL_MAX_WIDTH = 880;
-const CONTENT_IMAGE_SQUARE_MAX_WIDTH = 720;
-const CONTENT_IMAGE_PORTRAIT_MAX_WIDTH = 560;
 const MERMAID_WIDE_MAX_WIDTH = 820;
 const MERMAID_TALL_MAX_HEIGHT = 560;
 const TEST_ROUTE = "/MER-RT-01/";
@@ -139,6 +138,8 @@ flowchart LR
 ![Large Runtime Diagram](/assets/large-diagram.svg)
 
 ![Tall Runtime Diagram](/assets/tall-diagram.svg)
+
+<img src="/assets/tall-diagram.svg" alt="Standalone Raw Tall Diagram" />
 
 <figure class="image-frame ratio-4x3 fit-cover">
   <img src="/assets/large-diagram.svg" alt="Framed Cover Diagram" />
@@ -461,6 +462,9 @@ No diagram here.
         const mermaidBlock = page.locator(".mermaid-block");
         const landscapeImage = page.locator('#viewer-content img[alt="Large Runtime Diagram"]');
         const portraitImage = page.locator('#viewer-content img[alt="Tall Runtime Diagram"]');
+        const rawPortraitImage = page.locator(
+          '#viewer-content img[alt="Standalone Raw Tall Diagram"]',
+        );
         await expect(mermaidBlock).toHaveCount(1);
         await expect(mermaidBlock.locator(".code-header")).toHaveCount(0);
         await expect(mermaidBlock.locator(".code-copy")).toHaveCount(0);
@@ -499,20 +503,28 @@ No diagram here.
           Math.min(layout.blockWidth, CONTENT_VISUAL_MAX_WIDTH) + 1,
         );
 
-        await expect(landscapeImage).toHaveClass(/is-landscape/);
-        await expect(portraitImage).toHaveClass(/is-portrait/);
-        await expect(page.locator("#viewer-content figure.content-image").first()).toHaveClass(
-          /is-landscape/,
-        );
+        await expect(landscapeImage).toBeVisible();
+        await expect(portraitImage).toBeVisible();
+        await expect(rawPortraitImage).toBeVisible();
+        await expect(rawPortraitImage.locator("xpath=..")).toHaveClass(/content-image/);
         const imageLayout = await page.locator("#viewer-content").evaluate(() => {
           const content = document.getElementById("viewer-content");
+          const prose = document.querySelector("#viewer-content > h1");
           const landscape = document.querySelector(
             '#viewer-content img[alt="Large Runtime Diagram"]',
           );
           const portrait = document.querySelector(
             '#viewer-content img[alt="Tall Runtime Diagram"]',
           );
-          if (!(landscape instanceof HTMLImageElement) || !(portrait instanceof HTMLImageElement)) {
+          const rawPortrait = document.querySelector(
+            '#viewer-content img[alt="Standalone Raw Tall Diagram"]',
+          );
+          if (
+            !(prose instanceof HTMLElement) ||
+            !(landscape instanceof HTMLImageElement) ||
+            !(portrait instanceof HTMLImageElement) ||
+            !(rawPortrait instanceof HTMLImageElement)
+          ) {
             return null;
           }
           const contentRect =
@@ -521,8 +533,10 @@ No diagram here.
           const portraitRect = portrait.getBoundingClientRect();
           return {
             contentWidth: contentRect ? contentRect.width : null,
+            proseWidth: prose.getBoundingClientRect().width,
             landscapeWidth: landscapeRect.width,
             portraitWidth: portraitRect.width,
+            rawPortraitWidth: rawPortrait.getBoundingClientRect().width,
           };
         });
         expect(imageLayout).not.toBeNull();
@@ -530,12 +544,20 @@ No diagram here.
           throw new Error("본문 이미지 레이아웃 정보를 읽지 못했습니다.");
         }
         expect(imageLayout.landscapeWidth).toBeLessThanOrEqual(
-          Math.min(imageLayout.contentWidth, CONTENT_VISUAL_MAX_WIDTH) + 1,
+          Math.min(imageLayout.contentWidth, CONTENT_PROSE_MAX_WIDTH) + 1,
         );
         expect(imageLayout.portraitWidth).toBeLessThanOrEqual(
-          Math.min(imageLayout.contentWidth, CONTENT_IMAGE_PORTRAIT_MAX_WIDTH) + 1,
+          Math.min(imageLayout.contentWidth, CONTENT_PROSE_MAX_WIDTH) + 1,
         );
-        expect(imageLayout.portraitWidth).toBeLessThan(imageLayout.landscapeWidth);
+        expect(Math.abs(imageLayout.landscapeWidth - imageLayout.proseWidth)).toBeLessThanOrEqual(
+          1,
+        );
+        expect(
+          Math.abs(imageLayout.portraitWidth - imageLayout.landscapeWidth),
+        ).toBeLessThanOrEqual(1);
+        expect(
+          Math.abs(imageLayout.rawPortraitWidth - imageLayout.landscapeWidth),
+        ).toBeLessThanOrEqual(1);
 
         await expect(page.locator(".mermaid-render-error")).toHaveCount(0);
       } finally {
@@ -602,7 +624,6 @@ No diagram here.
         );
 
         await expect(portraitImage).toBeVisible();
-        await expect(portraitImage).toHaveClass(/is-portrait/);
         const mobileImageLayout = await page.locator("#viewer-content").evaluate(() => {
           const content = document.getElementById("viewer-content");
           const portrait = document.querySelector(
@@ -657,7 +678,6 @@ No diagram here.
         const containFrame = page.locator("#viewer-content figure.image-frame.fit-contain");
         await expect(coverFrame).toHaveClass(/ratio-4x3/);
         await expect(containFrame).toHaveClass(/ratio-4x5/);
-        await expect(containFrame).toHaveClass(/is-portrait/);
 
         const frameLayout = await page.locator("#viewer-content").evaluate(() => {
           const cover = document.querySelector("#viewer-content figure.image-frame.fit-cover");
@@ -697,9 +717,9 @@ No diagram here.
         await expect(nextLink).toBeVisible();
         await nextLink.click();
         await expect(page.locator("#viewer-title")).toHaveText("Mermaid Runtime Followup Test");
-        await expect(page.locator('#viewer-content img[alt="Followup Tall Diagram"]')).toHaveClass(
-          /is-portrait/,
-        );
+        await expect(
+          page.locator('#viewer-content img[alt="Followup Tall Diagram"]'),
+        ).toBeVisible();
       } finally {
         await server.close();
       }

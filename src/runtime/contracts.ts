@@ -225,13 +225,6 @@ export interface TreeControllerOptions {
   storage?: Pick<Storage, "setItem">;
 }
 
-export type TreeLabelHost = HTMLElement & {
-  __eiamTreeLabelFrame?: number;
-  __eiamTreeLabelObserver?: MutationObserver;
-  __eiamTreeLabelObservedRoot?: ParentNode;
-  __eiamMetadataByTreePath?: Map<string, TreePathMetadata>;
-};
-
 export type TreeRuntimeModule = Pick<
   typeof import("@pierre/trees"),
   "FileTree" | "prepareFileTreeInput"

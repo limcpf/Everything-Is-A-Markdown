@@ -1413,6 +1413,61 @@ title: HTML Policy
     }
   });
 
+  test("GFM 표를 꺼도 취소선을 렌더링하고 헤딩 직후 구분선만 생략한다", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-markdown-semantics-"));
+    const vaultDir = path.join(workDir, "vault");
+    const outDir = path.join(workDir, "dist");
+
+    try {
+      writeText(
+        path.join(workDir, "blog.config.mjs"),
+        "export default { markdown: { gfm: false } };\n",
+      );
+      writeText(
+        path.join(vaultDir, "markdown-semantics.md"),
+        `---
+publish: true
+prefix: MD-SEM-01
+category_path: markdown/semantics
+title: Markdown Semantics
+---
+
+# First heading
+
+---
+
+<img src="https://example.com/raw-image.png" alt="Raw image" />
+~~deleted text~~ remains readable.
+
+---
+
+Ordinary divider remains.
+
+## Second heading
+
+---
+
+Paragraph after the second heading.
+`,
+      );
+
+      const build = runCli(workDir, [cliPath, "build", "--vault", vaultDir, "--out", outDir]);
+      expect(build.status, build.output).toBe(0);
+
+      const content = readDocContentHtml(outDir, "/MD-SEM-01/");
+      expect(content).toContain(
+        '<figure class="content-image"><img src="https://example.com/raw-image.png" alt="Raw image" /></figure>',
+      );
+      expect(content).toContain("<s>deleted text</s>");
+      expect(content).not.toContain("~~deleted text~~");
+      expect(content.match(/<hr\b/g) ?? []).toHaveLength(1);
+      expect(content).not.toMatch(/<\/h[1-6]>\s*<hr\b/);
+      expect(content).toContain("<p>Ordinary divider remains.</p>");
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
   test("cache에는 unpublished와 draft Markdown 본문을 저장하지 않는다", async () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mfs-private-cache-"));
     const vaultDir = path.join(workDir, "vault");

@@ -14,148 +14,8 @@ const TREE_RUNTIME_STATE_ATTR = "data-tree-runtime";
  * @typedef {import("./contracts").EventScope} EventScope
  * @typedef {import("./contracts").TreeController} TreeController
  * @typedef {import("./contracts").TreeControllerOptions} TreeControllerOptions
- * @typedef {import("./contracts").TreeLabelHost} TreeLabelHost
- * @typedef {import("./contracts").TreePathMetadata} TreePathMetadata
  * @typedef {import("./contracts").TreeRuntimeModule} TreeRuntimeModule
- * @typedef {import("./contracts").RuntimeWindow} RuntimeWindow
  */
-
-/**
- * @param {unknown} value
- * @param {string} [fallback]
- */
-function normalizeTreeLabelText(value, fallback = "") {
-  const normalized = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
-  return normalized || fallback;
-}
-
-/**
- * @param {TreeLabelHost | null | undefined} host
- * @returns {ParentNode | null}
- */
-function getTreeLabelRenderRoot(host) {
-  return host?.shadowRoot || host || null;
-}
-
-/**
- * @param {TreeLabelHost | null | undefined} host
- * @param {Document} documentRef
- */
-function decorateTreeLabels(host, documentRef) {
-  const metadataByTreePath = host?.__eiamMetadataByTreePath;
-  if (!(metadataByTreePath instanceof Map)) {
-    return;
-  }
-
-  const renderRoot = getTreeLabelRenderRoot(host);
-  if (!renderRoot) {
-    return;
-  }
-
-  const rows = renderRoot.querySelectorAll(
-    "[data-type='item'][data-item-type='file'][data-item-path]",
-  );
-  for (const row of rows) {
-    const treePath = row.getAttribute("data-item-path") || "";
-    const metadata = metadataByTreePath.get(treePath);
-    if (!metadata || metadata.kind !== "file") {
-      continue;
-    }
-
-    const prefix = normalizeTreeLabelText(metadata.prefix);
-    const fallbackName = treePath.split("/").pop() || "";
-    const fallbackTitle =
-      prefix && fallbackName.startsWith(`${prefix} `)
-        ? fallbackName.slice(prefix.length).trimStart()
-        : fallbackName;
-    const title = normalizeTreeLabelText(metadata.title, fallbackTitle);
-    const labelKey = JSON.stringify([prefix, title]);
-    /** @type {HTMLElement | null} */
-    const content = row.querySelector("[data-item-section='content']");
-    if (!content || content.dataset.eiamTreeLabel === labelKey) {
-      continue;
-    }
-
-    content.dataset.eiamTreeLabel = labelKey;
-    content.textContent = "";
-    const label = documentRef.createElement("span");
-    label.className = "tree-item-label";
-    if (prefix) {
-      const prefixBadge = documentRef.createElement("span");
-      prefixBadge.className = "tree-item-prefix";
-      prefixBadge.textContent = prefix;
-      label.appendChild(prefixBadge);
-    }
-    const titleText = documentRef.createElement("span");
-    titleText.className = "tree-item-title";
-    titleText.textContent = title;
-    label.appendChild(titleText);
-    content.appendChild(label);
-    row.setAttribute("title", prefix ? `${prefix} ${title}` : title);
-  }
-}
-
-/**
- * @param {TreeLabelHost | null | undefined} host
- * @param {Document} documentRef
- * @param {RuntimeWindow} windowRef
- */
-function queueTreeLabelDecoration(host, documentRef, windowRef) {
-  if (!host) {
-    return;
-  }
-  if (host.__eiamTreeLabelFrame) {
-    windowRef.cancelAnimationFrame(host.__eiamTreeLabelFrame);
-  }
-  host.__eiamTreeLabelFrame = windowRef.requestAnimationFrame(() => {
-    host.__eiamTreeLabelFrame = 0;
-    decorateTreeLabels(host, documentRef);
-  });
-}
-
-/**
- * @param {TreeLabelHost | null | undefined} host
- * @param {Map<string, TreePathMetadata>} metadataByTreePath
- * @param {Document} documentRef
- * @param {RuntimeWindow} windowRef
- */
-function setupTreeLabelDecorations(host, metadataByTreePath, documentRef, windowRef) {
-  if (!host) {
-    return;
-  }
-  host.__eiamMetadataByTreePath = metadataByTreePath;
-  const renderRoot = getTreeLabelRenderRoot(host);
-  if (!renderRoot) {
-    return;
-  }
-  if (host.__eiamTreeLabelObservedRoot !== renderRoot) {
-    host.__eiamTreeLabelObserver?.disconnect();
-    host.__eiamTreeLabelObservedRoot = renderRoot;
-    host.__eiamTreeLabelObserver = new windowRef.MutationObserver(() => {
-      queueTreeLabelDecoration(host, documentRef, windowRef);
-    });
-    host.__eiamTreeLabelObserver.observe(renderRoot, { childList: true, subtree: true });
-  }
-  queueTreeLabelDecoration(host, documentRef, windowRef);
-}
-
-/**
- * @param {TreeLabelHost | null | undefined} host
- * @param {RuntimeWindow} windowRef
- */
-function cleanupTreeLabelDecorations(host, windowRef) {
-  if (!host) {
-    return;
-  }
-  if (host.__eiamTreeLabelFrame) {
-    windowRef.cancelAnimationFrame(host.__eiamTreeLabelFrame);
-    host.__eiamTreeLabelFrame = 0;
-  }
-  host.__eiamTreeLabelObserver?.disconnect();
-  delete host.__eiamTreeLabelObserver;
-  delete host.__eiamTreeLabelObservedRoot;
-  delete host.__eiamMetadataByTreePath;
-}
 
 /**
  * @param {unknown} value
@@ -205,8 +65,8 @@ export function createTreeController(options) {
   );
   const treeSearchCount = documentRef.getElementById("tree-search-count");
   const sidebarSearchActions = documentRef.getElementById("sidebar-search-actions");
-  const sidebarBranchSelect = /** @type {HTMLSelectElement | null} */ (
-    documentRef.getElementById("sidebar-branch-select")
+  const sidebarBranchPills = /** @type {HTMLElement | null} */ (
+    documentRef.getElementById("sidebar-branch-pills")
   );
   /** @type {EventScope | null} */
   let events = null;
@@ -239,24 +99,43 @@ export function createTreeController(options) {
     documentRef.documentElement?.setAttribute(TREE_RUNTIME_STATE_ATTR, state);
   };
 
-  const renderBranchOptions = () => {
-    if (!sidebarBranchSelect) {
+  const renderBranchPills = () => {
+    if (!sidebarBranchPills) {
       return;
     }
-    sidebarBranchSelect.replaceChildren();
+    sidebarBranchPills.replaceChildren();
     for (const branch of navigation.availableBranches) {
-      const option = documentRef.createElement("option");
-      option.value = branch;
-      option.textContent =
-        branch === navigation.defaultBranch ? messages.branchDefault(branch) : branch;
-      sidebarBranchSelect.appendChild(option);
+      const button = documentRef.createElement("button");
+      button.type = "button";
+      button.className = "branch-pill";
+      button.dataset.branch = branch;
+      button.textContent = branch;
+      if (branch === navigation.defaultBranch) {
+        const defaultLabel = messages.branchDefault(branch);
+        button.setAttribute("aria-label", defaultLabel);
+        button.title = defaultLabel;
+      }
+      sidebarBranchPills.appendChild(button);
     }
-    sidebarBranchSelect.disabled = navigation.availableBranches.length < 2;
+    updateBranchControl();
   };
 
   const updateBranchControl = () => {
-    if (sidebarBranchSelect) {
-      sidebarBranchSelect.value = navigation.activeBranch;
+    if (!sidebarBranchPills) {
+      return;
+    }
+    const branchButtons = sidebarBranchPills.querySelectorAll(".branch-pill");
+    for (const button of branchButtons) {
+      const branch =
+        button instanceof windowRef.HTMLElement
+          ? button.dataset.branch
+          : button.getAttribute("data-branch");
+      const active = branch === navigation.activeBranch;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+      if (button instanceof windowRef.HTMLButtonElement) {
+        button.disabled = navigation.availableBranches.length < 2;
+      }
     }
   };
 
@@ -366,10 +245,7 @@ export function createTreeController(options) {
   };
 
   const destroyFileTree = () => {
-    const host = /** @type {TreeLabelHost | null} */ (
-      treeRoot?.querySelector("file-tree-container") ?? null
-    );
-    cleanupTreeLabelDecorations(host, windowRef);
+    const host = treeRoot?.querySelector("file-tree-container") ?? null;
     fileTree?.cleanUp?.();
     fileTree = null;
     renderedTreeBranch = "";
@@ -523,12 +399,6 @@ export function createTreeController(options) {
     renderedTreeBranch = navigation.activeBranch;
     syncActiveSelection(navigation.currentDocId || "");
     applyTreeSearch(treeSearchValue);
-    setupTreeLabelDecorations(
-      /** @type {TreeLabelHost | null} */ (treeRoot.querySelector("file-tree-container")),
-      navigation.view.trees.metadataByTreePath,
-      documentRef,
-      windowRef,
-    );
   };
 
   const renderTreeLoadingState = () => {
@@ -699,8 +569,17 @@ export function createTreeController(options) {
     return true;
   };
 
-  const handleBranchSelectChange = () => {
-    void setActiveBranch(sidebarBranchSelect?.value);
+  /** @param {Event} event */
+  const handleBranchPillClick = (event) => {
+    const target = event.target;
+    if (!(target instanceof windowRef.Element)) {
+      return;
+    }
+    const button = target.closest(".branch-pill");
+    if (!(button instanceof windowRef.HTMLButtonElement) || !sidebarBranchPills?.contains(button)) {
+      return;
+    }
+    void setActiveBranch(button.dataset.branch);
   };
 
   const handleSearchFocus = () => {
@@ -804,7 +683,7 @@ export function createTreeController(options) {
         return;
       }
       events = createEventScope();
-      events.listen(sidebarBranchSelect, "change", handleBranchSelectChange);
+      events.listen(sidebarBranchPills, "click", handleBranchPillClick);
       events.listen(treeSearchInput, "focus", handleSearchFocus);
       events.listen(treeSearchInput, "input", handleSearchInput);
       events.listen(treeSearchInput, "keydown", handleSearchKeydown);
@@ -814,7 +693,7 @@ export function createTreeController(options) {
       });
       events.listen(treeSearchPrev, "click", () => moveTreeSearchFocus(-1));
       events.listen(treeSearchNext, "click", () => moveTreeSearchFocus(1));
-      renderBranchOptions();
+      renderBranchPills();
       updateBranchControl();
       updateTreeSearchControls();
       if (treeRuntime) {
