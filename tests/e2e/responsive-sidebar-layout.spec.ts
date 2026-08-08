@@ -227,6 +227,16 @@ test.describe("responsive Trees sidebar layout", () => {
           '[data-item-section="icon"]',
         ) as HTMLElement | null;
         return {
+          labelPrefix: content?.dataset.eiamTreePrefix ?? "",
+          labelTitle: content?.dataset.eiamTreeTitle ?? "",
+          nativeLabelDisplay:
+            content?.querySelector('[data-truncate-group-container="middle"]') instanceof
+            HTMLElement
+              ? getComputedStyle(
+                  content.querySelector<HTMLElement>('[data-truncate-group-container="middle"]')!,
+                ).display
+              : "missing",
+          titleOverflow: content ? getComputedStyle(content, "::after").textOverflow : "",
           fileIconDisplay: fileIcon ? getComputedStyle(fileIcon).display : "missing",
           itemPadding: host
             ? getComputedStyle(host).getPropertyValue("--trees-item-padding-x-override")
@@ -245,6 +255,10 @@ test.describe("responsive Trees sidebar layout", () => {
 
       expect(rowState.path).not.toContain(".md");
       expect(rowState.text).not.toContain(".md");
+      expect(rowState.labelPrefix).toMatch(/^RS-\d{2}$/);
+      expect(rowState.labelTitle).toMatch(/^(초장문|한국어와|Very Long|중복 제목)/);
+      expect(rowState.nativeLabelDisplay).toBe("none");
+      expect(rowState.titleOverflow).toBe("ellipsis");
       expect(rowState.fileIconDisplay).toBe("none");
       expect(rowState.itemPadding.trim()).toBe("8px");
       expect(rowState.rowWithinTree).toBe(true);

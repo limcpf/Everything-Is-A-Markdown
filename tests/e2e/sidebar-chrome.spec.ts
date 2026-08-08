@@ -90,7 +90,9 @@ test.describe("purposeful sidebar chrome", () => {
     expect(layout.searchTop ?? Infinity).toBeLessThan(layout.viewportHeight);
   });
 
-  test("keeps native tree labels, search, and settings affordances available", async ({ page }) => {
+  test("keeps prefix badges, start-aligned titles, search, and settings available", async ({
+    page,
+  }) => {
     await page.goto("/BC-VO-00/");
     await waitForAppReady(page);
     await waitForTreeReady(page);
@@ -104,6 +106,25 @@ test.describe("purposeful sidebar chrome", () => {
     const aboutRow = page.getByRole("treeitem", { name: "BC-VO-00 About", exact: true }).first();
     await expect(aboutRow).toBeVisible();
     await expect(aboutRow).toHaveAccessibleName("BC-VO-00 About");
+    const aboutLabel = aboutRow.locator('[data-item-section="content"]');
+    await expect(aboutLabel).toHaveAttribute("data-eiam-tree-prefix", "BC-VO-00");
+    await expect(aboutLabel).toHaveAttribute("data-eiam-tree-title", "About");
+    await expect(aboutLabel).toHaveAttribute("title", "BC-VO-00 About");
+    const labelPresentation = await aboutLabel.evaluate((label) => {
+      const nativeLabel = label.querySelector('[data-truncate-group-container="middle"]');
+      return {
+        display: getComputedStyle(label).display,
+        nativeDisplay: nativeLabel ? getComputedStyle(nativeLabel).display : "missing",
+        prefix: getComputedStyle(label, "::before").content,
+        textOverflow: getComputedStyle(label, "::after").textOverflow,
+        title: getComputedStyle(label, "::after").content,
+      };
+    });
+    expect(labelPresentation.display).toBe("flex");
+    expect(labelPresentation.nativeDisplay).toBe("none");
+    expect(labelPresentation.prefix).toContain("BC-VO-00");
+    expect(labelPresentation.title).toContain("About");
+    expect(labelPresentation.textOverflow).toBe("ellipsis");
     await expect(page.locator("#tree-root .tree-item-label")).toHaveCount(0);
     await expect(page.locator("#tree-root .tree-item-prefix")).toHaveCount(0);
 

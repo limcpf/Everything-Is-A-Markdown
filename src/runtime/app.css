@@ -634,7 +634,7 @@ a:hover {
 
 .tree-root file-tree-container {
   --trees-bg-override: transparent;
-  --trees-bg-muted-override: color-mix(in srgb, var(--color-border) 44%, transparent);
+  --trees-bg-muted-override: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
   --trees-fg-override: var(--color-text-secondary);
   --trees-fg-muted-override: var(--color-text-subtle);
   --trees-accent-override: var(--color-accent);
@@ -642,7 +642,7 @@ a:hover {
   --trees-focus-ring-color-override: var(--color-focus);
   --trees-focus-ring-width-override: 2px;
   --trees-focus-ring-offset-override: 1px;
-  --trees-selected-bg-override: var(--active-surface-bg);
+  --trees-selected-bg-override: color-mix(in srgb, var(--color-accent) 11%, var(--color-surface));
   --trees-selected-fg-override: var(--color-text);
   --trees-selected-focused-border-color-override: color-mix(
     in srgb,
@@ -653,14 +653,20 @@ a:hover {
   --trees-font-size-override: var(--type-navigation);
   --trees-font-weight-regular-override: 450;
   --trees-font-weight-semibold-override: 700;
-  --trees-border-radius-override: 6px;
-  --trees-gap-override: 2px;
+  --trees-border-radius-override: 8px;
+  --trees-gap-override: 3px;
   --trees-item-margin-x-override: 0px;
   --trees-item-padding-x-override: 8px;
   --trees-item-row-gap-override: 6px;
   --trees-level-gap-override: 10px;
   --trees-padding-inline-override: 0px;
   --trees-file-icon-color-default: var(--color-text-subtle);
+  --trees-folder-fg: var(--color-text-secondary);
+  --trees-document-title-fg: var(--color-text-secondary);
+  --trees-prefix-badge-bg: color-mix(in srgb, var(--color-accent) 11%, transparent);
+  --trees-prefix-badge-border: color-mix(in srgb, var(--color-accent) 26%, transparent);
+  --trees-prefix-badge-fg: var(--color-accent-strong);
+  --trees-row-divider: color-mix(in srgb, var(--color-border) 52%, transparent);
   --trees-new-badge-bg: var(--badge-new-bg);
   --trees-new-badge-fg: var(--badge-new-fg);
   display: block;
