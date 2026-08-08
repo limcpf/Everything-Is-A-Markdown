@@ -10,9 +10,9 @@ Every persistent sidebar element has one user-facing purpose:
 | Branch pills        | Scope navigation to one content branch and expose the active branch as pressed state      |
 | Search field        | Filters the document tree; result count and stepping controls appear only during a search |
 | Folder chevrons     | Expose hierarchy and expansion state                                                      |
-| Prefix text         | Preserves the document's stable public identifier without pill decoration                 |
+| Prefix badge        | Keeps the document's stable public identifier recognizable at a glance                    |
 | `NEW` marker        | Communicates actual recency derived from document dates                                   |
-| Settings button     | Keeps the persisted theme preference available                                             |
+| Settings button     | Keeps the persisted theme preference available                                            |
 | Mobile close button | Exits the modal navigation panel                                                          |
 
 The terminal glyph, branch badge, `publish: true` copy, animated `Online`
@@ -32,16 +32,19 @@ the existing persisted branch key.
 
 Document rows reclaim horizontal space through tighter tree padding and hidden
 generic file icons while folder chevrons remain. Prefix and title stay in the
-canonical tree path rendered by `@pierre/trees`; EIAM does not mutate virtualized
-row contents after rendering. This prevents a recycled row from retaining a
+canonical tree path used by `@pierre/trees` for search and accessibility. EIAM
+only synchronizes presentation data attributes on recycled rows; it never
+replaces the library-owned label nodes. Shadow styles render that data as a
+fixed prefix badge followed by a start-aligned, end-ellipsized title. This keeps
+the `NEW` lane independent and prevents a recycled row from retaining a
 previous document label after folders are collapsed or expanded.
 
 ## Regression coverage
 
 Browser coverage verifies keyboard branch switching and persistence, the
-absence of the select and static chrome, conditional search controls, native
+absence of the select and static chrome, conditional search controls, accessible
 tree labels, and settings availability. Collapse/expand coverage repeatedly
-recycles tree rows and verifies that labels remain tied to their paths.
-Responsive tests additionally verify that file icons are suppressed, tighter
-row padding is applied, and long labels stay inside the tree without
-overlapping `NEW` decorations.
+recycles tree rows and verifies that badge/title data remains tied to each path.
+Responsive tests additionally verify that file icons are suppressed, long
+titles use end ellipsis from their first character, and label lanes stay inside
+the tree without overlapping `NEW` decorations.

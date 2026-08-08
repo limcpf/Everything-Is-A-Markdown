@@ -14,8 +14,124 @@ const TREE_RUNTIME_STATE_ATTR = "data-tree-runtime";
  * @typedef {import("./contracts").EventScope} EventScope
  * @typedef {import("./contracts").TreeController} TreeController
  * @typedef {import("./contracts").TreeControllerOptions} TreeControllerOptions
+ * @typedef {import("./contracts").TreeLabelHost} TreeLabelHost
  * @typedef {import("./contracts").TreeRuntimeModule} TreeRuntimeModule
  */
+
+const TREE_LABEL_PREFIX_ATTR = "data-eiam-tree-prefix";
+const TREE_LABEL_TITLE_ATTR = "data-eiam-tree-title";
+
+/**
+ * @param {unknown} value
+ * @param {string} [fallback]
+ */
+function normalizeTreeLabelText(value, fallback = "") {
+  const normalized = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  return normalized || fallback;
+}
+
+/**
+ * @param {TreeLabelHost | null | undefined} host
+ * @returns {ParentNode | null}
+ */
+function getTreeLabelRenderRoot(host) {
+  return host?.shadowRoot || host || null;
+}
+
+/**
+ * Sync presentation-only label data without replacing Trees-owned row nodes.
+ * Virtualized rows can safely change paths because the observer runs before paint.
+ *
+ * @param {TreeLabelHost | null | undefined} host
+ */
+function syncTreeLabelAttributes(host) {
+  const metadataByTreePath = host?.__eiamMetadataByTreePath;
+  if (!(metadataByTreePath instanceof Map)) {
+    return;
+  }
+
+  const renderRoot = getTreeLabelRenderRoot(host);
+  if (!renderRoot) {
+    return;
+  }
+
+  const rows = renderRoot.querySelectorAll(
+    "[data-type='item'][data-item-type='file'][data-item-path]",
+  );
+  for (const row of rows) {
+    const treePath = row.getAttribute("data-item-path") || "";
+    const metadata = metadataByTreePath.get(treePath);
+    if (!metadata || metadata.kind !== "file") {
+      continue;
+    }
+
+    const prefix = normalizeTreeLabelText(metadata.prefix);
+    const fallbackName = treePath.split("/").pop() || "";
+    const fallbackTitle =
+      prefix && fallbackName.startsWith(`${prefix} `)
+        ? fallbackName.slice(prefix.length).trimStart()
+        : fallbackName;
+    const title = normalizeTreeLabelText(metadata.title, fallbackTitle);
+    const content = row.querySelector("[data-item-section='content']");
+    if (!content) {
+      continue;
+    }
+
+    if (content.getAttribute(TREE_LABEL_PREFIX_ATTR) !== prefix) {
+      content.setAttribute(TREE_LABEL_PREFIX_ATTR, prefix);
+    }
+    if (content.getAttribute(TREE_LABEL_TITLE_ATTR) !== title) {
+      content.setAttribute(TREE_LABEL_TITLE_ATTR, title);
+    }
+    const fullLabel = prefix ? `${prefix} ${title}` : title;
+    if (content.getAttribute("title") !== fullLabel) {
+      content.setAttribute("title", fullLabel);
+    }
+  }
+}
+
+/**
+ * @param {TreeLabelHost | null | undefined} host
+ * @param {Map<string, import("./contracts").TreePathMetadata>} metadataByTreePath
+ * @param {Window & typeof globalThis} windowRef
+ */
+function setupTreeLabelAttributes(host, metadataByTreePath, windowRef) {
+  if (!host) {
+    return;
+  }
+  host.__eiamMetadataByTreePath = metadataByTreePath;
+  const renderRoot = getTreeLabelRenderRoot(host);
+  if (!renderRoot) {
+    return;
+  }
+
+  if (host.__eiamTreeLabelObservedRoot !== renderRoot) {
+    host.__eiamTreeLabelObserver?.disconnect();
+    host.__eiamTreeLabelObservedRoot = renderRoot;
+    host.__eiamTreeLabelObserver = new windowRef.MutationObserver(() => {
+      syncTreeLabelAttributes(host);
+    });
+    host.__eiamTreeLabelObserver.observe(renderRoot, {
+      attributeFilter: ["data-item-path"],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  syncTreeLabelAttributes(host);
+}
+
+/** @param {TreeLabelHost | null | undefined} host */
+function cleanupTreeLabelAttributes(host) {
+  if (!host) {
+    return;
+  }
+  host.__eiamTreeLabelObserver?.disconnect();
+  delete host.__eiamTreeLabelObserver;
+  delete host.__eiamTreeLabelObservedRoot;
+  delete host.__eiamMetadataByTreePath;
+}
 
 /**
  * @param {unknown} value
@@ -245,7 +361,10 @@ export function createTreeController(options) {
   };
 
   const destroyFileTree = () => {
-    const host = treeRoot?.querySelector("file-tree-container") ?? null;
+    const host = /** @type {TreeLabelHost | null} */ (
+      treeRoot?.querySelector("file-tree-container") ?? null
+    );
+    cleanupTreeLabelAttributes(host);
     fileTree?.cleanUp?.();
     fileTree = null;
     renderedTreeBranch = "";
@@ -362,7 +481,7 @@ export function createTreeController(options) {
         icons: "minimal",
         initialExpansion: 1,
         initialSelectedPaths: selectedTreePath ? [selectedTreePath] : [],
-        itemHeight: 38,
+        itemHeight: 42,
         onSelectionChange(selectedPaths) {
           if (isSyncingTreeSelection) {
             return;
@@ -399,6 +518,11 @@ export function createTreeController(options) {
     renderedTreeBranch = navigation.activeBranch;
     syncActiveSelection(navigation.currentDocId || "");
     applyTreeSearch(treeSearchValue);
+    setupTreeLabelAttributes(
+      /** @type {TreeLabelHost | null} */ (treeRoot.querySelector("file-tree-container")),
+      navigation.view.trees.metadataByTreePath,
+      windowRef,
+    );
   };
 
   const renderTreeLoadingState = () => {

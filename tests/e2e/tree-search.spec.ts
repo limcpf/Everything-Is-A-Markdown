@@ -29,18 +29,20 @@ test.describe("Trees sidebar search", () => {
           rows.flatMap((row) => {
             const treePath = row.getAttribute("data-item-path") ?? "";
             const expected = treePath.split("/").filter(Boolean).at(-1) ?? "";
-            const visible = Array.from(
-              row.querySelectorAll<HTMLElement>('[data-truncate-content="visible"]'),
-            )
-              .filter((part) => Number.parseFloat(getComputedStyle(part).opacity) > 0)
-              .map((part) => part.textContent ?? "")
-              .join("")
-              .replace(/\s+/g, " ")
-              .trim();
+            const content = row.querySelector<HTMLElement>('[data-item-section="content"]');
+            const prefix = content?.dataset.eiamTreePrefix?.trim() ?? "";
+            const title = content?.dataset.eiamTreeTitle?.trim() ?? "";
+            const visible = `${prefix}${prefix ? " " : ""}${title}`.trim();
             const accessible = row.getAttribute("aria-label")?.replace(/\s+/g, " ").trim() ?? "";
-            return visible === expected && accessible === expected
+            const nativeLabel = content?.querySelector<HTMLElement>(
+              '[data-truncate-group-container="middle"]',
+            );
+            const nativeHidden = nativeLabel
+              ? getComputedStyle(nativeLabel).display === "none"
+              : false;
+            return visible === expected && accessible === expected && nativeHidden
               ? []
-              : [{ treePath, expected, visible, accessible }];
+              : [{ treePath, expected, visible, accessible, nativeHidden }];
           }),
         );
 
